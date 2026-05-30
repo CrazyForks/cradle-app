@@ -118,7 +118,7 @@ jobs:
           pnpm add -g electron-builder
           echo "$(pnpm bin -g)" >> "$GITHUB_PATH"
           export PATH="$(pnpm bin -g):$PATH"
-          pnpm install --frozen-lockfile --config.onlyBuiltDependencies='["@google/genai","protobufjs"]'
+          pnpm install --frozen-lockfile
 
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
