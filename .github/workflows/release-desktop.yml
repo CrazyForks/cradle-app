@@ -127,25 +127,40 @@ jobs:
           CRADLE_ELECTRON_REBUILD_ARCH: ${{ matrix.builderArch }}
         shell: bash
         run: |
-          # The build scripts trigger a second pnpm install (--config.node-linker=hoisted)
-          # via install-runtime-deps.mjs, which restructures node_modules and causes
-          # electron-builder install-app-deps to fail. Create a no-op wrapper on PATH
-          # that intercepts install-app-deps calls. pnpm exec falls back to PATH when
-          # the local .bin doesn't have the command.
+          # The build scripts trigger a second pnpm install via install-runtime-deps.mjs
+          # which restructures node_modules and breaks electron-builder, electron-vite, etc.
+          # Intercept pnpm install calls to prevent the restructure.
           WRAPPER_DIR=$(mktemp -d)
-          REAL_EB=$(command -v electron-builder)
-          cat > "$WRAPPER_DIR/electron-builder" <<'WRAPEOF'
+          REAL_PNPM=$(command -v pnpm)
+          cat > "$WRAPPER_DIR/pnpm" <<'WRAPEOF'
           #!/bin/bash
-          if [[ "$1" == "install-app-deps" ]]; then
-            echo "CI: skipping electron-builder install-app-deps"
+          if [[ "$1" == "install" ]]; then
+            echo "CI: intercepting pnpm install (args: $*)"
+            # Skip the install that would restructure workspace node_modules
             exit 0
           fi
+          exec WRAPEOF_PNPM "$@"
           WRAPEOF
-          # Append the real exec line with the actual path
-          echo "exec \"$REAL_EB\" \"\$@\"" >> "$WRAPPER_DIR/electron-builder"
-          chmod +x "$WRAPPER_DIR/electron-builder"
+          sed -i '' "s|WRAPEOF_PNPM|$REAL_PNPM|g" "$WRAPPER_DIR/pnpm"
+          chmod +x "$WRAPPER_DIR/pnpm"
           export PATH="$WRAPPER_DIR:$PATH"
           pnpm build:desktop
+
+      - name: Install server runtime deps for packaging
+        working-directory: .cradle-source
+        shell: bash
+        run: |
+          # The install-runtime-deps.mjs was intercepted during build.
+          # Install server runtime deps into dist now, outside the workspace context.
+          # Must move dist outside workspace to prevent pnpm from detecting the workspace
+          # and restructuring node_modules.
+          DIST_DIR="apps/server/dist"
+          TMP_DIST=$(mktemp -d)
+          cp -r "$DIST_DIR"/* "$TMP_DIST/"
+          cd "$TMP_DIST"
+          pnpm install --prod --no-lockfile --package-import-method copy
+          cd -
+          cp -r "$TMP_DIST"/node_modules "$DIST_DIR/"
 
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
