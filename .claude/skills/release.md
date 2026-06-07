@@ -103,7 +103,7 @@ User: /release dev
 
 ## Notes
 
-- The workflow builds desktop artifacts for mac-arm64 and mac-x64.
+- The workflow builds desktop artifacts for mac-arm64.
 - Release assets are uploaded directly to the tag release in `wibus-wee/cradle-app`.
 - Release builds use `electron-updater` with a generic provider URL:
   `https://github.com/wibus-wee/cradle-app/releases/latest/download/`
