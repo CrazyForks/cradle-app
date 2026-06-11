@@ -37,12 +37,12 @@ jobs:
 
       - uses: ./.github/actions/setup
         with:
-          node-version: 24
+          node-version: 22
 
       # ── Install Playwright ────────────────────────────────────────────────
       - name: Install Playwright browsers
-        timeout-minutes: 10
-        run: pnpm exec playwright install --with-deps --only-shell chromium
+        timeout-minutes: 15
+        run: pnpm exec playwright install --with-deps chromium-headless-shell
 
       # ── Run E2E (server auto-starts via BeforeAll hook) ───────────────────
       - name: Run E2E tests
