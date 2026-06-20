@@ -34,7 +34,9 @@ I have been deeply inspired by the following projects and communities:
 - Thanks to [Codex](https://chatgpt.com/codex/) for its feature ideas.
 - Thanks to [LobeHub](https://lobehub.com/) for its streamdown implementation.
 - Thanks to [Yansu](https://yansu.app/) for its chronicle ideas.
+- Thanks to [Linear](https://linear.com/) for its feature ideas and design ideas.
 - Thanks to [CC Switch](https://ccswitch.io) for our provider management plugin integration.
+- Thanks to [Nowledge Mem](https://mem.nowledge.co/) for our plugin integration.
 
 ## License
 
