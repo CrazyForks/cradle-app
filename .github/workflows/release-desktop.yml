@@ -436,6 +436,13 @@ jobs:
           writeCradleUpdateManifest(latestMacManifest)
           NODE
 
+          if [ "$RELEASE_CHANNEL" = "dev" ]; then
+            mkdir -p feed-assets
+            cp release-assets/manifest.json feed-assets/manifest.json
+            cp release-assets/*.zip feed-assets/
+            find feed-assets -maxdepth 1 -type f -print | sort
+          fi
+
           find release-assets -maxdepth 1 -type f -print | sort
 
       - name: Create version release
@@ -462,7 +469,7 @@ jobs:
           prerelease: true
           make_latest: false
           files: |
-            release-assets/*
+            feed-assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
