@@ -398,25 +398,12 @@ jobs:
           }
 
           if (releaseChannel === 'dev') {
-            const devMacManifest = path.join(outputRoot, 'dev-mac.yml')
-            const latestMacManifest = path.join(outputRoot, 'latest-mac.yml')
-
-            if (!fs.existsSync(latestMacManifest) && fs.existsSync(devMacManifest)) {
-              fs.copyFileSync(devMacManifest, latestMacManifest)
-            }
-
-            if (!fs.existsSync(latestMacManifest)) {
-              throw new Error('Dev release feed requires latest-mac.yml')
-            }
-
-            fs.rmSync(devMacManifest, { force: true })
-
             // Strip version numbers from asset filenames so the rolling
             // feed-dev release always contains stable names that get
             // overwritten instead of accumulating stale assets.
             const versionInName = /-(\d+\.\d+\.\d+(?:[-.][0-9A-Za-z.-]+)?)((?=-)|(?=\.\w+$))/
             for (const entry of fs.readdirSync(outputRoot)) {
-              if (!entry.startsWith('latest-') && !entry.endsWith('.yml')) {
+              if (!entry.endsWith('.yml')) {
                 const stable = entry.replace(versionInName, '')
                 if (stable !== entry) {
                   fs.renameSync(
@@ -424,23 +411,6 @@ jobs:
                     path.join(outputRoot, stable),
                   )
                 }
-              }
-            }
-
-            // Update manifest URLs / path to reference the renamed assets.
-            for (const entry of fs.readdirSync(outputRoot)) {
-              if (entry.startsWith('latest-') && entry.endsWith('.yml')) {
-                const manifestPath = path.join(outputRoot, entry)
-                const manifest = parseManifest(manifestPath)
-                for (const file of manifest.files) {
-                  if (file.url) {
-                    file.url = file.url.replace(versionInName, '')
-                  }
-                }
-                if (manifest.path) {
-                  manifest.path = manifest.path.replace(versionInName, '')
-                }
-                writeManifest(manifestPath, manifest)
               }
             }
           }
@@ -470,6 +440,26 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Clear dev feed release assets
+        if: needs.resolve.outputs.channel == 'dev'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          DEV_FEED_TAG: ${{ needs.resolve.outputs.dev_feed_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_id="$(gh api "repos/${GH_REPO}/releases/tags/${DEV_FEED_TAG}" --jq '.id' 2>/dev/null || true)"
+          if [ -z "$release_id" ]; then
+            exit 0
+          fi
+
+          gh api --paginate "repos/${GH_REPO}/releases/${release_id}/assets" --jq '.[].id' | while read -r asset_id; do
+            if [ -n "$asset_id" ]; then
+              gh api --method DELETE "repos/${GH_REPO}/releases/assets/${asset_id}"
+            fi
+          done
+
       - name: Update dev feed release
         if: needs.resolve.outputs.channel == 'dev'
         uses: softprops/action-gh-release@v2
@@ -488,7 +478,6 @@ jobs:
   deploy-web:
     name: Deploy Web
     needs: [resolve, publish]
-    if: needs.resolve.outputs.channel == 'release'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
