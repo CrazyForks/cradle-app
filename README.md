@@ -2,7 +2,13 @@
   <img src="./.github/Cradle.png" alt="Preview" width="182" />
   <h1 align="center"><b>Cradle</b></h1>
   <p align="center">
-    AI agent management platform — unified interface for organizing information, managing agents, and human-AI collaboration.
+    AI agent management platform — unified interface for organizing information, 
+    <br />
+    managing agents, and human-AI collaboration.
+    <br />
+    <br />
+    <img src='https://img.shields.io/github/stars/wibus-wee/cradle-app?style=flat-square'>
+    <img src='https://img.shields.io/github/downloads/wibus-wee/cradle-app/total?style=flat-square'>
     <br />
     <br />
     <a href="https://github.com/wibus-wee/Cradle-app/releases">Download Latest Release</a>
@@ -27,15 +33,21 @@ Cradle is a desktop-first platform for managing AI agents and their workflows. I
 - **Plugin System** — Extend Cradle with official and community plugins
 - **Multi-provider Support** — Anthropic, OpenAI, and any OpenAI-compatible endpoint
 
-
 ## Builtin Plugins
 
 | Plugin | Description | Status |
 |---|---|---|
 | `@cradleapp/browser-use` | MCP plugin that controls Cradle's built-in browser, supporting navigation, clicking, input, screenshots, page text reading, and DOM structure inspection. | ![Beta](https://img.shields.io/badge/status-Beta-yellow) |
+| `@cradleapp/system-info` | Exposes system information capabilities through the plugin API and Web commands. | ![Beta](https://img.shields.io/badge/status-Beta-yellow) |
+| `@cradleapp/github-issues` | First-party plugin that reads GitHub Issues via REST API as an external issue source, with workspace-level repository bindings and local Kanban status overlays. | ![Beta](https://img.shields.io/badge/status-WIP-black) |
+| `@cradleapp/slack-conversation-bridge` | Slack Socket Mode adapter and controls for the Cradle server-owned conversation bridge. | ![Beta](https://img.shields.io/badge/status-Beta-yellow) |
+
+### Integration Plugins
+
+| Plugin | Description | Status |
+|---|---|---|
 | `@cradleapp/cc-switch` | Maps CC Switch provider data into Cradle as a read-only external provider source. | ![Beta](https://img.shields.io/badge/status-Beta-yellow) |
 | `@cradleapp/nowledge-mem` | Official Nowledge Mem adapter for guided memory, Working Memory, thread, and context operations. | ![Beta](https://img.shields.io/badge/status-Beta-yellow) |
-| `@cradleapp/system-info` | Exposes system information capabilities through the plugin API and Web commands. | ![Beta](https://img.shields.io/badge/status-Beta-yellow) |
 
 ## Feedback
 
