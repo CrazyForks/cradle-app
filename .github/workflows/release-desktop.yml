@@ -418,34 +418,24 @@ jobs:
             const en = readChangelog('en')
             if (!en || !en.body) return null
 
-            const lines = []
+            const templatePath = path.join('.github', 'release-body.template.md')
+            if (!fs.existsSync(templatePath)) return null
+            let template = fs.readFileSync(templatePath, 'utf8')
+
             const title = en.title || `Cradle ${displayVersion}`
-
-            lines.push(`# ${title}`)
-            lines.push('')
-            lines.push(`> Cradle **${displayVersion}** · ${en.date || ''}`)
-            lines.push('')
-            lines.push('---')
-            lines.push('')
-            lines.push(en.body)
-            lines.push('')
-            lines.push('---')
-            lines.push('')
-
             const assets = fs.readdirSync(outputRoot)
             const downloadLinks = []
             const dmg = assets.find(f => f.endsWith('.dmg'))
             const exe = assets.find(f => f.endsWith('.exe'))
             if (dmg) downloadLinks.push(`[macOS (arm64)](${releaseDownloadUrl}/${encodeURIComponent(dmg)})`)
             if (exe) downloadLinks.push(`[Windows (x64)](${releaseDownloadUrl}/${encodeURIComponent(exe)})`)
-            if (downloadLinks.length) {
-              lines.push(`📥 **Downloads**: ${downloadLinks.join(' · ')}`)
-              lines.push('')
-            }
 
-            lines.push('📖 [Full changelog](https://cradle.wibus.ren/#/changelog)')
-
-            return lines.join('\n')
+            return template
+              .replace(/\{\{title\}\}/g, title)
+              .replace(/\{\{version\}\}/g, displayVersion)
+              .replace(/\{\{date\}\}/g, en.date || '')
+              .replace(/\{\{body\}\}/g, en.body)
+              .replace(/\{\{downloads\}\}/g, downloadLinks.join(' · ') || 'No downloads available')
           }
 
           function walk(dir, files = []) {
