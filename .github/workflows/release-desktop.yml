@@ -352,11 +352,42 @@ jobs:
           $installDir = Join-Path $env:RUNNER_TEMP "CradleInstall"
           Remove-Item $installDir -Recurse -Force -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Path $installDir | Out-Null
-          Start-Process -FilePath $installer -ArgumentList "/S", "/D=$installDir" -Wait -NoNewWindow
-          $exe = Join-Path $installDir "Cradle.exe"
-          if (!(Test-Path $exe)) {
-            Get-ChildItem $installDir -Recurse | Select-Object FullName, Length | Format-Table -AutoSize
-            throw "Installed Cradle.exe was not found at $exe"
+          $process = Start-Process -FilePath $installer -ArgumentList "/S", "/D=$installDir" -Wait -NoNewWindow -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "NSIS installer exited with code $($process.ExitCode)"
+          }
+
+          $candidatePaths = @(
+            (Join-Path $installDir "Cradle.exe"),
+            (Join-Path $installDir "Cradle\Cradle.exe"),
+            (Join-Path $env:LOCALAPPDATA "Programs\Cradle\Cradle.exe"),
+            (Join-Path $env:ProgramFiles "Cradle\Cradle.exe")
+          ) | Where-Object { $_ -and (Test-Path $_) }
+          if (${env:ProgramFiles(x86)}) {
+            $programFilesX86Candidate = Join-Path ${env:ProgramFiles(x86)} "Cradle\Cradle.exe"
+            if (Test-Path $programFilesX86Candidate) {
+              $candidatePaths += $programFilesX86Candidate
+            }
+          }
+
+          $exe = $candidatePaths | Select-Object -First 1
+          if (!$exe) {
+            $searchRoots = @(
+              $installDir,
+              (Join-Path $env:LOCALAPPDATA "Programs"),
+              $env:ProgramFiles
+            ) | Where-Object { $_ -and (Test-Path $_) }
+            if (${env:ProgramFiles(x86)} -and (Test-Path ${env:ProgramFiles(x86)})) {
+              $searchRoots += ${env:ProgramFiles(x86)}
+            }
+            $exe = $searchRoots |
+              ForEach-Object { Get-ChildItem $_ -Recurse -Filter Cradle.exe -ErrorAction SilentlyContinue } |
+              Select-Object -First 1 -ExpandProperty FullName
+          }
+
+          if (!$exe) {
+            Get-ChildItem $installDir -Recurse -ErrorAction SilentlyContinue | Select-Object FullName, Length | Format-Table -AutoSize
+            throw "Installed Cradle.exe was not found after running $installer"
           }
           "exe=$exe" >> $env:GITHUB_OUTPUT
 
