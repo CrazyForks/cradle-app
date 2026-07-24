@@ -339,6 +339,7 @@ It intentionally lists modules, not routes or leaf actions. Use `cradle man <mod
 | `kimi` | 1 | Generated Cradle CLI module. | `cradle man kimi` |
 | `link-preview` | 1 | Generated Cradle CLI module. | `cradle man link-preview` |
 | `managed-resources` | 5 | Generated Cradle CLI module. | `cradle man managed-resources` |
+| `mcp-server` | 3 | Generated Cradle CLI module. | `cradle man mcp-server` |
 | `observability` | 5 | Inspect local observability events, incidents, and exports. | `cradle man observability` |
 | `opencode` | 1 | Generated Cradle CLI module. | `cradle man opencode` |
 | `plugin` | 11 | Generated Cradle CLI module. | `cradle man plugin` |

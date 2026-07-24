@@ -33,9 +33,17 @@ export class MigrationRunner {
     const { dbPath, migrationsDir } = this.config.getOptions()
 
     try {
-      this.bootstrapReporter?.runSync('database-migration', () => {
+      // Always migrate — optional chaining on runSync would skip migrate when
+      // bootstrapReporter is absent (export-openapi, early db() from services).
+      const runMigrate = () => {
         migrate(db, { migrationsFolder: migrationsDir })
-      })
+      }
+      if (this.bootstrapReporter) {
+        this.bootstrapReporter.runSync('database-migration', runMigrate)
+      }
+ else {
+        runMigrate()
+      }
       this.runPendingMaintenanceTasks()
     }
  catch (error) {

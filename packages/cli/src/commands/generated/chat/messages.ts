@@ -15,7 +15,7 @@ const spec = {
     "chat",
     "messages"
   ],
-  "description": "Get chat message snapshot rows",
+  "description": "Get chat message shell rows",
   "flags": [
     {
       "name": "cursor",
