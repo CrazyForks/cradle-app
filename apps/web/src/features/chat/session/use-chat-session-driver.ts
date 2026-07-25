@@ -1,13 +1,16 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
+import type { UIMessage } from 'ai'
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 
 import { getServerUrl } from '~/lib/electron'
+import type { PassiveRunStateInput } from '~/store/chat'
 import { chatSelectors, useChatStore } from '~/store/chat'
 
 import { chatMessageHistoryInfiniteOptions } from '../api/messages'
 import { runtimeSessionStatusQueryKey } from '../commands/runtime-session-status-command'
 import { useRuntimeSessionStatus } from '../runtime/use-runtime-session-status'
 import { createChatSessionEventSource } from '../transport/chat-event-tail-transport'
+import { hydrateChatMessageShells } from './hydrate-chat-message-shells'
 import { openPassiveSessionStream } from './session-passive-stream'
 import {
   deriveSessionPassiveStreamProjection,
@@ -24,15 +27,41 @@ import {
   releaseSessionStreamingStateForTerminalRun,
 } from './use-chat-session-types'
 
+function applyProjectedMessages(
+  sessionId: string,
+  projection: {
+    messages: UIMessage[]
+    passiveRunState: PassiveRunStateInput
+    failedMessage: { messageId: string, errorText: string } | null
+    requestSnapshotRefresh?: boolean
+  },
+  scheduleSnapshotRefresh: (delay?: number) => void,
+) {
+  const store = useChatStore.getState()
+  store.setMessages(sessionId, projection.messages)
+  store.setSessionHydrated(sessionId, true)
+  store.clearSessionErrors(sessionId)
+  store.setPassiveRunState(sessionId, projection.passiveRunState)
+
+  if (projection.failedMessage) {
+    store.failGeneration(projection.failedMessage.messageId, projection.failedMessage.errorText)
+  }
+  if (projection.requestSnapshotRefresh) {
+    scheduleSnapshotRefresh(0)
+  }
+}
+
 export function useChatSessionDriver(chatSessionId: string | null, active = true): void {
   const controls = useChatSessionRuntimeControls(chatSessionId)
   const {
+    queryClient,
     scheduleSnapshotRefresh,
     refreshQueue,
   } = controls
   const controlsRef = useRef(controls)
   controlsRef.current = controls
   const driverEnabled = active && !!chatSessionId
+  const hydrateGenerationRef = useRef(0)
   const generatedSnapshotRowsOptions = useMemo(
     () => chatMessageHistoryInfiniteOptions(chatSessionId ?? ''),
     [chatSessionId],
@@ -78,6 +107,7 @@ export function useChatSessionDriver(chatSessionId: string | null, active = true
 
   useLayoutEffect(() => {
     authoritativeSnapshotObservedRef.current = false
+    hydrateGenerationRef.current += 1
   }, [chatSessionId])
 
   useLayoutEffect(() => {
@@ -158,6 +188,7 @@ export function useChatSessionDriver(chatSessionId: string | null, active = true
     }
 
     let cancelled = false
+    const generation = hydrateGenerationRef.current
     void (async () => {
       const cachedRows = await readStableMessageRows(chatSessionId).catch((error: unknown) => {
         console.warn('[useChatSession] failed to read stable message cache', error)
@@ -180,14 +211,25 @@ export function useChatSessionDriver(chatSessionId: string | null, active = true
       }
 
       const projection = deriveStableSessionSnapshotProjection(stableRows)
-      store.setMessages(chatSessionId, projection.messages)
-      store.setSessionHydrated(chatSessionId, true)
-      store.clearSessionErrors(chatSessionId)
-      store.setPassiveRunState(chatSessionId, projection.passiveRunState)
-
-      if (projection.failedMessage) {
-        store.failGeneration(projection.failedMessage.messageId, projection.failedMessage.errorText)
+      const messages = await hydrateChatMessageShells(
+        controlsRef.current.queryClient,
+        chatSessionId,
+        projection.messages,
+      )
+      if (
+        cancelled
+        || generation !== hydrateGenerationRef.current
+        || authoritativeSnapshotObservedRef.current
+        || (useChatStore.getState().messagesMap.get(chatSessionId)?.length ?? 0) > 0
+      ) {
+        return
       }
+
+      applyProjectedMessages(
+        chatSessionId,
+        { ...projection, messages },
+        delay => controlsRef.current.scheduleSnapshotRefresh(delay),
+      )
     })()
 
     return () => {
@@ -207,10 +249,13 @@ export function useChatSessionDriver(chatSessionId: string | null, active = true
     })
   }, [chatSessionId, driverEnabled])
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (!driverEnabled || !chatSessionId || !snapshotRows) {
       return
     }
+
+    let cancelled = false
+    const generation = ++hydrateGenerationRef.current
     const runState = chatSelectors.sessionRunState(chatSessionId)(useChatStore.getState())
     const store = useChatStore.getState()
     const projection = deriveSessionSnapshotProjection({
@@ -225,32 +270,37 @@ export function useChatSessionDriver(chatSessionId: string | null, active = true
       return
     }
 
-    store.setMessages(chatSessionId, projection.messages)
-    store.setSessionHydrated(chatSessionId, true)
-    store.clearSessionErrors(chatSessionId)
-    store.setPassiveRunState(chatSessionId, projection.passiveRunState)
-
-    if (projection.failedMessage) {
-      store.failGeneration(projection.failedMessage.messageId, projection.failedMessage.errorText)
-    }
-    if (projection.requestSnapshotRefresh) {
-      scheduleSnapshotRefresh(0)
-    }
-
-    const pendingPassiveStreamLeaseRelease = pendingPassiveStreamLeaseReleaseRef.current
-    if (
-      pendingPassiveStreamLeaseRelease
-      && !snapshotRowsQuery.isFetching
-      && snapshotRowsQuery.dataUpdatedAt > pendingPassiveStreamLeaseRelease.requestedDataUpdatedAt
-    ) {
-      pendingPassiveStreamLeaseReleaseRef.current = null
-      const state = useChatStore.getState()
-      if (state.streamLeaseMap.get(pendingPassiveStreamLeaseRelease.messageId)?.sessionId === chatSessionId) {
-        state.releaseStreamLease(pendingPassiveStreamLeaseRelease.messageId)
-        refreshQueue(QUEUE_DRAIN_SYNC_DELAY_MS)
+    void (async () => {
+      const messages = await hydrateChatMessageShells(queryClient, chatSessionId, projection.messages)
+      if (cancelled || generation !== hydrateGenerationRef.current) {
+        return
       }
+
+      applyProjectedMessages(
+        chatSessionId,
+        { ...projection, messages },
+        scheduleSnapshotRefresh,
+      )
+
+      const pendingPassiveStreamLeaseRelease = pendingPassiveStreamLeaseReleaseRef.current
+      if (
+        pendingPassiveStreamLeaseRelease
+        && !snapshotRowsQuery.isFetching
+        && snapshotRowsQuery.dataUpdatedAt > pendingPassiveStreamLeaseRelease.requestedDataUpdatedAt
+      ) {
+        pendingPassiveStreamLeaseReleaseRef.current = null
+        const state = useChatStore.getState()
+        if (state.streamLeaseMap.get(pendingPassiveStreamLeaseRelease.messageId)?.sessionId === chatSessionId) {
+          state.releaseStreamLease(pendingPassiveStreamLeaseRelease.messageId)
+          refreshQueue(QUEUE_DRAIN_SYNC_DELAY_MS)
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
     }
-  }, [chatSessionId, driverEnabled, refreshQueue, runtimeActiveRunMessageId, runtimeIdle, runtimeStatusKnown, scheduleSnapshotRefresh, snapshotRows, snapshotRowsQuery.dataUpdatedAt, snapshotRowsQuery.isFetching])
+  }, [chatSessionId, driverEnabled, queryClient, refreshQueue, runtimeActiveRunMessageId, runtimeIdle, runtimeStatusKnown, scheduleSnapshotRefresh, snapshotRows, snapshotRowsQuery.dataUpdatedAt, snapshotRowsQuery.isFetching])
 
   useEffect(() => {
     if (

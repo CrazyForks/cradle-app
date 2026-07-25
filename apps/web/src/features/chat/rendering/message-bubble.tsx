@@ -6,7 +6,6 @@ import {
   CopyLine as CopyIcon,
   PencilLine as PencilIcon,
 } from '@mingcute/react'
-import { useQuery } from '@tanstack/react-query'
 import type { UIMessage } from 'ai'
 import { useEffect, useRef, useState } from 'react'
 
@@ -18,7 +17,6 @@ import { cn } from '~/lib/cn'
 import { chatSelectors } from '~/store/chat'
 import { STREAMDOWN_RENDER_OPTIONS } from '~/store/streamdown'
 
-import { chatMessageDetailQueryOptions } from '../api/messages'
 import { readChatContinuationMetadata } from '../capabilities/chat-continuation-metadata'
 import { readBangCommandMetadata, readBangResultMetadata } from '../commands/bang-command-metadata'
 import { isChatMessageShell } from '../session/use-chat-session-types'
@@ -32,6 +30,7 @@ import type {
 import {
   groupMessageParts,
   splitExecutionPhase,
+  splitSegmentExecutionPhase,
 } from './chat-render-plan'
 import { useChatRenderStore, useChatRenderStoreApi } from './chat-render-store'
 import { ImageLightbox } from './image-lightbox'
@@ -483,9 +482,11 @@ const MessageBubbleSegmentsView = ({
       : null
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState(0)
-  const [detailsExpanded, setDetailsExpanded] = useState(false)
-  const detailSegments = segments.filter(segment => segment.kind !== 'text')
-  const textSegments = segments.filter(segment => segment.kind === 'text')
+  const executionPhaseSplit = isStreaming
+    ? null
+    : splitSegmentExecutionPhase(segments, {
+        describeToolKind: part => describeToolCall(part).kind,
+      })
 
   const imageSegments = (() => {
     return segments
@@ -617,31 +618,16 @@ const MessageBubbleSegmentsView = ({
       return <BangCommandBlock result={frame.bangResult} />
     }
 
-    if (isStreaming) {
+    if (isStreaming || !executionPhaseSplit) {
       return renderSegmentsWithImageGrid(segments)
     }
 
     return (
       <>
-        {renderSegmentsWithImageGrid(textSegments)}
-        {detailSegments.length > 0 && (
-          <div className="my-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="xs"
-              onClick={() => setDetailsExpanded(expanded => !expanded)}
-              className="h-6 px-1.5 text-[11px] text-muted-foreground/60 hover:text-muted-foreground"
-            >
-              {detailsExpanded ? 'Hide execution details' : 'Show execution details'}
-            </Button>
-            {detailsExpanded && (
-              <div className="mt-1 space-y-1 overflow-hidden -mx-3 px-3">
-                {renderSegmentsWithImageGrid(detailSegments)}
-              </div>
-            )}
-          </div>
-        )}
+        <ExecutionPhaseFold>
+          {executionPhaseSplit.executionItems.map(renderSegment)}
+        </ExecutionPhaseFold>
+        {renderSegmentsWithImageGrid(executionPhaseSplit.finalItems)}
       </>
     )
   }
@@ -757,29 +743,8 @@ export const MessageBubbleById = ({
     const message = readMessageFromState(state, storeSessionId, messageId)
     return message ? isChatMessageShell(message) : false
   })
-  const chatStore = useChatRenderStoreApi()
-  const detailQuery = useQuery({
-    ...chatMessageDetailQueryOptions(storeSessionId, messageId),
-    enabled: Boolean(sessionId) && isShell && !isStreaming,
-  })
 
-  useEffect(() => {
-    const detail = detailQuery.data?.message
-    if (
-      !detail
-      || !sessionId
-      || (detail.role !== 'user' && detail.role !== 'assistant')
-    ) {
-      return
-    }
-    chatStore.getState().updateMessage(
-      storeSessionId,
-      messageId,
-      () => detail as UIMessage,
-    )
-  }, [chatStore, detailQuery.data, messageId, sessionId, storeSessionId])
-
-  if (!frame) {
+  if (!frame || isShell) {
     return null
   }
 
