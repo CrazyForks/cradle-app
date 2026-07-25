@@ -12,6 +12,7 @@ import { cn } from '~/lib/cn'
 import type { PullRequestDetail } from './api/pull-requests'
 import { PullRequestCodeView } from './pull-request-code-view'
 import { PullRequestDetailSkeletonView } from './pull-request-detail-skeleton-view'
+import type { PullRequestActionsViewProps } from './pull-request-summary-view'
 import { PullRequestSummaryView } from './pull-request-summary-view'
 import { PullRequestTimelineView } from './pull-request-timeline-view'
 
@@ -28,6 +29,7 @@ export interface PullRequestDetailPanelViewProps {
   now?: number
   onRefresh: () => void
   onOpenWork?: () => void
+  actions?: PullRequestActionsViewProps
 }
 
 export function PullRequestDetailPanelView({
@@ -41,6 +43,7 @@ export function PullRequestDetailPanelView({
   now = Date.now(),
   onRefresh,
   onOpenWork,
+  actions,
 }: PullRequestDetailPanelViewProps) {
   const { t } = useTranslation('pull-requests')
   const [activeTab, setActiveTab] = useState<PullRequestDetailTab>(initialTab)
@@ -117,9 +120,9 @@ export function PullRequestDetailPanelView({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl px-6 pb-20">
+        <div className="mx-auto max-w-3xl px-6 pb-6">
           <div className={activeTab === 'summary' ? undefined : 'hidden'}>
-            <PullRequestSummaryView detail={detail} now={now} />
+            <PullRequestSummaryView detail={detail} now={now} locale={locale} actions={actions} />
           </div>
           <div className={activeTab === 'timeline' ? undefined : 'hidden'}>
             <PullRequestTimelineView detail={detail} locale={locale} />
@@ -129,6 +132,7 @@ export function PullRequestDetailPanelView({
           </div>
         </div>
       </div>
+
     </div>
   )
 }

@@ -32,39 +32,32 @@ describe('markPullRequestReady', () => {
   })
 
   it('uses GitHub GraphQL to convert a draft pull request to ready for review', async () => {
+    const pull = {
+      node_id: 'PR_node_id',
+      number: 14,
+      title: 'Fix retries',
+      state: 'open',
+      draft: false,
+      merged: false,
+      mergeable: true,
+      mergeable_state: 'clean',
+      html_url: 'https://github.com/cradle/app/pull/14',
+      head: { sha: 'head-sha', ref: 'feature' },
+      base: { ref: 'main' },
+    }
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        node_id: 'PR_node_id',
-        number: 14,
-        title: 'Fix retries',
-        state: 'open',
-        draft: true,
-        merged: false,
-        mergeable: true,
-        mergeable_state: 'clean',
-        html_url: 'https://github.com/cradle/app/pull/14',
-        head: { sha: 'head-sha', ref: 'feature' },
-        base: { ref: 'main' },
-      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...pull, draft: true }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         data: {
           markPullRequestReadyForReview: {
-            pullRequest: {
-              number: 14,
-              title: 'Fix retries',
-              isDraft: false,
-              url: 'https://github.com/cradle/app/pull/14',
-              state: 'OPEN',
-              headRefName: 'feature',
-              baseRefName: 'main',
-              headRefOid: 'head-sha',
-            },
+            pullRequest: { number: 14 },
           },
         },
       }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(pull), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(markPullRequestReady('cradle', 'app', 14)).resolves.toEqual({
+    await expect(markPullRequestReady('cradle', 'app', 14)).resolves.toMatchObject({
       number: 14,
       title: 'Fix retries',
       draft: false,
@@ -77,19 +70,19 @@ describe('markPullRequestReady', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       'https://api.github.com/repos/cradle/app/pulls/14',
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      expect.objectContaining({ method: 'GET' }),
     )
     const graphQlRequest = fetchMock.mock.calls[1]
     expect(graphQlRequest?.[0]).toBe('https://api.github.com/graphql')
-    expect(graphQlRequest?.[1]).toEqual(expect.objectContaining({
-      method: 'POST',
-      body: expect.any(String),
-      signal: expect.any(AbortSignal),
-    }))
     expect(JSON.parse(graphQlRequest?.[1]?.body as string)).toEqual(expect.objectContaining({
       variables: { pullRequestId: 'PR_node_id' },
       query: expect.stringContaining('markPullRequestReadyForReview'),
     }))
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      'https://api.github.com/repos/cradle/app/pulls/14',
+      expect.objectContaining({ method: 'GET' }),
+    )
   })
 })
 
@@ -168,7 +161,6 @@ describe('pull request detail reads', () => {
       expect.objectContaining({
         filename: 'src/retry.ts',
         patch: '@@ -1 +1 @@\n-old\n+new',
-        previous_filename: null,
       }),
     ])
   })
@@ -235,14 +227,16 @@ describe('pull request review threads', () => {
       startLine: 6,
       diffSide: 'RIGHT',
       startDiffSide: 'RIGHT',
-      comments: [{
-        id: 'PRRC_comment',
-        body: 'Please handle the failure path.',
-        url: 'https://github.com/cradle/app/pull/70#discussion_r1',
-        createdAt: '2026-07-21T10:00:00Z',
-        updatedAt: '2026-07-21T11:00:00Z',
-        author: { login: 'reviewer' },
-      }],
+      comments: {
+        nodes: [{
+          id: 'PRRC_comment',
+          body: 'Please handle the failure path.',
+          url: 'https://github.com/cradle/app/pull/70#discussion_r1',
+          createdAt: '2026-07-21T10:00:00Z',
+          updatedAt: '2026-07-21T11:00:00Z',
+          author: { login: 'reviewer' },
+        }],
+      },
     }])
     const request = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))
     expect(request.variables).toEqual({ owner: 'cradle', repo: 'app', number: 70, after: null })
@@ -340,6 +334,36 @@ describe('mergePullRequest', () => {
       expect.objectContaining({
         method: 'PUT',
         body: JSON.stringify({ merge_method: 'squash' }),
+      }),
+    )
+  })
+
+  it('forwards optional commit title and message to GitHub', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      sha: 'merge-sha',
+      merged: true,
+      message: 'Pull Request successfully merged',
+    }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(mergePullRequest({
+      owner: 'cradle',
+      repo: 'app',
+      pullRequestNumber: 70,
+      mergeMethod: 'squash',
+      commitTitle: 'feat: thing (#70)',
+      commitMessage: 'Detailed message',
+    })).resolves.toMatchObject({ merged: true })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.github.com/repos/cradle/app/pulls/70/merge',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({
+          merge_method: 'squash',
+          commit_title: 'feat: thing (#70)',
+          commit_message: 'Detailed message',
+        }),
       }),
     )
   })

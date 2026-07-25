@@ -1,6 +1,5 @@
 import { throttling } from '@octokit/plugin-throttling'
-import { RequestError } from '@octokit/request-error'
-import { Octokit } from 'octokit'
+import { Octokit, RequestError } from 'octokit'
 
 import { resolveGitHubToken } from '../github-api-token'
 
@@ -10,31 +9,44 @@ export const GITHUB_RATE_LIMIT_SOFT_FLOOR = 500
 
 const CradleOctokit = Octokit.plugin(throttling)
 
+export type CradleOctokitInstance = InstanceType<typeof CradleOctokit>
+
 let rateLimitRemaining = 5000
 let rateLimitReset = 0
-let cachedOctokit: InstanceType<typeof CradleOctokit> | null = null
+let cachedOctokit: CradleOctokitInstance | null = null
 let cachedOctokitToken: string | null | undefined
 
 export { RequestError }
 
-export function recordGitHubRateLimit(headers: Headers | Record<string, string | number | undefined> | undefined): void {
+export class GitHubAuthRequiredError extends Error {
+  readonly status = 401
+
+  constructor(message = 'GitHub authentication required. Set GH_TOKEN / GITHUB_TOKEN or run `gh auth login`.') {
+    super(message)
+    this.name = 'GitHubAuthRequiredError'
+  }
+}
+
+export function recordGitHubRateLimit(
+  headers: Headers | Record<string, string | number | undefined> | undefined,
+): void {
   if (!headers) {
     return
   }
-  const remaining = headers instanceof Headers
+  const remainingRaw = headers instanceof Headers
     ? headers.get('x-ratelimit-remaining') ?? headers.get('X-RateLimit-Remaining')
-    : String(headers['x-ratelimit-remaining'] ?? headers['X-RateLimit-Remaining'] ?? '')
-  const reset = headers instanceof Headers
+    : headers['x-ratelimit-remaining'] ?? headers['X-RateLimit-Remaining']
+  const resetRaw = headers instanceof Headers
     ? headers.get('x-ratelimit-reset') ?? headers.get('X-RateLimit-Reset')
-    : String(headers['x-ratelimit-reset'] ?? headers['X-RateLimit-Reset'] ?? '')
-  if (remaining) {
-    const parsed = Number.parseInt(remaining, 10)
+    : headers['x-ratelimit-reset'] ?? headers['X-RateLimit-Reset']
+  if (remainingRaw !== undefined && remainingRaw !== null && `${remainingRaw}`.length > 0) {
+    const parsed = Number.parseInt(String(remainingRaw), 10)
     if (Number.isFinite(parsed)) {
       rateLimitRemaining = parsed
     }
   }
-  if (reset) {
-    const parsed = Number.parseInt(reset, 10)
+  if (resetRaw !== undefined && resetRaw !== null && `${resetRaw}`.length > 0) {
+    const parsed = Number.parseInt(String(resetRaw), 10)
     if (Number.isFinite(parsed)) {
       rateLimitReset = parsed
     }
@@ -65,14 +77,34 @@ export function resetGitHubClientState(): void {
   cachedOctokitToken = undefined
 }
 
-export function getOctokit(options?: { requireToken?: boolean }): InstanceType<typeof CradleOctokit> {
+function createOctokitFetch(): typeof fetch {
+  return async (input, init) => {
+    const response = await globalThis.fetch(input, init)
+    if (response.status === 204 || response.status === 304) {
+      return response
+    }
+    const contentType = response.headers.get('content-type') ?? ''
+    if (contentType.includes('json')) {
+      return response
+    }
+    // Test mocks and some edge proxies omit / mis-label Content-Type; Octokit
+    // then returns a raw string / fails to unwrap GraphQL `data`. Normalize.
+    const text = await response.text()
+    return new Response(text, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: {
+        ...Object.fromEntries(response.headers.entries()),
+        'content-type': 'application/json; charset=utf-8',
+      },
+    })
+  }
+}
+
+export function getOctokit(options?: { requireToken?: boolean }): CradleOctokitInstance {
   const token = resolveGitHubToken()
   if (options?.requireToken && !token) {
-    throw new RequestError(
-      'GitHub authentication required. Set GH_TOKEN / GITHUB_TOKEN or run `gh auth login`.',
-      401,
-      { request: { method: 'GET', url: 'https://api.github.com', headers: {} } },
-    )
+    throw new GitHubAuthRequiredError()
   }
 
   if (cachedOctokit && cachedOctokitToken === token) {
@@ -84,20 +116,11 @@ export function getOctokit(options?: { requireToken?: boolean }): InstanceType<t
     auth: token ?? undefined,
     request: {
       timeout: GITHUB_REQUEST_TIMEOUT_MS,
+      fetch: createOctokitFetch(),
     },
     throttle: {
-      onRateLimit: (retryAfter, _options, _octokit, retryCount) => {
-        if (retryCount < 2) {
-          return true
-        }
-        return false
-      },
-      onSecondaryRateLimit: (retryAfter, _options, _octokit, retryCount) => {
-        if (retryCount < 2) {
-          return true
-        }
-        return false
-      },
+      onRateLimit: (_retryAfter, _options, _octokit, retryCount) => retryCount < 2,
+      onSecondaryRateLimit: (_retryAfter, _options, _octokit, retryCount) => retryCount < 2,
     },
   })
   return cachedOctokit

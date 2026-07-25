@@ -1,8 +1,21 @@
 import { Elysia } from 'elysia'
 
 import { AppError } from '../../errors/app-error'
+import * as ConsoleActions from './console-actions'
 import { PullRequestModel } from './model'
 import * as PullRequest from './service'
+
+function parsePullRequestNumber(raw: string): number {
+  const number = Number(raw)
+  if (!Number.isInteger(number) || number <= 0) {
+    throw new AppError({
+      code: 'invalid_pull_request_number',
+      status: 400,
+      message: 'Invalid pull request number.',
+    })
+  }
+  return number
+}
 
 export const pullRequest = new Elysia({
   prefix: '/sessions',
@@ -97,12 +110,22 @@ export const pullRequestFeed = new Elysia({
     query: PullRequestModel.searchPageQuery,
     response: { 200: PullRequestModel.searchPageResponse },
   })
+  .get('/:owner/:repo/assignable-users', async ({ params }) => {
+    return await ConsoleActions.listAssignableUsers(params.owner, params.repo)
+  }, {
+    detail: {
+      'summary': 'List users who can be assigned to pull requests in this repository',
+      'x-cradle-cli': { command: ['pull-request', 'assignable-users'] },
+    },
+    params: PullRequestModel.ownerRepoParams,
+    response: { 200: PullRequestModel.assignableUsersResponse },
+  })
   .get('/:owner/:repo/:number/detail', async ({ params }) => {
-    const number = Number(params.number)
-    if (!Number.isInteger(number) || number <= 0) {
-      throw new AppError({ code: 'invalid_pull_request_number', status: 400, message: 'Invalid pull request number.' })
-    }
-    return await PullRequest.fetchPullRequestDetailByRef(params.owner, params.repo, number)
+    return await PullRequest.fetchPullRequestDetailByRef(
+      params.owner,
+      params.repo,
+      parsePullRequestNumber(params.number),
+    )
   }, {
     detail: {
       'summary': 'Get live GitHub pull request details by owner/repo/number, independent of any Cradle session',
@@ -110,4 +133,149 @@ export const pullRequestFeed = new Elysia({
     },
     params: PullRequestModel.refParams,
     response: { 200: PullRequestModel.detailResponse },
+  })
+  .get('/:owner/:repo/:number/fingerprint', async ({ params }) => {
+    return await ConsoleActions.getPullRequestFingerprint(
+      params.owner,
+      params.repo,
+      parsePullRequestNumber(params.number),
+    )
+  }, {
+    detail: {
+      'summary': 'Get a cheap GitHub pull request fingerprint for cache-aware refresh',
+      'x-cradle-cli': { command: ['pull-request', 'fingerprint'] },
+    },
+    params: PullRequestModel.refParams,
+    response: { 200: PullRequestModel.fingerprintResponse },
+  })
+  .post('/:owner/:repo/:number/fingerprint/probe', async ({ params, body }) => {
+    return await ConsoleActions.probePullRequestFingerprintChange(
+      params.owner,
+      params.repo,
+      parsePullRequestNumber(params.number),
+      body.previous ?? null,
+    )
+  }, {
+    detail: {
+      'summary': 'Probe GitHub for pull request fingerprint changes while the detail surface is visible',
+      'x-cradle-cli': { command: ['pull-request', 'fingerprint', 'probe'] },
+    },
+    params: PullRequestModel.refParams,
+    body: PullRequestModel.fingerprintProbeBody,
+    response: { 200: PullRequestModel.fingerprintResponse },
+  })
+  .post('/:owner/:repo/:number/comment', async ({ params, body }) => {
+    return await ConsoleActions.commentOnPullRequest({
+      owner: params.owner,
+      repo: params.repo,
+      number: parsePullRequestNumber(params.number),
+      body: body.body,
+    })
+  }, {
+    detail: {
+      'summary': 'Post an issue comment on a pull request',
+      'x-cradle-cli': { command: ['pull-request', 'comment'] },
+    },
+    params: PullRequestModel.refParams,
+    body: PullRequestModel.commentBody,
+    response: { 200: PullRequestModel.commentResponse },
+  })
+  .post('/:owner/:repo/:number/review', async ({ params, body }) => {
+    return await ConsoleActions.submitPullRequestReviewAction({
+      owner: params.owner,
+      repo: params.repo,
+      number: parsePullRequestNumber(params.number),
+      event: body.event,
+      body: body.body,
+    })
+  }, {
+    detail: {
+      'summary': 'Submit a whole-PR GitHub review (approve, request changes, or comment)',
+      'x-cradle-cli': { command: ['pull-request', 'review'] },
+    },
+    params: PullRequestModel.refParams,
+    body: PullRequestModel.reviewBody,
+    response: { 200: PullRequestModel.reviewResponse },
+  })
+  .post('/:owner/:repo/:number/merge', async ({ params, body }) => {
+    return await ConsoleActions.mergePullRequestByRef({
+      owner: params.owner,
+      repo: params.repo,
+      number: parsePullRequestNumber(params.number),
+      mergeMethod: body.mergeMethod,
+      commitTitle: body.commitTitle,
+      commitMessage: body.commitMessage,
+    })
+  }, {
+    detail: {
+      'summary': 'Merge a pull request using a repository-allowed merge method',
+      'x-cradle-cli': { command: ['pull-request', 'merge'] },
+    },
+    params: PullRequestModel.refParams,
+    body: PullRequestModel.mergeBody,
+    response: { 200: PullRequestModel.mergeResponse },
+  })
+  .post('/:owner/:repo/:number/assignees', async ({ params, body }) => {
+    return await ConsoleActions.updatePullRequestAssignees({
+      owner: params.owner,
+      repo: params.repo,
+      number: parsePullRequestNumber(params.number),
+      add: body.add,
+      remove: body.remove,
+    })
+  }, {
+    detail: {
+      'summary': 'Add or remove pull request assignees',
+      'x-cradle-cli': { command: ['pull-request', 'assignees'] },
+    },
+    params: PullRequestModel.refParams,
+    body: PullRequestModel.assigneesBody,
+    response: { 200: PullRequestModel.peopleMutationResponse },
+  })
+  .post('/:owner/:repo/:number/reviewers', async ({ params, body }) => {
+    return await ConsoleActions.updatePullRequestReviewers({
+      owner: params.owner,
+      repo: params.repo,
+      number: parsePullRequestNumber(params.number),
+      add: body.add,
+      remove: body.remove,
+    })
+  }, {
+    detail: {
+      'summary': 'Request or remove pull request reviewers',
+      'x-cradle-cli': { command: ['pull-request', 'reviewers'] },
+    },
+    params: PullRequestModel.refParams,
+    body: PullRequestModel.reviewersBody,
+    response: { 200: PullRequestModel.peopleMutationResponse },
+  })
+  .post('/:owner/:repo/:number/ready', async ({ params }) => {
+    const pullRequest = await ConsoleActions.markPullRequestReadyByRef(
+      params.owner,
+      params.repo,
+      parsePullRequestNumber(params.number),
+    )
+    return { pullRequest }
+  }, {
+    detail: {
+      'summary': 'Mark a pull request ready for review by owner/repo/number',
+      'x-cradle-cli': { command: ['pull-request', 'ready'] },
+    },
+    params: PullRequestModel.refParams,
+    response: { 200: PullRequestModel.mutationResponse },
+  })
+  .post('/:owner/:repo/:number/draft', async ({ params }) => {
+    const pullRequest = await ConsoleActions.markPullRequestDraftByRef(
+      params.owner,
+      params.repo,
+      parsePullRequestNumber(params.number),
+    )
+    return { pullRequest }
+  }, {
+    detail: {
+      'summary': 'Convert a pull request back to draft by owner/repo/number',
+      'x-cradle-cli': { command: ['pull-request', 'draft'] },
+    },
+    params: PullRequestModel.refParams,
+    response: { 200: PullRequestModel.mutationResponse },
   })

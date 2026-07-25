@@ -781,7 +781,9 @@ export async function fetchAvailableChecks(
     fetchBranchProtection(owner, repo, defaultBranch),
   ])
 
-  const requiredContexts = new Set(branchProtection?.requiredContexts ?? [])
+  const requiredContexts = new Set(
+    branchProtection?.required_status_checks?.contexts ?? [],
+  )
   const seen = new Map<string, AvailableCheck>()
 
   for (const run of checkRunsResp?.check_runs ?? []) {

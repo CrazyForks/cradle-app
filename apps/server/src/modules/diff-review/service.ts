@@ -37,18 +37,12 @@ import { and, asc, desc, eq, ne } from 'drizzle-orm'
 import { AppError } from '../../errors/app-error'
 import { currentUnixSeconds } from '../../helpers/time'
 import { db } from '../../infra'
-import type {
-  GitHubPullRequestReviewThread,
-  MergePullRequestResult,
-} from '../../lib/github-api'
 import {
   createPullRequestReviewThread,
   fetchPullRequestReviewThreads,
   hasGitHubToken,
-  mergePullRequest,
   replyToPullRequestReviewThread,
   resolvePullRequestReviewThread,
-  submitPullRequestReview,
 } from '../../lib/github-api'
 import * as BackgroundJobPoller from '../background-job/poller'
 import { registerOwnerProjector } from '../background-job/registry'
@@ -65,6 +59,7 @@ import * as ModelRegistry from '../model-registry/service'
 import { runtimeOwnsProviderBinding, runtimeSupportsProviderKind } from '../provider-contracts/runtime-compatibility'
 import type { RuntimeKind } from '../provider-contracts/types'
 import { resolveProviderTarget } from '../provider-targets/service'
+import * as PullRequestConsole from '../pull-request/console-actions'
 import type { SessionPullRequestDetail } from '../pull-request/service'
 import * as PullRequest from '../pull-request/service'
 import * as Session from '../session/service'
@@ -102,6 +97,10 @@ import type {
   ReviewThreadView,
 } from './types'
 import { hashText, jsonStringify, safeJsonParse, shortHash, titleForRepository } from './utils'
+
+type GitHubPullRequestReviewThread = Awaited<
+  ReturnType<typeof fetchPullRequestReviewThreads>
+>[number]
 
 export type {
   DiffReviewPreferenceView,
@@ -1265,9 +1264,9 @@ function syncGitHubReviewThreads(input: {
         anchor = null
       }
     }
-    const firstComment = remoteThread.comments[0]
+    const firstComment = remoteThread.comments.nodes[0]
     const createdAt = firstComment ? githubTimestamp(firstComment.createdAt) : currentUnixSeconds()
-    const updatedAt = remoteThread.comments.reduce(
+    const updatedAt = remoteThread.comments.nodes.reduce(
       (latest, comment) => Math.max(latest, githubTimestamp(comment.updatedAt)),
       createdAt,
     )
@@ -1307,7 +1306,7 @@ function syncGitHubReviewThreads(input: {
       .run()
 
     db().delete(diffReviewComments).where(eq(diffReviewComments.threadId, id)).run()
-    for (const comment of remoteThread.comments) {
+    for (const comment of remoteThread.comments.nodes) {
       db().insert(diffReviewComments).values({
         id: githubCommentId(comment.id),
         threadId: id,
@@ -1971,11 +1970,11 @@ export async function submitReview(input: {
   if (review.sourceKind === 'github-pull-request') {
     const binding = readSourceBinding<GitHubPullRequestBinding>(getReviewSource(review))
     try {
-      await submitPullRequestReview({
+      await PullRequestConsole.submitPullRequestReviewAction({
         owner: binding.owner,
         repo: binding.repo,
-        pullRequestNumber: binding.number,
-        body: input.bodyMarkdown,
+        number: binding.number,
+        body: input.bodyMarkdown ?? undefined,
         event: githubReviewEvent(input.decision),
       })
       sourceSyncState = 'synced'
@@ -2034,50 +2033,13 @@ export async function mergeGitHubReview(input: {
     })
   }
   const binding = readSourceBinding<GitHubPullRequestBinding>(getReviewSource(review))
-  const detail = await PullRequest.fetchPullRequestDetailByRef(binding.owner, binding.repo, binding.number)
-  if (detail.pullRequest.merged || detail.pullRequest.state !== 'open') {
-    throw new AppError({
-      code: 'diff_review_pull_request_not_open',
-      status: 409,
-      message: 'The pull request is no longer open.',
-      details: { reviewId: review.id, state: detail.pullRequest.state, merged: detail.pullRequest.merged },
-    })
-  }
-  if (detail.pullRequest.isDraft) {
-    throw new AppError({
-      code: 'diff_review_pull_request_draft',
-      status: 409,
-      message: 'Mark the pull request ready for review before merging.',
-      details: { reviewId: review.id },
-    })
-  }
-  if (detail.pullRequest.mergeable !== true) {
-    throw new AppError({
-      code: 'diff_review_pull_request_not_mergeable',
-      status: 409,
-      message: detail.pullRequest.mergeable === false
-        ? 'The pull request has conflicts or is blocked from merging.'
-        : 'GitHub has not finished computing mergeability. Refresh and try again.',
-      details: { reviewId: review.id, mergeableState: detail.pullRequest.mergeableState },
-    })
-  }
-  if (detail.pullRequest.checksState === 'failure' || detail.pullRequest.checksState === 'pending') {
-    throw new AppError({
-      code: 'diff_review_pull_request_checks_not_ready',
-      status: 409,
-      message: detail.pullRequest.checksState === 'failure'
-        ? 'Required pull request checks are failing.'
-        : 'Pull request checks are still running.',
-      details: { reviewId: review.id, checksState: detail.pullRequest.checksState },
-    })
-  }
 
-  let result: MergePullRequestResult
+  let result: { sha: string, merged: true, message: string }
   try {
-    result = await mergePullRequest({
+    result = await PullRequestConsole.mergePullRequestByRef({
       owner: binding.owner,
       repo: binding.repo,
-      pullRequestNumber: binding.number,
+      number: binding.number,
       mergeMethod: input.mergeMethod,
     })
   }
@@ -2093,14 +2055,6 @@ export async function mergeGitHubReview(input: {
       },
     })
     throw error
-  }
-  if (!result.merged) {
-    throw new AppError({
-      code: 'diff_review_pull_request_merge_rejected',
-      status: 409,
-      message: result.message,
-      details: { reviewId: review.id, mergeMethod: input.mergeMethod },
-    })
   }
   recordEvent({
     reviewId: review.id,

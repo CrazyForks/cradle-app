@@ -1,6 +1,5 @@
 import type { CachedFetchResult } from '../github-cache'
 import {
-  cachedFetch as baseCachedFetch,
   getCached,
   isCacheStale,
   setCache,
@@ -8,7 +7,6 @@ import {
 } from '../github-cache'
 import {
   getOctokit,
-  isGitHubRateLimited,
   recordGitHubRateLimit,
   RequestError,
   shouldAvoidGitHubNetwork,
@@ -23,9 +21,11 @@ export interface GitHubCachedReadOptions<T> {
   etag?: boolean
   mode?: GitHubReadMode
   /**
-   * Perform the network fetch. Receive the stored ETag (if any).
-   * Return status 304 when GitHub reports Not Modified.
+   * When true (default), stale hits return cached data immediately and
+   * revalidate in the background. Set false for list feeds that must
+   * surface newly created items on the same request.
    */
+  swr?: boolean
   fetcher: (etag: string | null) => Promise<CachedFetchResult<T>>
 }
 
@@ -36,8 +36,7 @@ const inFlight = new Map<string, Promise<unknown>>()
  * - fresh TTL hit → zero network
  * - stale hit → return stale immediately; background ETag revalidate (SWR)
  * - miss → sync fetch (unless budget is low)
- * - force → sync conditional fetch
- * - probe → like force but callers should use a cheap fingerprint resource
+ * - force / probe → sync conditional fetch
  */
 export async function cachedGitHubRead<T>(options: GitHubCachedReadOptions<T>): Promise<T | null> {
   const {
@@ -45,33 +44,33 @@ export async function cachedGitHubRead<T>(options: GitHubCachedReadOptions<T>): 
     ttlS = 60,
     etag = true,
     mode = 'read',
+    swr = true,
     fetcher,
   } = options
 
   const cached = getCached<T>(cacheKey)
-  const fresh = cached && !isCacheStale(cacheKey, ttlS)
+  const fresh = Boolean(cached && !isCacheStale(cacheKey, ttlS))
 
-  if (mode === 'read' && fresh) {
+  if (mode === 'read' && fresh && cached) {
     return cached.data
   }
 
-  if (mode === 'read' && cached && shouldAvoidGitHubNetwork()) {
+  // Probe and normal reads must not burn budget; only explicit force may.
+  if (mode !== 'force' && cached && shouldAvoidGitHubNetwork()) {
     return cached.data
   }
 
   if (mode === 'read' && cached && !fresh) {
-    // Stale-while-revalidate: serve immediately, refresh in background.
-    void coalesce(cacheKey, async () => {
-      await revalidate(cacheKey, etag, fetcher)
-    })
-    return cached.data
+    if (swr) {
+      void coalesce(cacheKey, async () => {
+        await revalidate(cacheKey, etag, fetcher)
+      })
+      return cached.data
+    }
+    return coalesce(cacheKey, async () => revalidate(cacheKey, etag, fetcher))
   }
 
-  if (shouldAvoidGitHubNetwork() && mode !== 'force' && cached) {
-    return cached.data
-  }
-
-  if (shouldAvoidGitHubNetwork() && mode !== 'force' && !cached) {
+  if (mode !== 'force' && shouldAvoidGitHubNetwork() && !cached) {
     return null
   }
 
@@ -117,11 +116,12 @@ export function clearGitHubReadInFlight(): void {
   inFlight.clear()
 }
 
-/** Thin wrapper kept for callers that still use the older cachedFetch shape. */
+/** Drop-in replacement for the old github-cache `cachedFetch` used by github-api.ts. */
 export async function cachedFetch<T>(options: {
   cacheKey: string
   ttlS?: number
   etag?: boolean
+  swr?: boolean
   fetcher: (etag: string | null) => Promise<CachedFetchResult<T>>
 }): Promise<T | null> {
   return cachedGitHubRead({ ...options, mode: 'read' })
@@ -131,12 +131,11 @@ export async function octokitRestGet<T>(input: {
   route: string
   params?: Record<string, unknown>
   etag?: string | null
-  schema: { parse: (data: unknown) => T }
   requireToken?: boolean
 }): Promise<CachedFetchResult<T>> {
   const octokit = getOctokit({ requireToken: input.requireToken })
   try {
-    const response = await octokit.request(input.route as `${string} ${string}`, {
+    const response = await octokit.request(input.route, {
       ...input.params,
       headers: input.etag
         ? { 'If-None-Match': input.etag }
@@ -145,7 +144,7 @@ export async function octokitRestGet<T>(input: {
     recordGitHubRateLimit(response.headers as Record<string, string | number | undefined>)
     const etagHeader = response.headers.etag ?? response.headers.ETag
     return {
-      data: input.schema.parse(response.data),
+      data: response.data as T,
       etag: typeof etagHeader === 'string' ? etagHeader : null,
       status: response.status,
     }
@@ -160,5 +159,3 @@ export async function octokitRestGet<T>(input: {
     throw error
   }
 }
-
-export { baseCachedFetch, isGitHubRateLimited, shouldAvoidGitHubNetwork }

@@ -6,22 +6,18 @@ import { subscribeWithSelector } from 'zustand/middleware'
 import { shallow } from 'zustand/shallow'
 import { createWithEqualityFn } from 'zustand/traditional'
 
+import type { ChatDisplayRow } from './expand-messages-for-display'
+import { expandMessagesForDisplay } from './expand-messages-for-display'
 import {
-  applyDisplaySplits,
   findActiveAssistantId,
   getQueueItemId,
-  hasVisibleParts,
-  hydrateDisplaySplits,
-  projectStreamingThroughSplits,
   reconcileMessage,
   reconcileMessages,
 } from './helpers'
 import { getChatStoreTelemetrySnapshot as buildTelemetrySnapshot } from './telemetry'
 import type {
-  AssistantDisplaySplit,
   ChatActiveGoal,
   ChatError,
-  ChatRunDisplayMeta,
   ChatRunState,
   ChatState,
   MessagePart,
@@ -53,34 +49,49 @@ export function createChatStore() {
 
       setMessages: (sessionId, messages) => {
         set((state) => {
-          const splits = hydrateDisplaySplits(messages, state.assistantDisplaySplitMap)
+          // Canonical store only — steer display cuts are view-owned (expandMessagesForDisplay).
+          const reclaimed = reclaimSteerTailStreamingRefs(state, sessionId)
+          const base = reclaimed ? { ...state, ...reclaimed } : state
+          const incoming = preserveSteerSplitMetadata(
+            stripSteerTailMessages(base.messagesMap.get(sessionId) ?? EMPTY_MESSAGES),
+            stripSteerTailMessages(messages),
+          )
+          const current = stripSteerTailMessages(base.messagesMap.get(sessionId) ?? EMPTY_MESSAGES)
           const displayed = preserveLeasedMessages(
             sessionId,
-            state.messagesMap.get(sessionId),
-            applyDisplaySplits(messages, splits),
-            state.streamLeaseMap,
+            current.length > 0 ? current : undefined,
+            incoming,
+            base.streamLeaseMap,
           )
-          const current = state.messagesMap.get(sessionId)
-          const next = current ? reconcileMessages(current, displayed) : displayed
-          const splitsChanged = splits !== state.assistantDisplaySplitMap
+          const next = current.length > 0 ? reconcileMessages(current, displayed) : displayed
 
-          const currentIds = new Set((current ?? []).map(m => m.id))
+          const currentIds = new Set(current.map(m => m.id))
           const nextIds = new Set(displayed.map(m => m.id))
           const removed = [...currentIds].filter(id => !nextIds.has(id))
 
-          const currentRunState = readSessionRunState(state, sessionId)
+          const currentRunState = readSessionRunState(base, sessionId)
           const removedActiveMessage = currentRunState.phase === 'streaming'
             && currentRunState.source === 'passive'
             && removed.includes(currentRunState.messageId)
 
-          if (current === next && !splitsChanged && !removedActiveMessage) {
+          const previous = state.messagesMap.get(sessionId)
+          const hadSteerTails = previous?.some(message => message.id.includes(STEER_TAIL_MARKER)) ?? false
+          if (
+            previous === next
+            && !reclaimed
+            && !removedActiveMessage
+            && !hadSteerTails
+          ) {
             return state
           }
 
-          return produce(state, (draft) => {
+          return produce(base, (draft) => {
             draft.messagesMap.set(sessionId, next)
-            if (splitsChanged) {
-              draft.assistantDisplaySplitMap = splits as Draft<Map<string, AssistantDisplaySplit>>
+            // Drop legacy split ownership; cuts live in the transcript projection only.
+            for (const [sourceId] of draft.assistantDisplaySplitMap) {
+              if (previous?.some(m => m.id === sourceId) || next.some(m => m.id === sourceId)) {
+                draft.assistantDisplaySplitMap.delete(sourceId)
+              }
             }
             for (const id of removed) {
               draft.errorMap.delete(id)
@@ -104,11 +115,17 @@ export function createChatStore() {
 
           const nextMessages = messages.slice()
           nextMessages[idx] = updated
+          const remappedMessages = updated.id !== messageId
+            ? rewriteSteerSourceMessageIds(nextMessages, messageId, updated.id)
+            : nextMessages
           const nextMap = new Map(state.messagesMap)
-          nextMap.set(sessionId, nextMessages)
+          nextMap.set(sessionId, remappedMessages)
 
           if (updated.id !== messageId) {
-            return { messagesMap: nextMap, ...migrateDisplaySplit(state, nextMap, messageId, updated.id) }
+            return {
+              messagesMap: nextMap,
+              ...moveStreamingRefs_immutable(state, sessionId, messageId, updated.id),
+            }
           }
           return { messagesMap: nextMap }
         })
@@ -125,8 +142,10 @@ export function createChatStore() {
 
       insertLiveSteerMessage: (sessionId, message, sourceMessageId) => {
         set((state) => {
-          const messages = state.messagesMap.get(sessionId)
-          if (!messages) { return state }
+          const messages = stripSteerTailMessages(state.messagesMap.get(sessionId) ?? EMPTY_MESSAGES)
+          if (messages.length === 0 && !state.messagesMap.has(sessionId)) {
+            return state
+          }
 
           const queueItemId = getQueueItemId(message)
           if (messages.some(m => m.id === message.id || (queueItemId && getQueueItemId(m) === queueItemId))) {
@@ -135,54 +154,36 @@ export function createChatStore() {
 
           const runState = readSessionRunState(state, sessionId)
           const activeMessageId = readRunStateMessageId(runState)
-          const effectiveSourceId = sourceMessageId ?? findActiveAssistantId(
-            messages,
-            readStreamingMessageIds(state),
-            activeMessageId,
-          )
+          const metadataSourceId = readSteerSourceMessageId(message)
+          const effectiveSourceId = sourceMessageId
+            ?? metadataSourceId
+            ?? findActiveAssistantId(
+              messages,
+              readStreamingMessageIds(state),
+              activeMessageId,
+            )
           const sourceIdx = effectiveSourceId
             ? messages.findIndex(m => m.id === effectiveSourceId && m.role === 'assistant')
             : -1
+          const sourceMessage = sourceIdx === -1 ? null : messages[sourceIdx]
+          const steerMessage = ensureSteerSplitMetadata(message, sourceMessage)
 
-          if (sourceIdx === -1) {
-            const nextMap = new Map(state.messagesMap)
-            nextMap.set(sessionId, [...messages, message])
-            return { messagesMap: nextMap }
-          }
+          const nextMessages = sourceIdx === -1
+            ? [...messages, steerMessage]
+            : [
+                ...messages.slice(0, sourceIdx + 1),
+                steerMessage,
+                ...messages.slice(sourceIdx + 1),
+              ]
 
           return produce(state, (draft) => {
-            const sourceMessage = messages[sourceIdx]
-            const split = state.assistantDisplaySplitMap.get(sourceMessage.id)
-            const tailMessageId = split?.tailMessageId ?? `${sourceMessage.id}:steer-tail`
-            const sourceHead = trimTrailingEmptyParts(split ? sourceMessage.parts : structuredClone(sourceMessage.parts) as MessagePart[])
-            const tailMessage = { ...sourceMessage, id: tailMessageId, parts: projectTailFromHead(sourceMessage.parts, sourceHead) }
-            const shouldKeepTail = isStreamingMessageId(state, sourceMessage.id)
-              || activeMessageId === sourceMessage.id
-
-            const insertedMessageIds = split ? [...split.insertedMessageIds, message.id] : [message.id]
-            const insertedQueueItemIds = queueItemId
-              ? split ? [...split.insertedQueueItemIds.filter(id => id !== queueItemId), queueItemId] : [queueItemId]
-              : split?.insertedQueueItemIds ?? []
-
-            const nextMessages = [
-              ...messages.slice(0, sourceIdx),
-              { ...sourceMessage, parts: sourceHead },
-              message,
-              ...(shouldKeepTail || hasVisibleParts(tailMessage.parts) ? [tailMessage] : []),
-              ...messages.slice(sourceIdx + 1).filter(m => m.id !== tailMessageId),
-            ]
-
             draft.messagesMap.set(sessionId, nextMessages as Draft<UIMessage[]>)
-            draft.assistantDisplaySplitMap.set(sourceMessage.id, {
-              sourceMessageId: sourceMessage.id,
-              tailMessageId,
-              splitParts: structuredClone(sourceHead) as Draft<MessagePart[]>,
-              insertedMessageIds,
-              insertedQueueItemIds,
-            } as Draft<AssistantDisplaySplit>)
-
-            if (shouldKeepTail) {
-              moveStreamingRefs(draft, state, sessionId, sourceMessage.id, tailMessageId)
+            // Ensure streaming stays on the real assistant id (never a synthetic :steer-tail).
+            reclaimSteerTailStreamingRefsInto(draft, sessionId)
+            for (const [sourceId] of draft.assistantDisplaySplitMap) {
+              if (nextMessages.some(m => m.id === sourceId)) {
+                draft.assistantDisplaySplitMap.delete(sourceId)
+              }
             }
           })
         })
@@ -426,9 +427,7 @@ export function createChatStore() {
         })
       },
 
-      projectStreamingMessageForDisplay: (_sessionId, message) => {
-        return projectStreamingThroughSplits(message, get().assistantDisplaySplitMap)
-      },
+      projectStreamingMessageForDisplay: (_sessionId, message) => message,
 
       setSessionHydrated: (sessionId, hydrated) => {
         set((state) => {
@@ -537,6 +536,8 @@ export const useChatStore = createChatStore()
 
 const EMPTY_IDS: string[] = []
 const idsCache = new WeakMap<UIMessage[], string[]>()
+const EMPTY_DISPLAY_ROWS: ChatDisplayRow[] = []
+const displayRowsCache = new WeakMap<UIMessage[], ChatDisplayRow[]>()
 const EMPTY_STREAMING_MESSAGE_IDS = new Set<string>()
 let streamingMessageIdsCache: Set<string> | null = null
 
@@ -548,6 +549,18 @@ function cachedIds(messages: UIMessage[]): string[] {
     idsCache.set(messages, ids)
   }
   return ids
+}
+
+function cachedDisplayRows(messages: UIMessage[]): ChatDisplayRow[] {
+  if (messages === EMPTY_MESSAGES || messages.length === 0) {
+    return EMPTY_DISPLAY_ROWS
+  }
+  let rows = displayRowsCache.get(messages)
+  if (!rows) {
+    rows = expandMessagesForDisplay(messages)
+    displayRowsCache.set(messages, rows)
+  }
+  return rows
 }
 
 function readSessionRunState(state: Pick<ChatState, 'runStateMap'>, sessionId: string): ChatRunState {
@@ -836,6 +849,10 @@ export const chatSelectors = {
   messageIds: (sessionId: string) => (s: ChatState) =>
     cachedIds(s.messagesMap.get(sessionId) ?? EMPTY_MESSAGES),
 
+  /** View-only transcript rows (steer head / steer user / mid / tail). */
+  displayRows: (sessionId: string) => (s: ChatState) =>
+    cachedDisplayRows(s.messagesMap.get(sessionId) ?? EMPTY_MESSAGES),
+
   messageCount: (sessionId: string) => (s: ChatState) =>
     s.messagesMap.get(sessionId)?.length ?? 0,
 
@@ -931,49 +948,253 @@ export function getChatStoreTelemetrySnapshot() {
 
 // ── Private Helpers ──────────────────────────────────────────
 
-function getRunMessageIds(state: ChatState, messageId: string): string[] {
-  const ids: string[] = []
-  const seen = new Set<string>()
-  let current: string | null = messageId
-  while (current && !seen.has(current)) {
-    ids.push(current)
-    seen.add(current)
-    current = state.assistantDisplaySplitMap.get(current)?.tailMessageId ?? null
-  }
-  return ids
+const STEER_TAIL_MARKER = ':steer-tail'
+
+function stripSteerTailMessages(messages: UIMessage[]): UIMessage[] {
+  return messages.filter(message => !message.id.includes(STEER_TAIL_MARKER))
 }
 
-function resolveStreamingDisplayMessageId(state: ChatState, messageId: string): string {
-  return getRunMessageIds(state, messageId).at(-1) ?? messageId
+function readSteerSplitParts(message: UIMessage): MessagePart[] | null {
+  const metadata = (message as { metadata?: unknown }).metadata
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return null
+  }
+  const cradle = (metadata as Record<string, unknown>).cradle
+  if (!cradle || typeof cradle !== 'object' || Array.isArray(cradle)) {
+    return null
+  }
+  const continuation = (cradle as { continuation?: unknown }).continuation
+  if (!continuation || typeof continuation !== 'object' || Array.isArray(continuation)) {
+    return null
+  }
+  const splitParts = (continuation as { splitParts?: unknown }).splitParts
+  if (!Array.isArray(splitParts)) {
+    return null
+  }
+  if (!splitParts.every(part => part && typeof part === 'object' && typeof (part as { type?: unknown }).type === 'string')) {
+    return null
+  }
+  return splitParts as MessagePart[]
 }
 
-function moveStreamingRefs(
-  draft: Draft<ChatState>,
-  state: ChatState,
-  sessionId: string,
-  from: string,
-  to: string,
-): void {
-  if (from === to) { return }
-  const ctrl = state.activeAbortControllers.get(from)
-  const run = state.runDisplayMetaMap.get(from)
-  const lease = state.streamLeaseMap.get(from)
+function withSteerContinuationFields(
+  message: UIMessage,
+  fields: { sourceMessageId?: string, splitParts?: MessagePart[] },
+): UIMessage {
+  const metadata = (message as { metadata?: unknown }).metadata
+  const currentMetadata = metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+    ? metadata as Record<string, unknown>
+    : {}
+  const cradle = currentMetadata.cradle
+  const currentCradle = cradle && typeof cradle === 'object' && !Array.isArray(cradle)
+    ? cradle as Record<string, unknown>
+    : {}
+  const continuation = currentCradle.continuation
+  const currentContinuation = continuation && typeof continuation === 'object' && !Array.isArray(continuation)
+    ? continuation as Record<string, unknown>
+    : {}
 
-  draft.activeAbortControllers.delete(from)
-  draft.runDisplayMetaMap.delete(from)
-  draft.streamLeaseMap.delete(from)
-  if (ctrl) { draft.activeAbortControllers.set(to, ctrl) }
-  if (run && (run.completedAtMs === null || !state.runDisplayMetaMap.has(to))) {
-    draft.runDisplayMetaMap.set(to, { ...run } as Draft<ChatRunDisplayMeta>)
-  }
-  if (lease) {
-    draft.streamLeaseMap.set(to, { ...lease } as Draft<MessageStreamLease>)
+  return {
+    ...message,
+    metadata: {
+      ...currentMetadata,
+      cradle: {
+        ...currentCradle,
+        continuation: {
+          ...currentContinuation,
+          mode: 'steer',
+          ...(fields.sourceMessageId ? { sourceMessageId: fields.sourceMessageId } : {}),
+          ...(fields.splitParts ? { splitParts: structuredClone(fields.splitParts) } : {}),
+        },
+      },
+    },
+  } as UIMessage
+}
+
+/** Snapshot refresh may drop splitParts; keep the live cut from the prior steer message. */
+function preserveSteerSplitMetadata(current: UIMessage[], incoming: UIMessage[]): UIMessage[] {
+  if (current.length === 0) {
+    return incoming
   }
 
-  const runState = readSessionRunState(state, sessionId)
-  if (readRunStateMessageId(runState) === from) {
-    draft.runStateMap.set(sessionId, moveRunStateMessage(runState, to) as Draft<ChatRunState>)
+  const previousById = new Map(current.map(message => [message.id, message]))
+  const previousByQueue = new Map<string, UIMessage>()
+  for (const message of current) {
+    const queueItemId = getQueueItemId(message)
+    if (queueItemId) {
+      previousByQueue.set(queueItemId, message)
+    }
   }
+
+  let changed = false
+  const next = incoming.map((message) => {
+    const queueItemId = getQueueItemId(message)
+    const previous = previousById.get(message.id)
+      ?? (queueItemId ? previousByQueue.get(queueItemId) : undefined)
+    if (!previous) {
+      return message
+    }
+
+    const previousSource = readSteerSourceMessageId(previous)
+    const previousSplit = readSteerSplitParts(previous)
+    if (!previousSource || !previousSplit) {
+      return message
+    }
+
+    const incomingSource = readSteerSourceMessageId(message)
+    const incomingSplit = readSteerSplitParts(message)
+    if (incomingSource && incomingSplit) {
+      return message
+    }
+
+    changed = true
+    return withSteerContinuationFields(message, {
+      sourceMessageId: incomingSource ?? previousSource,
+      splitParts: incomingSplit ?? previousSplit,
+    })
+  })
+
+  return changed ? next : incoming
+}
+
+function ensureSteerSplitMetadata(
+  message: UIMessage,
+  sourceMessage: UIMessage | null,
+): UIMessage {
+  if (!sourceMessage) {
+    return message
+  }
+  const sourceMessageId = readSteerSourceMessageId(message) ?? sourceMessage.id
+  const splitParts = readSteerSplitParts(message)
+    ?? (structuredClone(sourceMessage.parts) as MessagePart[])
+  if (readSteerSourceMessageId(message) === sourceMessageId && readSteerSplitParts(message)) {
+    return message
+  }
+  return withSteerContinuationFields(message, { sourceMessageId, splitParts })
+}
+
+function rewriteSteerSourceMessageIds(
+  messages: UIMessage[],
+  fromId: string,
+  toId: string,
+): UIMessage[] {
+  let changed = false
+  const next = messages.map((message) => {
+    if (readSteerSourceMessageId(message) !== fromId) {
+      return message
+    }
+    changed = true
+    return withSteerContinuationFields(message, {
+      sourceMessageId: toId,
+      ...(readSteerSplitParts(message) ? { splitParts: readSteerSplitParts(message)! } : {}),
+    })
+  })
+  return changed ? next : messages
+}
+
+function canonicalMessageId(messageId: string): string {
+  const index = messageId.indexOf(STEER_TAIL_MARKER)
+  return index === -1 ? messageId : messageId.slice(0, index)
+}
+
+function readSteerSourceMessageId(message: UIMessage): string | null {
+  const metadata = (message as { metadata?: unknown }).metadata
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return null
+  }
+  const cradle = (metadata as Record<string, unknown>).cradle
+  if (!cradle || typeof cradle !== 'object' || Array.isArray(cradle)) {
+    return null
+  }
+  const continuation = (cradle as { continuation?: unknown }).continuation
+  if (!continuation || typeof continuation !== 'object' || Array.isArray(continuation)) {
+    return null
+  }
+  const sourceMessageId = (continuation as { sourceMessageId?: unknown }).sourceMessageId
+  return typeof sourceMessageId === 'string' && sourceMessageId ? sourceMessageId : null
+}
+
+/** Move leases / run refs off synthetic `:steer-tail` ids onto the real assistant id. */
+function reclaimSteerTailStreamingRefs(state: ChatState, sessionId: string): Partial<ChatState> | null {
+  const draft = produce(state, (d) => {
+    reclaimSteerTailStreamingRefsInto(d, sessionId)
+  })
+  if (
+    draft.streamLeaseMap === state.streamLeaseMap
+    && draft.runDisplayMetaMap === state.runDisplayMetaMap
+    && draft.activeAbortControllers === state.activeAbortControllers
+    && draft.runStateMap === state.runStateMap
+  ) {
+    return null
+  }
+  return {
+    streamLeaseMap: draft.streamLeaseMap,
+    runDisplayMetaMap: draft.runDisplayMetaMap,
+    activeAbortControllers: draft.activeAbortControllers,
+    runStateMap: draft.runStateMap,
+  }
+}
+
+function reclaimSteerTailStreamingRefsInto(draft: Draft<ChatState>, sessionId: string): void {
+  const moveMapEntry = <T>(map: Map<string, T>, from: string, to: string) => {
+    const value = map.get(from)
+    if (!value) {
+      return
+    }
+    map.delete(from)
+    if (!map.has(to)) {
+      map.set(to, value)
+    }
+  }
+
+  for (const id of [...draft.streamLeaseMap.keys()]) {
+    const lease = draft.streamLeaseMap.get(id)
+    if (!lease || lease.sessionId !== sessionId) {
+      continue
+    }
+    const canonical = canonicalMessageId(id)
+    if (canonical !== id) {
+      moveMapEntry(draft.streamLeaseMap, id, canonical)
+    }
+  }
+
+  for (const id of [...draft.runDisplayMetaMap.keys()]) {
+    const canonical = canonicalMessageId(id)
+    if (canonical !== id) {
+      // Only reclaim meta that belongs to this session's messages / leases.
+      const lease = draft.streamLeaseMap.get(canonical)
+      if (lease?.sessionId === sessionId || draft.messagesMap.get(sessionId)?.some(m => m.id === canonical)) {
+        moveMapEntry(draft.runDisplayMetaMap, id, canonical)
+      }
+    }
+  }
+
+  for (const id of [...draft.activeAbortControllers.keys()]) {
+    const canonical = canonicalMessageId(id)
+    if (canonical !== id) {
+      const lease = draft.streamLeaseMap.get(canonical)
+      if (lease?.sessionId === sessionId || draft.messagesMap.get(sessionId)?.some(m => m.id === canonical)) {
+        moveMapEntry(draft.activeAbortControllers, id, canonical)
+      }
+    }
+  }
+
+  const runState = readSessionRunState(draft, sessionId)
+  const activeId = readRunStateMessageId(runState)
+  if (activeId) {
+    const canonical = canonicalMessageId(activeId)
+    if (canonical !== activeId) {
+      draft.runStateMap.set(sessionId, moveRunStateMessage(runState, canonical) as Draft<ChatRunState>)
+    }
+  }
+}
+
+function getRunMessageIds(_state: ChatState, messageId: string): string[] {
+  return [canonicalMessageId(messageId)]
+}
+
+function resolveStreamingDisplayMessageId(_state: ChatState, messageId: string): string {
+  return canonicalMessageId(messageId)
 }
 
 function moveStreamingRefs_immutable(state: ChatState, sessionId: string, from: string, to: string): Partial<ChatState> {
@@ -999,67 +1220,4 @@ function moveStreamingRefs_immutable(state: ChatState, sessionId: string, from: 
   }
 
   return { activeAbortControllers: nextAbort, runDisplayMetaMap: nextRun, streamLeaseMap: nextLease, runStateMap: nextRunState }
-}
-
-function migrateDisplaySplit(state: ChatState, messagesMap: Map<string, UIMessage[]>, from: string, to: string): Partial<ChatState> {
-  const split = state.assistantDisplaySplitMap.get(from)
-  if (!split) { return {} }
-
-  const nextTailId = `${to}:steer-tail`
-  const nextSplits = new Map(state.assistantDisplaySplitMap)
-  nextSplits.delete(from)
-  if (!nextSplits.has(to)) {
-    nextSplits.set(to, { ...split, sourceMessageId: to, tailMessageId: nextTailId })
-  }
-
-  const result: Partial<ChatState> = { assistantDisplaySplitMap: nextSplits }
-
-  // Find session containing tail message and update it
-  for (const [sid, msgs] of messagesMap) {
-    const tailIdx = msgs.findIndex(m => m.id === split.tailMessageId)
-    if (tailIdx === -1) { continue }
-
-    const nextMsgs = msgs.slice()
-    nextMsgs[tailIdx] = { ...msgs[tailIdx], id: nextTailId }
-    const nextMap = new Map(messagesMap)
-    nextMap.set(sid, nextMsgs)
-    result.messagesMap = nextMap
-
-    // Migrate streaming refs for tail
-    const ctrl = state.activeAbortControllers.get(split.tailMessageId)
-    if (ctrl) { const a = new Map(state.activeAbortControllers); a.delete(split.tailMessageId); a.set(nextTailId, ctrl); result.activeAbortControllers = a }
-    const rm = state.runDisplayMetaMap.get(split.tailMessageId)
-    if (rm) { const r = new Map(state.runDisplayMetaMap); r.delete(split.tailMessageId); r.set(nextTailId, rm); result.runDisplayMetaMap = r }
-    const lease = state.streamLeaseMap.get(split.tailMessageId)
-    if (lease) { const l = new Map(state.streamLeaseMap); l.delete(split.tailMessageId); l.set(nextTailId, lease); result.streamLeaseMap = l }
-    const runState = readSessionRunState(state, sid)
-    if (readRunStateMessageId(runState) === split.tailMessageId) {
-      const nextRunState = new Map(state.runStateMap)
-      nextRunState.set(sid, moveRunStateMessage(runState, nextTailId))
-      result.runStateMap = nextRunState
-    }
-    break
-  }
-
-  return result
-}
-
-function trimTrailingEmptyParts(parts: MessagePart[]): MessagePart[] {
-  let end = parts.length
-  while (end > 0 && isEmptyPart(parts[end - 1])) { end-- }
-  return end === parts.length ? parts : parts.slice(0, end)
-}
-
-function isEmptyPart(part: MessagePart): boolean {
-  if (part.type === 'text') { return !(part as { text: string }).text }
-  if (part.type === 'reasoning') {
-    const reasoningPart = part as { text?: string, reasoning?: string }
-    return !(reasoningPart.text || reasoningPart.reasoning)
-  }
-  return false
-}
-
-function projectTailFromHead(sourceParts: MessagePart[], headParts: MessagePart[]): MessagePart[] {
-  // The tail is everything after the head's content
-  return sourceParts.slice(headParts.length)
 }

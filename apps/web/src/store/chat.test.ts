@@ -390,7 +390,7 @@ describe('chat store messages', () => {
     expect(meta?.acceptedAtMs).toBe(225)
   })
 
-  it('releases a live steer tail only when the source run is terminal', () => {
+  it('keeps live steer streaming on the canonical assistant id', () => {
     useChatStore.getState().setMessages('session-1', [{
       id: 'assistant-1',
       role: 'assistant',
@@ -412,23 +412,27 @@ describe('chat store messages', () => {
       },
     } as UIMessage)
 
-    expect(chatSelectors.isVisibleStreamingMessage('session-1', 'assistant-1:steer-tail')(useChatStore.getState())).toBe(true)
+    expect(useChatStore.getState().messagesMap.get('session-1')?.map(message => message.id)).toEqual([
+      'assistant-1',
+      'continuation-steer-1',
+    ])
+    expect(chatSelectors.isVisibleStreamingMessage('session-1', 'assistant-1')(useChatStore.getState())).toBe(true)
     expect(releaseSessionStreamingStateForTerminalRun('session-1', runtimeRun({
       runId: 'run-b',
       messageId: 'assistant-1',
       status: 'failed',
     }))).toBe(false)
-    expect(chatSelectors.isVisibleStreamingMessage('session-1', 'assistant-1:steer-tail')(useChatStore.getState())).toBe(true)
+    expect(chatSelectors.isVisibleStreamingMessage('session-1', 'assistant-1')(useChatStore.getState())).toBe(true)
 
     expect(releaseSessionStreamingStateForTerminalRun('session-1', runtimeRun({
       runId: 'run-a',
       messageId: 'assistant-1',
       status: 'failed',
     }))).toBe(true)
-    expect(chatSelectors.isVisibleStreamingMessage('session-1', 'assistant-1:steer-tail')(useChatStore.getState())).toBe(false)
+    expect(chatSelectors.isVisibleStreamingMessage('session-1', 'assistant-1')(useChatStore.getState())).toBe(false)
   })
 
-  it('maps passive active-run streaming from a split source message to the visible tail', () => {
+  it('keeps passive streaming leases on the canonical assistant through live steer', () => {
     useChatStore.getState().setMessages('session-1', [
       {
         id: 'assistant-1',
@@ -454,7 +458,9 @@ describe('chat store messages', () => {
     expect(useChatStore.getState().messagesMap.get('session-1')?.map(message => message.id)).toEqual([
       'assistant-1',
       'continuation-steer-canonical',
-      'assistant-1:steer-tail',
+    ])
+    expect(useChatStore.getState().messagesMap.get('session-1')?.[0]?.parts).toEqual([
+      { type: 'text', text: 'Before steer. After steer.' },
     ])
 
     useChatStore.getState().setRunDisplayId('assistant-1', 'run-a')
@@ -464,10 +470,8 @@ describe('chat store messages', () => {
       source: 'passive',
     })
 
-    expect(chatSelectors.isVisibleStreamingMessage('session-1', 'assistant-1')(useChatStore.getState())).toBe(false)
-    expect(chatSelectors.isVisibleStreamingMessage('session-1', 'assistant-1:steer-tail')(useChatStore.getState())).toBe(true)
-    expect(chatSelectors.runDisplayMeta('assistant-1')(useChatStore.getState())).toBeUndefined()
-    expect(chatSelectors.runDisplayMeta('assistant-1:steer-tail')(useChatStore.getState())?.runId).toBe('run-a')
+    expect(chatSelectors.isVisibleStreamingMessage('session-1', 'assistant-1')(useChatStore.getState())).toBe(true)
+    expect(chatSelectors.runDisplayMeta('assistant-1')(useChatStore.getState())?.runId).toBe('run-a')
 
     const projected = useChatStore.getState().projectStreamingMessageForDisplay('session-1', {
       id: 'assistant-1',
@@ -476,27 +480,27 @@ describe('chat store messages', () => {
     })
     useChatStore.getState().updateMessage('session-1', projected.id, () => projected)
 
-    expect(useChatStore.getState().messagesMap.get('session-1')?.[2]?.parts).toEqual([
-      { type: 'text', text: ' After steer. Still running.' },
+    expect(useChatStore.getState().messagesMap.get('session-1')?.[0]?.parts).toEqual([
+      { type: 'text', text: 'Before steer. After steer. Still running.' },
     ])
-    expect(chatSelectors.isVisibleStreamingMessage('session-1', 'assistant-1:steer-tail')(useChatStore.getState())).toBe(true)
+    expect(chatSelectors.isVisibleStreamingMessage('session-1', 'assistant-1')(useChatStore.getState())).toBe(true)
 
-    useChatStore.getState().releaseStreamLease('assistant-1:steer-tail')
-    expect(chatSelectors.isVisibleStreamingMessage('session-1', 'assistant-1:steer-tail')(useChatStore.getState())).toBe(false)
+    useChatStore.getState().releaseStreamLease('assistant-1')
+    expect(chatSelectors.isVisibleStreamingMessage('session-1', 'assistant-1')(useChatStore.getState())).toBe(false)
 
     useChatStore.getState().acquireStreamLease({
       sessionId: 'session-1',
       messageId: 'assistant-1',
       source: 'passive',
     })
-    expect(chatSelectors.isVisibleStreamingMessage('session-1', 'assistant-1:steer-tail')(useChatStore.getState())).toBe(true)
+    expect(chatSelectors.isVisibleStreamingMessage('session-1', 'assistant-1')(useChatStore.getState())).toBe(true)
 
     expect(releaseSessionStreamingStateForTerminalRun('session-1', runtimeRun({
       runId: 'run-a',
       messageId: 'assistant-1',
       status: 'complete',
     }))).toBe(true)
-    expect(chatSelectors.isVisibleStreamingMessage('session-1', 'assistant-1:steer-tail')(useChatStore.getState())).toBe(false)
+    expect(chatSelectors.isVisibleStreamingMessage('session-1', 'assistant-1')(useChatStore.getState())).toBe(false)
   })
 
   it('reopens stale completed run meta without using it as streaming state', () => {
@@ -528,7 +532,7 @@ describe('chat store messages', () => {
     expect(chatSelectors.isVisibleStreamingMessage('session-1', 'assistant-1')(useChatStore.getState())).toBe(true)
   })
 
-  it('inserts live steer messages before the assistant tail and keeps later deltas in a new bubble', () => {
+  it('inserts live steer after the source assistant and stamps split metadata', () => {
     useChatStore.getState().setMessages('session-1', [{
       id: 'assistant-1',
       role: 'assistant',
@@ -554,10 +558,16 @@ describe('chat store messages', () => {
     expect(afterInsert.messagesMap.get('session-1')?.map(message => message.id)).toEqual([
       'assistant-1',
       'continuation-steer-1',
-      'assistant-1:steer-tail',
     ])
-    expect(chatSelectors.isStreamingMessage('assistant-1')(afterInsert)).toBe(false)
-    expect(chatSelectors.isStreamingMessage('assistant-1:steer-tail')(afterInsert)).toBe(true)
+    expect(chatSelectors.isStreamingMessage('assistant-1')(afterInsert)).toBe(true)
+
+    const steer = afterInsert.messagesMap.get('session-1')?.[1] as UIMessage & {
+      metadata?: { cradle?: { continuation?: { sourceMessageId?: string, splitParts?: unknown } } }
+    }
+    expect(steer.metadata?.cradle?.continuation?.sourceMessageId).toBe('assistant-1')
+    expect(steer.metadata?.cradle?.continuation?.splitParts).toEqual([
+      { type: 'text', text: 'Before steer.' },
+    ])
 
     const projected = useChatStore.getState().projectStreamingMessageForDisplay('session-1', {
       id: 'assistant-1',
@@ -566,31 +576,11 @@ describe('chat store messages', () => {
     })
     useChatStore.getState().updateMessage('session-1', projected.id, () => projected)
 
-    expect(useChatStore.getState().messagesMap.get('session-1')).toEqual([
-      {
-        id: 'assistant-1',
-        role: 'assistant',
-        parts: [{ type: 'text', text: 'Before steer.' }],
-      },
-      {
-        id: 'continuation-steer-1',
-        role: 'user',
-        parts: [{ type: 'text', text: 'Please adjust.' }],
-        metadata: {
-          cradle: {
-            continuation: {
-              mode: 'steer',
-              queueItemId: 'steer-1',
-            },
-          },
-        },
-      },
-      {
-        id: 'assistant-1:steer-tail',
-        role: 'assistant',
-        parts: [{ type: 'text', text: ' After steer.' }],
-      },
-    ])
+    expect(useChatStore.getState().messagesMap.get('session-1')?.[0]).toEqual({
+      id: 'assistant-1',
+      role: 'assistant',
+      parts: [{ type: 'text', text: 'Before steer. After steer.' }],
+    })
   })
 
   it('keeps canonical live steer snapshots anchored by queue item id', () => {
@@ -639,16 +629,17 @@ describe('chat store messages', () => {
     expect(useChatStore.getState().messagesMap.get('session-1')?.map(message => message.id)).toEqual([
       'assistant-1',
       'continuation-steer-canonical',
-      'assistant-1:steer-tail',
     ])
-    expect(useChatStore.getState().messagesMap.get('session-1')?.[2]).toEqual({
-      id: 'assistant-1:steer-tail',
-      role: 'assistant',
-      parts: [],
-    })
+    const steer = useChatStore.getState().messagesMap.get('session-1')?.[1] as UIMessage & {
+      metadata?: { cradle?: { continuation?: { sourceMessageId?: string, splitParts?: unknown } } }
+    }
+    expect(steer.metadata?.cradle?.continuation?.sourceMessageId).toBe('assistant-1')
+    expect(steer.metadata?.cradle?.continuation?.splitParts).toEqual([
+      { type: 'text', text: 'Before steer.' },
+    ])
   })
 
-  it('hydrates persisted live steer splits from continuation metadata', () => {
+  it('hydrates persisted live steer without inventing steer-tail store messages', () => {
     useChatStore.getState().setMessages('session-1', [
       {
         id: 'assistant-1',
@@ -676,7 +667,7 @@ describe('chat store messages', () => {
       {
         id: 'assistant-1',
         role: 'assistant',
-        parts: [{ type: 'text', text: 'Before steer.' }],
+        parts: [{ type: 'text', text: 'Before steer. After steer.' }],
       },
       {
         id: 'continuation-steer-canonical',
@@ -693,11 +684,11 @@ describe('chat store messages', () => {
           },
         },
       },
-      {
-        id: 'assistant-1:steer-tail',
-        role: 'assistant',
-        parts: [{ type: 'text', text: ' After steer.' }],
-      },
+    ])
+    expect(chatSelectors.displayRows('session-1')(useChatStore.getState()).map(row => row.rowKey)).toEqual([
+      'assistant-1#steer-head-continuation-steer-canonical',
+      'continuation-steer-canonical',
+      'assistant-1#steer-tail-continuation-steer-canonical',
     ])
   })
 
@@ -727,7 +718,14 @@ describe('chat store messages', () => {
       ...message,
       id: 'assistant-canonical',
     }))
-    expect(chatSelectors.isStreamingMessage('assistant-canonical:steer-tail')(useChatStore.getState())).toBe(true)
+    expect(chatSelectors.isStreamingMessage('assistant-canonical')(useChatStore.getState())).toBe(true)
+    expect(
+      (
+        useChatStore.getState().messagesMap.get('session-1')?.[1] as UIMessage & {
+          metadata?: { cradle?: { continuation?: { sourceMessageId?: string } } }
+        }
+      ).metadata?.cradle?.continuation?.sourceMessageId,
+    ).toBe('assistant-canonical')
 
     useChatStore.getState().setMessages('session-1', [
       {
@@ -753,14 +751,20 @@ describe('chat store messages', () => {
     expect(useChatStore.getState().messagesMap.get('session-1')?.map(message => message.id)).toEqual([
       'assistant-canonical',
       'continuation-steer-canonical',
-      'assistant-canonical:steer-tail',
     ])
+    // Active stream lease keeps the local assistant parts; display expansion owns the cut.
     expect(useChatStore.getState().messagesMap.get('session-1')?.[0]?.parts).toEqual([
       { type: 'text', text: 'Before steer.' },
     ])
-    expect(useChatStore.getState().messagesMap.get('session-1')?.[2]?.parts).toEqual([])
+    const steer = useChatStore.getState().messagesMap.get('session-1')?.[1] as UIMessage & {
+      metadata?: { cradle?: { continuation?: { sourceMessageId?: string, splitParts?: unknown } } }
+    }
+    expect(steer.metadata?.cradle?.continuation?.sourceMessageId).toBe('assistant-canonical')
+    expect(steer.metadata?.cradle?.continuation?.splitParts).toEqual([
+      { type: 'text', text: 'Before steer.' },
+    ])
 
     useChatStore.getState().finishGeneration('assistant-canonical')
-    expect(chatSelectors.isStreamingMessage('assistant-canonical:steer-tail')(useChatStore.getState())).toBe(false)
+    expect(chatSelectors.isStreamingMessage('assistant-canonical')(useChatStore.getState())).toBe(false)
   })
 })

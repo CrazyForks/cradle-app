@@ -14,26 +14,76 @@ import { cn } from '~/lib/cn'
 import type { PullRequestDetail } from './api/pull-requests'
 import { PullRequestCheckBadgeView } from './pull-request-check-badge-view'
 import { PullRequestChecksValueView } from './pull-request-checks-value-view'
+import { PullRequestCommentComposerView } from './pull-request-comment-composer-view'
+import type { PullRequestReviewEvent } from './pull-request-header-actions-view'
+import {
+  PullRequestHeaderActionsView,
+} from './pull-request-header-actions-view'
+import { PullRequestPeopleEditorView } from './pull-request-people-editor-view'
 import { PullRequestPeopleValueView } from './pull-request-people-value-view'
 import { PullRequestPropertyRowView } from './pull-request-property-row-view'
 import { PullRequestSectionHeadingView } from './pull-request-section-heading-view'
 import { PullRequestSummaryHeaderView } from './pull-request-summary-header-view'
+import { PullRequestTimelineEntryView } from './pull-request-timeline-entry-view'
+
+type PullRequest = PullRequestDetail['pullRequest']
+
+export interface PullRequestActionsPending {
+  comment: boolean
+  review: boolean
+  merge: boolean
+  readyDraft: boolean
+  assignees: boolean
+  reviewers: boolean
+}
+
+export interface PullRequestActionsViewProps {
+  pullRequest: PullRequest
+  assignableUsers: Array<{ login: string, avatarUrl?: string }>
+  pending: PullRequestActionsPending
+  onComment: (body: string) => void
+  onReview: (event: PullRequestReviewEvent, body?: string) => void
+  onMerge: (method: PullRequest['allowedMergeMethods'][number], commit?: { title?: string, message?: string }) => void
+  onToggleReadyDraft: () => void
+  onAddAssignee: (login: string) => void
+  onRemoveAssignee: (login: string) => void
+  onAddReviewer: (login: string) => void
+  onRemoveReviewer: (login: string) => void
+}
 
 export interface PullRequestSummaryViewProps {
   detail: PullRequestDetail
   now: number
+  locale: string
+  actions?: PullRequestActionsViewProps
 }
 
 export function PullRequestSummaryView({
   detail,
   now,
+  locale,
+  actions,
 }: PullRequestSummaryViewProps) {
   const { t } = useTranslation('pull-requests')
   const pullRequest = detail.pullRequest
+  const canAct = actions !== undefined && pullRequest.state === 'open' && !pullRequest.merged
 
   return (
     <div className="pt-5">
-      <PullRequestSummaryHeaderView pullRequest={pullRequest} now={now} />
+      {canAct
+        ? (
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 gap-y-3">
+              <PullRequestSummaryHeaderView pullRequest={pullRequest} now={now} />
+              <PullRequestHeaderActionsView
+                pullRequest={pullRequest}
+                pending={actions.pending}
+                onReview={actions.onReview}
+                onMerge={actions.onMerge}
+                onToggleReadyDraft={actions.onToggleReadyDraft}
+              />
+            </div>
+          )
+        : <PullRequestSummaryHeaderView pullRequest={pullRequest} now={now} />}
 
       <div className="space-y-8 pt-6">
         <dl>
@@ -63,16 +113,44 @@ export function PullRequestSummaryView({
             />
           </PullRequestPropertyRowView>
           <PullRequestPropertyRowView icon={UserAssignIcon} label={t('summary.assignees')}>
-            <PullRequestPeopleValueView
-              people={pullRequest.assignees}
-              empty={t('summary.noAssignees')}
-            />
+            {canAct
+              ? (
+                  <PullRequestPeopleEditorView
+                    people={pullRequest.assignees}
+                    pending={actions.pending.assignees}
+                    assignableUsers={actions.assignableUsers}
+                    empty={t('summary.noAssignees')}
+                    addLabel={t('console.people.addAssignee')}
+                    onAdd={actions.onAddAssignee}
+                    onRemove={actions.onRemoveAssignee}
+                  />
+                )
+              : (
+                  <PullRequestPeopleValueView
+                    people={pullRequest.assignees}
+                    empty={t('summary.noAssignees')}
+                  />
+                )}
           </PullRequestPropertyRowView>
           <PullRequestPropertyRowView icon={ReviewIcon} label={t('summary.reviewers')}>
-            <PullRequestPeopleValueView
-              people={pullRequest.reviewers}
-              empty={t('summary.noReviewers')}
-            />
+            {canAct
+              ? (
+                  <PullRequestPeopleEditorView
+                    people={pullRequest.reviewers}
+                    pending={actions.pending.reviewers}
+                    assignableUsers={actions.assignableUsers}
+                    empty={t('summary.noReviewers')}
+                    addLabel={t('console.people.addReviewer')}
+                    onAdd={actions.onAddReviewer}
+                    onRemove={actions.onRemoveReviewer}
+                  />
+                )
+              : (
+                  <PullRequestPeopleValueView
+                    people={pullRequest.reviewers}
+                    empty={t('summary.noReviewers')}
+                  />
+                )}
           </PullRequestPropertyRowView>
         </dl>
 
@@ -123,6 +201,43 @@ export function PullRequestSummaryView({
               </section>
             )
           : null}
+
+        <section>
+          <PullRequestSectionHeadingView>
+            {t('summary.comments')}
+          </PullRequestSectionHeadingView>
+          {detail.timeline.length > 0
+            ? (
+                <ol className="ml-2.5 border-l border-border/70">
+                  {detail.timeline.map(item => (
+                    <PullRequestTimelineEntryView
+                      key={item.id}
+                      item={item}
+                      locale={locale}
+                    />
+                  ))}
+                </ol>
+              )
+            : (
+                <p className="text-[13px] text-muted-foreground/70">{t('timeline.empty')}</p>
+              )}
+          {actions
+            ? (
+                canAct
+                  ? (
+                      <div className="mt-4">
+                        <PullRequestCommentComposerView
+                          pending={actions.pending.comment}
+                          onComment={actions.onComment}
+                        />
+                      </div>
+                    )
+                  : (
+                      <p className="mt-3 text-[11px] text-muted-foreground">{t('console.closed')}</p>
+                    )
+              )
+            : null}
+        </section>
       </div>
     </div>
   )

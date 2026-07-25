@@ -104,29 +104,50 @@ describe('fetchPullRequestDetailByRef', () => {
       assignees: [],
       labels: [],
     }
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify(pullRequest), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify([{
-        id: 1,
-        user: { login: 'reviewed', avatar_url: 'https://avatars.example/reviewed', html_url: 'https://github.com/reviewed' },
-        state: 'APPROVED',
-        commit_id: 'head-sha',
-        submitted_at: '2026-07-11T11:00:00Z',
-        body: null,
-        html_url: 'https://github.com/cradle/app/pull/14#pullrequestreview-1',
-      }, {
-        id: 2,
-        user: { login: 'submitted', avatar_url: 'https://avatars.example/submitted', html_url: 'https://github.com/submitted' },
-        state: 'COMMENTED',
-        commit_id: 'head-sha',
-        submitted_at: '2026-07-11T12:00:00Z',
-        body: 'Looks good',
-        html_url: 'https://github.com/cradle/app/pull/14#pullrequestreview-2',
-      }]), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ total_count: 0, check_runs: [] }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ state: 'success', total_count: 0, statuses: [] }), { status: 200 }))
+    const reviews = [{
+      id: 1,
+      user: { login: 'reviewed', avatar_url: 'https://avatars.example/reviewed', html_url: 'https://github.com/reviewed' },
+      state: 'APPROVED',
+      commit_id: 'head-sha',
+      submitted_at: '2026-07-11T11:00:00Z',
+      body: null,
+      html_url: 'https://github.com/cradle/app/pull/14#pullrequestreview-1',
+    }, {
+      id: 2,
+      user: { login: 'submitted', avatar_url: 'https://avatars.example/submitted', html_url: 'https://github.com/submitted' },
+      state: 'COMMENTED',
+      commit_id: 'head-sha',
+      submitted_at: '2026-07-11T12:00:00Z',
+      body: 'Looks good',
+      html_url: 'https://github.com/cradle/app/pull/14#pullrequestreview-2',
+    }]
+    // Route by URL: detail uses Promise.all, so Once-order mocks race.
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/pulls/14/reviews')) {
+        return new Response(JSON.stringify(reviews), { status: 200 })
+      }
+      if (url.includes('/pulls/14/files') || url.includes('/issues/14/comments')) {
+        return new Response(JSON.stringify([]), { status: 200 })
+      }
+      if (url.includes('/pulls/14')) {
+        return new Response(JSON.stringify(pullRequest), { status: 200 })
+      }
+      if (url.includes('/repos/cradle/app') && !url.includes('/pulls/') && !url.includes('/commits/')) {
+        return new Response(JSON.stringify({
+          allow_merge_commit: true,
+          allow_squash_merge: true,
+          allow_rebase_merge: false,
+        }), { status: 200 })
+      }
+      if (url.includes('/check-runs')) {
+        return new Response(JSON.stringify({ total_count: 0, check_runs: [] }), { status: 200 })
+      }
+      if (url.includes('/status')) {
+        return new Response(JSON.stringify({ state: 'success', total_count: 0, statuses: [] }), { status: 200 })
+      }
+      return new Response(JSON.stringify({ message: `unmocked ${url}` }), { status: 404 })
+    })
     vi.stubGlobal('fetch', fetchMock)
 
     const detail = await fetchPullRequestDetailByRef('cradle', 'app', 14)

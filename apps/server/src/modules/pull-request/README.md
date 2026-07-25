@@ -7,6 +7,9 @@ Owns session-bound GitHub pull request lifecycle for isolated agent work:
 3. Persist PR linkage on `sessions.configJson.github.pullRequest`
 4. Refresh status and mark ready for review
 5. Project live GitHub PR summary, review/comment timeline, checks, and changed files
+6. Own the **PR console** mutates (comment, whole-PR review, merge, assignees,
+   reviewers, ready/draft) and the cheap fingerprint probe used for cache-aware
+   detail refresh
 
 The module also owns read-only delivery readiness (`baseRef..HEAD`, cleanliness,
 changed files) and updating an existing open PR after pushing follow-up commits.
@@ -40,7 +43,11 @@ Branch push policy for create/update delivery:
   bare `--force`. If the remote tip moved after inspection, push fails with
   `git_push_lease_rejected` instead of overwriting blindly.
 
-Does **not** own merge, CI awaits, or Diff Review sync. Waiting for CI remains a user/agent decision via `session await`.
+Merge authority lives here. Diff Review may **delegate** merge / whole-PR review
+submit to this module; it must not re-implement GitHub merge policy. Waiting for
+CI remains a user/agent decision via `session await`. Detail responses include
+`allowedMergeMethods`, `mergeBlockers`, and `canMerge` derived from repo merge
+settings + PR mergeability + checks.
 
 ## Routes
 
@@ -54,6 +61,16 @@ Does **not** own merge, CI awaits, or Diff Review sync. Waiting for CI remains a
 | `GET` | `/pull-requests/authored?login&after` | `pull-request authored` | One cursor page of PRs authored by `login`, most recently updated first (GraphQL search, not session-bound) |
 | `GET` | `/pull-requests/reviewing?login&after` | `pull-request reviewing` | Combined cursor page of PRs requested from or previously reviewed by `login`, most recently updated first |
 | `GET` | `/pull-requests/:owner/:repo/:number/detail` | `pull-request detail` | Same detail projection as the session route, addressed directly by ref instead of by session |
+| `GET` | `/pull-requests/:owner/:repo/:number/fingerprint` | `pull-request fingerprint` | Cheap PR version for cache-aware refresh |
+| `POST` | `/pull-requests/:owner/:repo/:number/fingerprint/probe` | `pull-request fingerprint probe` | Visible-tab probe; returns `changed` vs optional previous fingerprint |
+| `POST` | `/pull-requests/:owner/:repo/:number/comment` | `pull-request comment` | Post an issue comment |
+| `POST` | `/pull-requests/:owner/:repo/:number/review` | `pull-request review` | Whole-PR approve / request-changes / comment |
+| `POST` | `/pull-requests/:owner/:repo/:number/merge` | `pull-request merge` | Merge with a repo-allowed method; optional `commitTitle`/`commitMessage`; pre-blocks only impossible states (merged/closed/draft/conflicts/no methods) and otherwise relays GitHub's rejection reason |
+| `POST` | `/pull-requests/:owner/:repo/:number/assignees` | `pull-request assignees` | Add/remove assignees |
+| `POST` | `/pull-requests/:owner/:repo/:number/reviewers` | `pull-request reviewers` | Request/remove reviewers |
+| `POST` | `/pull-requests/:owner/:repo/:number/ready` | `pull-request ready` | Draft → ready by ref |
+| `POST` | `/pull-requests/:owner/:repo/:number/draft` | `pull-request draft` | Ready → draft by ref |
+| `GET` | `/pull-requests/:owner/:repo/assignable-users` | `pull-request assignable-users` | Assignable users for people pickers |
 
 Ready-for-review uses GitHub's GraphQL `markPullRequestReadyForReview` mutation;
 the REST pull-request update endpoint does not transition Draft PR state. GitHub
@@ -62,8 +79,10 @@ of remaining pending indefinitely.
 
 ## Files
 
-- **index.ts**: Two Elysia routers - session-bound routes under `/sessions/:id/pull-request*`, and the standalone `/pull-requests/*` router (viewer identity, paginated authored/reviewing feeds, ref-based detail) - both with `x-cradle-cli` metadata.
-- **model.ts**: TypeBox request/response schemas, including the search-derived `pullRequestSearchViewSchema` (adds `checksState` to the base view) and the cursor-paginated `pullRequestSearchPageSchema`.
-- **service.ts**: Isolation/readiness checks, remote resolution, push, GitHub create/update/ready, `configJson` persistence, plus the session-independent `fetchPullRequestDetailByRef`, `getViewerIdentity`, `listAuthoredPullRequests`, and `listReviewingPullRequests`.
+- **index.ts**: Two Elysia routers - session-bound routes under `/sessions/:id/pull-request*`, and the standalone `/pull-requests/*` router (feeds, detail, fingerprint, console mutates) - both with `x-cradle-cli` metadata.
+- **model.ts**: TypeBox request/response schemas, including search views, detail merge capability fields, fingerprint, and console mutate bodies.
+- **service.ts**: Isolation/readiness checks, remote resolution, push, GitHub create/update/ready, `configJson` persistence, plus session-independent detail/search reads.
+- **console-actions.ts**: Fingerprint probe and PR console mutates (comment, review, merge, people, ready/draft).
+- **merge-capability.ts**: Pure merge allow/block derivation for detail UI and merge route.
 - **delivery-push.ts**: First-publish vs force-with-lease push arg selection for managed branches.
 - **github-remote.ts**: Parse `owner/repo` from GitHub HTTPS/SSH remote URLs.

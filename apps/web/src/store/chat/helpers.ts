@@ -324,7 +324,8 @@ function buildTailMessage(source: UIMessage, splitParts: MessagePart[], tailId: 
   return { ...source, id: tailId, parts: projectTailParts(source.parts, splitParts) }
 }
 
-function projectTailParts(source: MessagePart[], split: MessagePart[]): MessagePart[] {
+/** Remainder of `source` after consuming an absolute `split` prefix (text/reasoning aware). */
+export function projectTailParts(source: MessagePart[], split: MessagePart[]): MessagePart[] {
   let sourceIdx = 0
 
   for (const splitPart of split) {
@@ -386,12 +387,16 @@ function isEmptyPart(part: MessagePart): boolean {
   return false
 }
 
-function trimTrailingEmpty(parts: MessagePart[]): MessagePart[] {
+export function trimTrailingEmptyParts(parts: MessagePart[]): MessagePart[] {
   let end = parts.length
   while (end > 0 && isEmptyPart(parts[end - 1])) {
     end--
   }
   return end === parts.length ? parts : parts.slice(0, end)
+}
+
+function trimTrailingEmpty(parts: MessagePart[]): MessagePart[] {
+  return trimTrailingEmptyParts(parts)
 }
 
 function trimLeadingEmpty(parts: MessagePart[]): MessagePart[] {

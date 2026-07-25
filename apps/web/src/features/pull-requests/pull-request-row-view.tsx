@@ -74,6 +74,12 @@ export function PullRequestRowView({
         </span>
         <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
           <span className="shrink-0 font-mono font-medium text-foreground/55">
+            <img
+              src={`https://github.com/${pullRequest.owner}.png?size=32`}
+              alt=""
+              loading="lazy"
+              className="mr-1 inline-block size-3.5 rounded-sm align-[-2px] outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10"
+            />
             {pullRequest.owner}
             /
             {pullRequest.repo}

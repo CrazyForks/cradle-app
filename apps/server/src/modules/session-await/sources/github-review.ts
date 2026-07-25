@@ -1,6 +1,5 @@
 import { z } from 'zod'
 
-import type { GitHubPullRequestReview } from '../../../lib/github-api'
 import {
   fetchPullRequest,
   fetchPullRequestReviews,
@@ -10,6 +9,8 @@ import {
   isGitHubRateLimited,
 } from '../../../lib/github-api'
 import type { CheckResult, SessionAwait, SessionAwaitSource } from '../types'
+
+type GitHubPullRequestReview = NonNullable<Awaited<ReturnType<typeof fetchPullRequestReviews>>>[number]
 
 const GitHubReviewModeSchema = z.enum(['approved', 'changes-requested', 'reviewed'])
 

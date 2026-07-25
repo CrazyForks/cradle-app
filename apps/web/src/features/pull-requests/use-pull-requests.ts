@@ -9,6 +9,10 @@ import { pullRequestQueryOptions } from './api/pull-requests'
 export type { PullRequestView } from './api/pull-requests'
 export type PullRequestRole = 'authored' | 'reviewing'
 
+/** Aligned with server `search-authored` / `search-reviewing` TTL. */
+const LIST_STALE_TIME_MS = 15_000
+const LIST_REFETCH_INTERVAL_MS = 15_000
+
 /**
  * A pull request the viewer is involved in on GitHub, with an optional
  * Cradle Work overlay when Cradle happens to have created/bound it. `role`
@@ -92,14 +96,18 @@ export function useCradlePullRequests() {
     initialPageParam: '',
     getNextPageParam: lastPage => (lastPage.hasNextPage ? lastPage.endCursor ?? undefined : undefined),
     enabled: !!login,
-    staleTime: 30_000,
+    staleTime: LIST_STALE_TIME_MS,
+    refetchInterval: LIST_REFETCH_INTERVAL_MS,
+    refetchIntervalInBackground: false,
   })
   const reviewingQuery = useInfiniteQuery({
     ...pullRequestQueryOptions.reviewing({ query: { login: login ?? '' } }),
     initialPageParam: '',
     getNextPageParam: lastPage => (lastPage.hasNextPage ? lastPage.endCursor ?? undefined : undefined),
     enabled: !!login,
-    staleTime: 30_000,
+    staleTime: LIST_STALE_TIME_MS,
+    refetchInterval: LIST_REFETCH_INTERVAL_MS,
+    refetchIntervalInBackground: false,
   })
   const workQuery = useQuery({
     ...pullRequestQueryOptions.works(),

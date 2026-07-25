@@ -6,6 +6,30 @@ import {
 } from './fixtures/pull-requests'
 import { PullRequestDetailPanelView } from './pull-request-detail-panel-view'
 
+const actionsFixture = {
+  pullRequest: pullRequestDetailFixture.pullRequest,
+  assignableUsers: [
+    { login: 'review-owner', avatarUrl: '/icon.png' },
+    { login: 'cradle-maintainer', avatarUrl: '/icon.png' },
+  ],
+  pending: {
+    comment: false,
+    review: false,
+    merge: false,
+    readyDraft: false,
+    assignees: false,
+    reviewers: false,
+  },
+  onComment: () => {},
+  onReview: () => {},
+  onMerge: () => {},
+  onToggleReadyDraft: () => {},
+  onAddAssignee: () => {},
+  onRemoveAssignee: () => {},
+  onAddReviewer: () => {},
+  onRemoveReviewer: () => {},
+}
+
 const meta = {
   title: 'App/Pull Requests/Detail',
   component: PullRequestDetailPanelView,
@@ -26,6 +50,7 @@ const meta = {
     now: pullRequestFixtureNow,
     onRefresh: () => {},
     onOpenWork: () => {},
+    actions: actionsFixture,
   },
 } satisfies Meta<typeof PullRequestDetailPanelView>
 
@@ -56,5 +81,20 @@ export const Loading: Story = {
   args: {
     detail: null,
     onOpenWork: undefined,
+    actions: undefined,
+  },
+}
+
+export const MergeBlocked: Story = {
+  args: {
+    actions: {
+      ...actionsFixture,
+      pullRequest: {
+        ...pullRequestDetailFixture.pullRequest,
+        canMerge: false,
+        mergeBlockers: ['checks_pending', 'blocked'],
+        allowedMergeMethods: ['squash'],
+      },
+    },
   },
 }

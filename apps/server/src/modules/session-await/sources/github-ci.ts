@@ -1,6 +1,5 @@
 import { z } from 'zod'
 
-import type { GitHubCheckRun, GitHubCommitStatus, GitHubWorkflowJob, GitHubWorkflowJobStep, GitHubWorkflowRun } from '../../../lib/github-api'
 import {
   fetchBranchProtection,
   fetchCheckRun,
@@ -17,6 +16,12 @@ import {
 } from '../../../lib/github-api'
 import { getMatchingBypassPatterns, matchesAnyBypassPattern } from '../service'
 import type { CheckResult, SessionAwait, SessionAwaitSource } from '../types'
+
+type GitHubCheckRun = NonNullable<Awaited<ReturnType<typeof fetchCheckRuns>>>['check_runs'][number]
+type GitHubCommitStatus = NonNullable<Awaited<ReturnType<typeof fetchCombinedStatus>>>['statuses'][number]
+type GitHubWorkflowRun = NonNullable<Awaited<ReturnType<typeof fetchWorkflowRunsForHead>>>['workflow_runs'][number]
+type GitHubWorkflowJob = NonNullable<Awaited<ReturnType<typeof fetchWorkflowRunJobs>>>['jobs'][number]
+type GitHubWorkflowJobStep = NonNullable<GitHubWorkflowJob['steps']>[number]
 
 export { resetTokenCache }
 
@@ -439,8 +444,8 @@ function toLiveWorkflowStep(step: GitHubWorkflowJobStep): LiveWorkflowJobStep {
     status: step.status,
     conclusion: step.conclusion,
     number: step.number,
-    startedAt: step.started_at,
-    completedAt: step.completed_at,
+    startedAt: step.started_at ?? null,
+    completedAt: step.completed_at ?? null,
   }
 }
 
@@ -450,27 +455,43 @@ function toLiveWorkflowJob(job: GitHubWorkflowJob): LiveWorkflowJob {
     name: job.name,
     status: job.status,
     conclusion: job.conclusion,
-    htmlUrl: job.html_url,
-    checkRunId: parseCheckRunId(job.check_run_url),
-    startedAt: job.started_at,
-    completedAt: job.completed_at,
-    runnerName: job.runner_name,
+    htmlUrl: job.html_url ?? null,
+    checkRunId: parseCheckRunId(job.check_run_url ?? null),
+    startedAt: job.started_at ?? null,
+    completedAt: job.completed_at ?? null,
+    runnerName: job.runner_name ?? null,
     labels: job.labels,
-    steps: job.steps.map(toLiveWorkflowStep),
+    steps: (job.steps ?? []).map(toLiveWorkflowStep),
+  }
+}
+
+function toLiveWorkflowRunStatus(
+  status: GitHubWorkflowRun['status'],
+): LiveWorkflowRun['status'] {
+  switch (status) {
+    case 'queued':
+    case 'in_progress':
+    case 'completed':
+    case 'waiting':
+    case 'requested':
+    case 'pending':
+      return status
+    default:
+      return 'queued'
   }
 }
 
 function toLiveWorkflowRun(run: GitHubWorkflowRun, jobs: GitHubWorkflowJob[]): LiveWorkflowRun {
   return {
     id: run.id,
-    name: run.name,
-    displayTitle: run.display_title,
+    name: run.name ?? null,
+    displayTitle: run.display_title ?? null,
     runNumber: run.run_number,
-    runAttempt: run.run_attempt,
-    status: run.status,
-    conclusion: run.conclusion,
+    runAttempt: run.run_attempt ?? 1,
+    status: toLiveWorkflowRunStatus(run.status),
+    conclusion: run.conclusion ?? null,
     headSha: run.head_sha,
-    htmlUrl: run.html_url,
+    htmlUrl: run.html_url ?? null,
     createdAt: run.created_at,
     updatedAt: run.updated_at,
     jobs: jobs.map(toLiveWorkflowJob),
@@ -523,7 +544,7 @@ function toLiveCheckRun(run: GitHubCheckRun, workflowRuns: LiveWorkflowRun[], re
   return {
     id: run.id ?? null,
     name: run.name,
-    status: run.status,
+    status: run.status === 'completed' || run.status === 'in_progress' ? run.status : 'queued',
     conclusion: run.conclusion,
     required: requiredContexts.has(run.name),
     htmlUrl: run.html_url ?? null,
@@ -635,7 +656,9 @@ export const githubCISource: SessionAwaitSource = {
         let requiredContexts: string[]
         try {
           requiredContexts = target.baseBranch
-            ? (await fetchBranchProtection(target.owner, target.repo, target.baseBranch))?.requiredContexts ?? []
+            ? (await fetchBranchProtection(target.owner, target.repo, target.baseBranch))
+                ?.required_status_checks
+?.contexts ?? []
             : []
         }
         catch {
@@ -804,7 +827,9 @@ export async function fetchLiveCIStatus(filterJson: string): Promise<LiveCIStatu
     run.status === 'completed' && (!run.conclusion || !PASSING_CHECK_CONCLUSIONS.has(run.conclusion)))
 
   const requiredContexts = target.baseBranch
-    ? (await fetchBranchProtection(target.owner, target.repo, target.baseBranch))?.requiredContexts ?? []
+    ? (await fetchBranchProtection(target.owner, target.repo, target.baseBranch))
+        ?.required_status_checks
+?.contexts ?? []
     : []
   const requiredSet = new Set(requiredContexts)
 
@@ -819,7 +844,7 @@ export async function fetchLiveCIStatus(filterJson: string): Promise<LiveCIStatu
     workflowRuns,
     statuses: aggregate.statuses.map(s => ({
       context: s.context,
-      state: s.state,
+      state: s.state as LiveCommitStatus['state'],
       description: s.description,
       targetUrl: s.target_url,
     })),

@@ -111,7 +111,41 @@ const pullRequestDetail = t.Object({
   })),
   checksState: pullRequestChecksState,
   checks: t.Array(pullRequestCheck),
+  allowedMergeMethods: t.Array(t.Union([
+    t.Literal('merge'),
+    t.Literal('squash'),
+    t.Literal('rebase'),
+  ])),
+  mergeBlockers: t.Array(t.String()),
+  canMerge: t.Boolean(),
 })
+
+const pullRequestFingerprint = t.Object({
+  updatedAt: t.String(),
+  headSha: t.String(),
+  state: t.Union([t.Literal('open'), t.Literal('closed')]),
+  merged: t.Boolean(),
+  isDraft: t.Boolean(),
+  mergeableState: t.String(),
+  comments: t.Number(),
+  reviewComments: t.Number(),
+  commits: t.Number(),
+  checksState: pullRequestChecksState,
+})
+
+const pullRequestMergeMethod = t.Union([
+  t.Literal('merge'),
+  t.Literal('squash'),
+  t.Literal('rebase'),
+])
+
+const pullRequestReviewEvent = t.Union([
+  t.Literal('APPROVE'),
+  t.Literal('REQUEST_CHANGES'),
+  t.Literal('COMMENT'),
+])
+
+const githubLoginList = t.Array(t.String({ minLength: 1 }))
 
 const pullRequestTimelineItem = t.Object({
   id: t.String(),
@@ -147,6 +181,11 @@ export const PullRequestModel = {
     number: t.String({ minLength: 1 }),
   }),
 
+  ownerRepoParams: t.Object({
+    owner: t.String({ minLength: 1 }),
+    repo: t.String({ minLength: 1 }),
+  }),
+
   searchPageQuery: t.Object({
     login: t.String({ minLength: 1 }),
     after: t.Optional(t.String()),
@@ -156,6 +195,35 @@ export const PullRequestModel = {
     title: t.String({ minLength: 1 }),
     body: t.Optional(t.String()),
     base: t.Optional(t.String({ minLength: 1 })),
+  }),
+
+  commentBody: t.Object({
+    body: t.String({ minLength: 1 }),
+  }),
+
+  reviewBody: t.Object({
+    event: pullRequestReviewEvent,
+    body: t.Optional(t.String()),
+  }),
+
+  mergeBody: t.Object({
+    mergeMethod: pullRequestMergeMethod,
+    commitTitle: t.Optional(t.String({ minLength: 1 })),
+    commitMessage: t.Optional(t.String()),
+  }),
+
+  assigneesBody: t.Object({
+    add: t.Optional(githubLoginList),
+    remove: t.Optional(githubLoginList),
+  }),
+
+  reviewersBody: t.Object({
+    add: t.Optional(githubLoginList),
+    remove: t.Optional(githubLoginList),
+  }),
+
+  fingerprintProbeBody: t.Object({
+    previous: t.Optional(t.Nullable(pullRequestFingerprint)),
   }),
 
   pullRequestView: pullRequestViewSchema,
@@ -168,6 +236,44 @@ export const PullRequestModel = {
     pullRequest: pullRequestDetail,
     timeline: t.Array(pullRequestTimelineItem),
     files: t.Array(pullRequestFile),
+  }),
+
+  fingerprintResponse: t.Object({
+    fingerprint: pullRequestFingerprint,
+    changed: t.Boolean(),
+  }),
+
+  commentResponse: t.Object({
+    id: t.String(),
+    body: t.String(),
+    url: t.String(),
+    createdAt: t.String(),
+  }),
+
+  reviewResponse: t.Object({
+    id: t.Number(),
+    state: t.String(),
+    body: nullableString,
+    htmlUrl: t.String(),
+  }),
+
+  mergeResponse: t.Object({
+    sha: t.String(),
+    merged: t.Literal(true),
+    message: t.String(),
+  }),
+
+  peopleMutationResponse: t.Object({
+    added: githubLoginList,
+    removed: githubLoginList,
+  }),
+
+  assignableUsersResponse: t.Object({
+    users: t.Array(t.Object({
+      login: t.String(),
+      avatarUrl: t.String(),
+      url: t.String(),
+    })),
   }),
 
   mutationResponse: t.Object({

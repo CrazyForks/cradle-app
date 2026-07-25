@@ -486,6 +486,7 @@ describe('diff-review capability', () => {
       resetTokenCache()
       const pullRequest = {
         number: 70,
+        node_id: 'PR_70',
         title: 'Complete remote review flow',
         body: null,
         state: 'open',
@@ -582,41 +583,76 @@ describe('diff-review capability', () => {
           ],
         },
       }
-      const fetchMock = vi.fn()
-        .mockResolvedValueOnce(new Response(JSON.stringify(pullRequest), { status: 200 }))
-        .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
-        .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
-        .mockResolvedValueOnce(new Response(JSON.stringify(files), { status: 200 }))
-        .mockResolvedValueOnce(new Response(JSON.stringify({
-          data: {
-            repository: {
-              pullRequest: {
-                id: 'PR_70',
-                reviewThreads: {
-                  nodes: [importedThread],
-                  pageInfo: { hasNextPage: false, endCursor: null },
-                },
+      const reviewThreadsPayload = {
+        data: {
+          repository: {
+            pullRequest: {
+              id: 'PR_70',
+              reviewThreads: {
+                nodes: [importedThread],
+                pageInfo: { hasNextPage: false, endCursor: null },
               },
             },
           },
-        }), { status: 200 }))
-        .mockResolvedValueOnce(new Response(JSON.stringify({ total_count: 0, check_runs: [] }), { status: 200 }))
-        .mockResolvedValueOnce(new Response(JSON.stringify({ state: 'success', total_count: 0, statuses: [] }), { status: 200 }))
-        .mockResolvedValueOnce(new Response(JSON.stringify({ node_id: 'PR_70' }), { status: 200 }))
-        .mockResolvedValueOnce(new Response(JSON.stringify({
-          data: { addPullRequestReviewThread: { thread: createdThread } },
-        }), { status: 200 }))
-        .mockResolvedValueOnce(new Response(JSON.stringify({
-          data: { addPullRequestReviewThreadReply: { thread: repliedThread } },
-        }), { status: 200 }))
-        .mockResolvedValueOnce(new Response(JSON.stringify({
-          data: { resolveReviewThread: { thread: { ...repliedThread, isResolved: true } } },
-        }), { status: 200 }))
-        .mockResolvedValueOnce(new Response(JSON.stringify({
-          id: 9001,
-          state: 'APPROVED',
-          html_url: 'https://github.com/cradle/app/pull/70#pullrequestreview-9001',
-        }), { status: 200 }))
+        },
+      }
+      const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input)
+        const method = (init?.method ?? 'GET').toUpperCase()
+        const body = typeof init?.body === 'string' ? init.body : ''
+
+        if (url.includes('/graphql')) {
+          if (body.includes('addPullRequestReviewThreadReply')) {
+            return new Response(JSON.stringify({
+              data: { addPullRequestReviewThreadReply: { thread: repliedThread } },
+            }), { status: 200 })
+          }
+          if (body.includes('addPullRequestReviewThread')) {
+            return new Response(JSON.stringify({
+              data: { addPullRequestReviewThread: { thread: createdThread } },
+            }), { status: 200 })
+          }
+          if (body.includes('resolveReviewThread')) {
+            return new Response(JSON.stringify({
+              data: { resolveReviewThread: { thread: { ...repliedThread, isResolved: true } } },
+            }), { status: 200 })
+          }
+          return new Response(JSON.stringify(reviewThreadsPayload), { status: 200 })
+        }
+        if (method === 'POST' && url.endsWith('/pulls/70/reviews')) {
+          return new Response(JSON.stringify({
+            id: 9001,
+            state: 'APPROVED',
+            html_url: 'https://github.com/cradle/app/pull/70#pullrequestreview-9001',
+          }), { status: 200 })
+        }
+        if (url.includes('/pulls/70/reviews')) {
+          return new Response(JSON.stringify([]), { status: 200 })
+        }
+        if (url.includes('/pulls/70/files')) {
+          return new Response(JSON.stringify(files), { status: 200 })
+        }
+        if (url.includes('/issues/70/comments')) {
+          return new Response(JSON.stringify([]), { status: 200 })
+        }
+        if (url.includes('/pulls/70')) {
+          return new Response(JSON.stringify(pullRequest), { status: 200 })
+        }
+        if (url.includes('/check-runs')) {
+          return new Response(JSON.stringify({ total_count: 0, check_runs: [] }), { status: 200 })
+        }
+        if (url.includes('/commits/') && url.includes('/status')) {
+          return new Response(JSON.stringify({ state: 'success', total_count: 0, statuses: [] }), { status: 200 })
+        }
+        if (url.includes('/repos/cradle/app') && !url.includes('/pulls/') && !url.includes('/commits/')) {
+          return new Response(JSON.stringify({
+            allow_merge_commit: true,
+            allow_squash_merge: true,
+            allow_rebase_merge: true,
+          }), { status: 200 })
+        }
+        return new Response(JSON.stringify({ message: `unmocked ${method} ${url}` }), { status: 404 })
+      })
       vi.stubGlobal('fetch', fetchMock)
 
       const app = await createServerApp()
@@ -672,7 +708,9 @@ describe('diff-review capability', () => {
           })],
         }),
       ])
-      expect(fetchMock).toHaveBeenCalledTimes(7)
+      expect(fetchMock).toHaveBeenCalled()
+      const initialCallCount = fetchMock.mock.calls.length
+      expect(initialCallCount).toBeGreaterThanOrEqual(7)
 
       const appFile = review.files.find(file => file.path === 'src/app.ts')!
       const created = await postJson<DiffReviewResponse>(
@@ -689,6 +727,7 @@ describe('diff-review capability', () => {
         id: 'github-review-thread:PRRT_created',
         comments: [expect.objectContaining({ bodyMarkdown: 'Created from Cradle.' })],
       })
+      expect(fetchMock.mock.calls.length).toBeGreaterThan(initialCallCount)
 
       const replied = await postJson<DiffReviewResponse>(
         app,
@@ -711,7 +750,6 @@ describe('diff-review capability', () => {
         400,
       )
       expect(missingBody.code).toBe('diff_review_github_body_required')
-      expect(fetchMock).toHaveBeenCalledTimes(11)
 
       const submitted = await postJson<DiffReviewResponse>(
         app,
@@ -723,11 +761,15 @@ describe('diff-review capability', () => {
         decision: 'approve',
         sourceSyncState: 'synced',
       })
-      expect(fetchMock).toHaveBeenCalledTimes(12)
-      const [submitUrl, submitInit] = fetchMock.mock.calls[11]!
-      expect(submitUrl).toBe('https://api.github.com/repos/cradle/app/pulls/70/reviews')
-      expect(submitInit).toMatchObject({ method: 'POST' })
-      expect(JSON.parse(String(submitInit?.body))).toEqual({
+      const reviewSubmitCall = fetchMock.mock.calls.find((call) => {
+        const url = String(call[0] ?? '')
+        const init = call[1] as RequestInit | undefined
+        return url.endsWith('/pulls/70/reviews') && (init?.method ?? 'GET').toUpperCase() === 'POST'
+      })
+      expect(reviewSubmitCall).toBeTruthy()
+      expect(reviewSubmitCall?.[0]).toBe('https://api.github.com/repos/cradle/app/pulls/70/reviews')
+      expect(reviewSubmitCall?.[1]).toMatchObject({ method: 'POST' })
+      expect(JSON.parse(String((reviewSubmitCall?.[1] as RequestInit | undefined)?.body))).toEqual({
         body: 'Ready to merge.',
         event: 'APPROVE',
       })

@@ -6,7 +6,6 @@ import { simpleGit } from 'simple-git'
 import { AppError } from '../../errors/app-error'
 import { parseJsonObjectOrEmpty } from '../../helpers/json-record'
 import { db } from '../../infra'
-import type { GitHubSearchPullRequest, GitHubViewer } from '../../lib/github-api'
 import {
   createPullRequest as createGitHubPullRequest,
   fetchAuthenticatedUser,
@@ -18,6 +17,7 @@ import {
   fetchPullRequestFiles,
   fetchPullRequestReviews,
   fetchRepo,
+  fetchRepoMergeSettings,
   GitHubApiError,
   hasGitHubToken,
   markPullRequestReady as markGitHubPullRequestReady,
@@ -28,8 +28,14 @@ import {
 import * as Worktree from '../worktree/service'
 import { isForceWithLeaseRejection, resolveDeliveryPushArgs } from './delivery-push'
 import { parseGitHubOwnerRepo } from './github-remote'
+import { derivePullRequestMergeCapability } from './merge-capability'
 import type { pullRequestSearchViewSchema, pullRequestViewSchema } from './model'
 import { withCradlePullRequestFooter } from './pr-body'
+
+type GitHubSearchPullRequest = Awaited<
+  ReturnType<typeof searchAuthoredPullRequests>
+>['items'][number]
+type GitHubViewer = Awaited<ReturnType<typeof fetchAuthenticatedUser>>
 
 export { resolveDeliveryPushArgs } from './delivery-push'
 
@@ -88,6 +94,9 @@ export interface SessionPullRequestDetail {
       conclusion: string | null
       url: string | null
     }>
+    allowedMergeMethods: Array<'merge' | 'squash' | 'rebase'>
+    mergeBlockers: string[]
+    canMerge: boolean
   }
   timeline: Array<{
     id: string
@@ -514,11 +523,12 @@ export async function fetchPullRequestDetailByRef(
   repo: string,
   number: number,
 ): Promise<SessionPullRequestDetail> {
-  const [live, comments, reviews, files] = await Promise.all([
+  const [live, comments, reviews, files, mergeSettings] = await Promise.all([
     fetchPullRequestDetail(owner, repo, number),
     fetchPullRequestComments(owner, repo, number),
     fetchPullRequestReviews(owner, repo, number),
     fetchPullRequestFiles(owner, repo, number),
+    fetchRepoMergeSettings(owner, repo),
   ])
   if (!live) {
     throw new AppError({
@@ -537,7 +547,11 @@ export async function fetchPullRequestDetailByRef(
     ...(checkRuns?.check_runs ?? []).map(check => ({
       id: `check-run:${check.id ?? check.name}`,
       name: check.name,
-      status: check.status,
+      status: (check.status === 'completed'
+        ? 'completed'
+        : check.status === 'in_progress'
+          ? 'in_progress'
+          : 'queued') as 'queued' | 'in_progress' | 'completed',
       conclusion: check.conclusion,
       url: check.html_url ?? check.details_url ?? null,
     })),
@@ -561,7 +575,7 @@ export async function fetchPullRequestDetailByRef(
             url: comment.user.html_url,
           }
         : null,
-      body: comment.body,
+      body: comment.body ?? null,
       state: null,
       createdAt: comment.created_at,
       url: comment.html_url,
@@ -571,12 +585,12 @@ export async function fetchPullRequestDetailByRef(
           id: `review:${review.id}`,
           kind: 'review' as const,
           author: review.user
-            ? { login: review.user.login, avatarUrl: null, url: null }
+            ? { login: review.user.login, avatarUrl: null as string | null, url: null as string | null }
             : null,
-          body: review.body,
+          body: review.body ?? null,
           state: review.state,
           createdAt: review.submitted_at,
-          url: review.html_url,
+          url: review.html_url ?? null,
         }]
       : []),
   ].toSorted((left, right) => left.createdAt.localeCompare(right.createdAt))
@@ -586,7 +600,7 @@ export async function fetchPullRequestDetailByRef(
     avatarUrl: string
     url: string
   }>()
-  for (const reviewer of live.requested_reviewers) {
+  for (const reviewer of live.requested_reviewers ?? []) {
     reviewers.set(reviewer.login, {
       login: reviewer.login,
       avatarUrl: reviewer.avatar_url,
@@ -603,6 +617,19 @@ export async function fetchPullRequestDetailByRef(
     }
   }
 
+  const checksState = deriveChecksState(checks)
+  const capability = derivePullRequestMergeCapability({
+    state: live.state,
+    merged: Boolean(live.merged),
+    isDraft: Boolean(live.draft),
+    mergeable: live.mergeable,
+    mergeableState: live.mergeable_state ?? 'unknown',
+    checksState,
+    allowMergeCommit: mergeSettings?.allow_merge_commit ?? true,
+    allowSquashMerge: mergeSettings?.allow_squash_merge ?? true,
+    allowRebaseMerge: mergeSettings?.allow_rebase_merge ?? true,
+  })
+
   return {
     pullRequest: {
       owner,
@@ -610,9 +637,9 @@ export async function fetchPullRequestDetailByRef(
       number: live.number,
       url: live.html_url,
       title: live.title,
-      isDraft: live.draft,
+      isDraft: Boolean(live.draft),
       state: live.state,
-      merged: live.merged,
+      merged: Boolean(live.merged),
       headRef: live.head.ref,
       baseRef: live.base.ref,
       headSha: live.head.sha,
@@ -633,31 +660,34 @@ export async function fetchPullRequestDetailByRef(
       comments: live.comments,
       reviewComments: live.review_comments,
       mergeable: live.mergeable,
-      mergeableState: live.mergeable_state,
+      mergeableState: live.mergeable_state ?? 'unknown',
       createdAtIso: live.created_at,
       updatedAtIso: live.updated_at,
       closedAtIso: live.closed_at,
       mergedAtIso: live.merged_at,
       reviewers: [...reviewers.values()],
-      assignees: live.assignees.map(assignee => ({
+      assignees: (live.assignees ?? []).map(assignee => ({
         login: assignee.login,
         avatarUrl: assignee.avatar_url,
         url: assignee.html_url,
       })),
       labels: live.labels,
-      checksState: deriveChecksState(checks),
+      checksState,
       checks,
+      allowedMergeMethods: capability.allowedMergeMethods,
+      mergeBlockers: capability.mergeBlockers,
+      canMerge: capability.canMerge,
     },
     timeline,
     files: (files ?? []).map(file => ({
-      sha: file.sha,
+      sha: file.sha ?? '',
       filename: file.filename,
-      previousFilename: file.previous_filename,
+      previousFilename: file.previous_filename ?? null,
       status: file.status,
       additions: file.additions,
       deletions: file.deletions,
       changes: file.changes,
-      patch: file.patch,
+      patch: file.patch ?? null,
       blobUrl: file.blob_url,
       rawUrl: file.raw_url,
     })),
@@ -882,7 +912,7 @@ export async function createDraftPullRequest(input: {
     number: created.number,
     url: created.html_url,
     title: created.title,
-    isDraft: created.draft,
+    isDraft: Boolean(created.draft),
     state: created.state,
     merged: false,
     headRef: created.head.ref,
@@ -962,7 +992,7 @@ export async function updatePullRequest(input: {
   return persistPullRequest(input.sessionId, {
     ...stored,
     title: updated.title,
-    isDraft: updated.draft,
+    isDraft: Boolean(updated.draft),
     state: updated.state,
     headRef: updated.head.ref,
     baseRef: updated.base.ref,
@@ -1009,7 +1039,7 @@ export async function markPullRequestReady(sessionId: string): Promise<SessionPu
   const next: StoredSessionPullRequest = {
     ...stored,
     title: updated.title,
-    isDraft: updated.draft,
+    isDraft: Boolean(updated.draft),
     state: updated.state,
     headRef: updated.head.ref,
     baseRef: updated.base.ref,
