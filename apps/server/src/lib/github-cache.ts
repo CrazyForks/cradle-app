@@ -42,8 +42,35 @@ export function setCache(key: string, data: unknown, etag?: string | null): void
   }).run()
 }
 
+/** Renew freshness without rewriting payload (e.g. HTTP 304). */
+export function touchCache(key: string): void {
+  const now = Math.floor(Date.now() / 1000)
+  const row = db().select().from(githubApiCache).where(eq(githubApiCache.cacheKey, key)).get()
+  if (!row) {
+    return
+  }
+  db().insert(githubApiCache).values({
+    cacheKey: key,
+    dataJson: row.dataJson,
+    etag: row.etag,
+    fetchedAt: now,
+  }).onConflictDoUpdate({
+    target: githubApiCache.cacheKey,
+    set: { fetchedAt: now },
+  }).run()
+}
+
 export function deleteCache(key: string): void {
   db().delete(githubApiCache).where(eq(githubApiCache.cacheKey, key)).run()
+}
+
+export function deleteCachePrefix(prefix: string): void {
+  const rows = db().select({ key: githubApiCache.cacheKey }).from(githubApiCache).all()
+  for (const row of rows) {
+    if (row.key.startsWith(prefix)) {
+      db().delete(githubApiCache).where(eq(githubApiCache.cacheKey, row.key)).run()
+    }
+  }
 }
 
 export interface CachedFetchResult<T> {
