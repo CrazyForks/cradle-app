@@ -2,26 +2,20 @@ import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { isAbsolute, join, normalize, relative, resolve } from 'node:path'
 
-import { z } from 'zod'
-
 const CAPTURE_LOOKBACK_MS = 5_000
 const CAPTURE_LOOKAHEAD_MS = 120_000
 const SESSION_ID_RE = /^session_\w(?:\w|-){0,255}$/
 
-const SessionIndexEntrySchema = z.object({
-  sessionId: z.string().regex(SESSION_ID_RE),
-  sessionDir: z.string().min(1),
-  workDir: z.string().min(1),
-})
+type KimiTimestamp = number | string
 
-const SessionStateSchema = z.object({
-  workDir: z.string().min(1).optional(),
-  cwd: z.string().min(1).optional(),
-  createdAt: z.string().optional(),
-  updatedAt: z.string().optional(),
-  title: z.string().optional(),
-  lastPrompt: z.string().optional(),
-})
+interface KimiSessionState {
+  workDir?: string
+  cwd?: string
+  createdAt?: KimiTimestamp
+  updatedAt?: KimiTimestamp
+  title?: string
+  lastPrompt?: string
+}
 
 export interface CaptureKimiCliSessionInput {
   workspacePath: string
@@ -118,7 +112,10 @@ async function readSessionIndex(path: string): Promise<Map<string, SessionIndexE
         entries.delete(parsed.sessionId)
         continue
       }
-      const entry = SessionIndexEntrySchema.parse(parsed)
+      const entry = parseSessionIndexEntry(parsed)
+      if (!entry) {
+        continue
+      }
       entries.set(entry.sessionId, entry)
     }
     catch {
@@ -128,27 +125,48 @@ async function readSessionIndex(path: string): Promise<Map<string, SessionIndexE
   return entries
 }
 
-async function readSessionState(path: string): Promise<z.infer<typeof SessionStateSchema> | null> {
+function parseSessionIndexEntry(value: unknown): SessionIndexEntry | null {
+  const record = asRecord(value)
+  const sessionId = readString(record, 'sessionId')
+  const sessionDir = readString(record, 'sessionDir')
+  const workDir = readString(record, 'workDir')
+  if (!sessionId || !SESSION_ID_RE.test(sessionId) || !sessionDir || !workDir) {
+    return null
+  }
+  return { sessionId, sessionDir, workDir }
+}
+
+async function readSessionState(path: string): Promise<KimiSessionState | null> {
   try {
-    return SessionStateSchema.parse(JSON.parse(await readFile(path, 'utf8')))
+    const record = asRecord(JSON.parse(await readFile(path, 'utf8')) as unknown)
+    if (!record) {
+      return null
+    }
+    return {
+      workDir: readString(record, 'workDir'),
+      cwd: readString(record, 'cwd'),
+      createdAt: readTimestamp(record, 'createdAt'),
+      updatedAt: readTimestamp(record, 'updatedAt'),
+      title: readString(record, 'title'),
+      lastPrompt: readString(record, 'lastPrompt'),
+    }
   }
   catch {
     return null
   }
 }
 
-function sessionTimestampMs(state: z.infer<typeof SessionStateSchema> | null): number | null {
+function sessionTimestampMs(state: KimiSessionState | null): number | null {
   if (!state) {
     return null
   }
   const timestamps = [state.createdAt, state.updatedAt]
-    .filter((value): value is string => Boolean(value))
-    .map(value => Date.parse(value))
+    .map(timestampMs)
     .filter(value => Number.isFinite(value))
   return timestamps.length > 0 ? Math.max(...timestamps) : null
 }
 
-function sessionTitle(state: z.infer<typeof SessionStateSchema> | null): string | undefined {
+function sessionTitle(state: KimiSessionState | null): string | undefined {
   if (!state) {
     return undefined
   }
@@ -158,6 +176,36 @@ function sessionTitle(state: z.infer<typeof SessionStateSchema> | null): string 
   }
   const lastPrompt = state.lastPrompt?.trim()
   return lastPrompt ? lastPrompt.slice(0, 200) : undefined
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function readString(record: Record<string, unknown> | null, key: string): string | undefined {
+  const value = record?.[key]
+  if (typeof value !== 'string') {
+    return undefined
+  }
+  const trimmed = value.trim()
+  return trimmed || undefined
+}
+
+function readTimestamp(record: Record<string, unknown> | null, key: string): KimiTimestamp | undefined {
+  const value = record?.[key]
+  return typeof value === 'string' || typeof value === 'number' ? value : undefined
+}
+
+function timestampMs(value: KimiTimestamp | undefined): number {
+  if (typeof value === 'string') {
+    return Date.parse(value)
+  }
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return Number.NaN
+  }
+  return value > 1_000_000_000_000 ? value : value * 1000
 }
 
 function isDeletion(value: unknown): value is { sessionId: string, deleted: true } {
@@ -173,8 +221,10 @@ function isInside(parent: string, child: string): boolean {
 }
 
 export const __kimiSessionCaptureTestUtils = {
+  parseSessionIndexEntry,
   readSessionIndex,
   readSessionState,
   sessionTimestampMs,
   sessionTitle,
+  timestampMs,
 }
