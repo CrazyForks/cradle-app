@@ -225,7 +225,12 @@ type ActiveClaudeTurn = {
    * (lifecycle takeover).
    */
   hasProjectedOutput: boolean
-  /** Set while an empty main `result` is deferred pending follow-on Query output or input-pull idle. */
+  /**
+   * Set while an empty main `result` is deferred pending follow-on Query output.
+   * Cleared when output projects or the turn finalizes (next user `streamTurn` /
+   * Query teardown). Never finalized solely because the input stream is waiting
+   * for the next prompt pull — that race opens a system synthetic run.
+   */
   deferredEmptyResult: boolean
 }
 
@@ -878,39 +883,6 @@ export class ClaudeAgentProvider implements ChatRuntime {
     void this.refreshCompactState({ runtimeSession: entry.runtimeSession }).catch(() => undefined)
   }
 
-  /**
-   * After an empty main `result`, keep the user turn open for follow-on Query output.
-   * If the SDK instead parks on the next prompt pull, the native turn is idle — finish
-   * the empty UI turn so the next user send is not blocked (harness / true empty reply).
-   */
-  private scheduleDeferredEmptyMainTurnIdleCheck(entry: ActiveClaudeQuery): void {
-    // Bounded retries: after an empty `result`, the pump may still be draining
-    // buffered Query messages before it parks on the next prompt pull. Do not
-    // spin forever — the next `streamTurn` / Query teardown also finalizes
-    // empty turns with no projected output.
-    let attempts = 0
-    const check = () => {
-      if (entry.closed) {
-        return
-      }
-      const turn = entry.currentTurn
-      if (!turn?.deferredEmptyResult || turn.hasProjectedOutput) {
-        return
-      }
-      if (entry.inputStream.isWaitingForPull()) {
-        this.finalizeClaudeUserTurn(entry, turn, {
-          type: 'finish',
-          finishReason: 'stop',
-        })
-        return
-      }
-      if (attempts++ < 8) {
-        setTimeout(check, 0)
-      }
-    }
-    setTimeout(check, 0)
-  }
-
   private async handleClaudeSessionMessage(
     entry: ActiveClaudeQuery,
     message: ClaudeAgentWireMessage,
@@ -1035,10 +1007,12 @@ export class ClaudeAgentProvider implements ChatRuntime {
         })
         if (shouldDeferEmptyMainResult) {
           // Keep `currentTurn` so subsequent Query messages stay on this user run.
-          // Closing here would clear the turn and reopen work as a system synthetic.
+          // Closing here (including via input-pull idle heuristics) would clear the
+          // turn and reopen follow-on work as a system synthetic run.
+          // Empty turns without follow-on close on the next user `streamTurn` or
+          // Query teardown — never because `isWaitingForPull()` alone.
           turn.deferredEmptyResult = true
           resetClaudeAgentChunkMapperForTurn(entry.mapperState)
-          this.scheduleDeferredEmptyMainTurnIdleCheck(entry)
           return
         }
         turn.deferredEmptyResult = false
@@ -1682,12 +1656,22 @@ export class ClaudeAgentProvider implements ChatRuntime {
     // Interrupt the long-lived Query even when `currentTurn` is already cleared
     // (empty-result / synthetic projection window). Otherwise Composer cancel
     // returns ok while Claude keeps running under a system synthetic run.
-    if (entry.currentTurn) {
-      entry.currentTurn.interruptRequested = true
+    const turn = entry.currentTurn
+    if (turn) {
+      turn.interruptRequested = true
+      // A deferred empty main `result` already consumed the native turn boundary.
+      // `interrupt()` will not produce another result while the Query is parked on
+      // the next prompt pull — settle the UI turn here or Stop hangs forever.
+      if (turn.deferredEmptyResult && !turn.hasProjectedOutput) {
+        this.finalizeClaudeUserTurn(entry, turn, {
+          type: 'abort',
+          reason: 'user',
+        })
+      }
     }
 
-    // Match Synara's provider lifecycle: the interrupt request does not settle
-    // the turn. The native result or query exit remains the terminal authority.
+    // For in-flight turns with projected output, interrupt does not settle the
+    // turn: the native result / query exit remains the terminal authority.
     await entry.query.interrupt()
   }
 

@@ -1725,7 +1725,119 @@ export const zGetPullRequestsReviewingQuery = z.object({
     after: z.string().optional()
 });
 
+export const zGetPullRequestsByOwnerByRepoAssignableUsersPath = z.object({
+    owner: z.string().min(1),
+    repo: z.string().min(1)
+});
+
 export const zGetPullRequestsByOwnerByRepoByNumberDetailPath = z.object({
+    owner: z.string().min(1),
+    repo: z.string().min(1),
+    number: z.string().min(1)
+});
+
+export const zGetPullRequestsByOwnerByRepoByNumberFingerprintPath = z.object({
+    owner: z.string().min(1),
+    repo: z.string().min(1),
+    number: z.string().min(1)
+});
+
+export const zPostPullRequestsByOwnerByRepoByNumberFingerprintProbeBody = z.object({
+    previous: z.object({
+        updatedAt: z.string(),
+        headSha: z.string(),
+        state: z.enum(['open', 'closed']),
+        merged: z.boolean(),
+        isDraft: z.boolean(),
+        mergeableState: z.string(),
+        comments: z.number(),
+        reviewComments: z.number(),
+        commits: z.number(),
+        checksState: z.enum([
+            'success',
+            'failure',
+            'pending',
+            'neutral'
+        ])
+    }).nullish()
+});
+
+export const zPostPullRequestsByOwnerByRepoByNumberFingerprintProbePath = z.object({
+    owner: z.string().min(1),
+    repo: z.string().min(1),
+    number: z.string().min(1)
+});
+
+export const zPostPullRequestsByOwnerByRepoByNumberCommentBody = z.object({
+    body: z.string().min(1)
+});
+
+export const zPostPullRequestsByOwnerByRepoByNumberCommentPath = z.object({
+    owner: z.string().min(1),
+    repo: z.string().min(1),
+    number: z.string().min(1)
+});
+
+export const zPostPullRequestsByOwnerByRepoByNumberReviewBody = z.object({
+    event: z.enum([
+        'APPROVE',
+        'REQUEST_CHANGES',
+        'COMMENT'
+    ]),
+    body: z.string().optional()
+});
+
+export const zPostPullRequestsByOwnerByRepoByNumberReviewPath = z.object({
+    owner: z.string().min(1),
+    repo: z.string().min(1),
+    number: z.string().min(1)
+});
+
+export const zPostPullRequestsByOwnerByRepoByNumberMergeBody = z.object({
+    mergeMethod: z.enum([
+        'merge',
+        'squash',
+        'rebase'
+    ]),
+    commitTitle: z.string().min(1).optional(),
+    commitMessage: z.string().optional()
+});
+
+export const zPostPullRequestsByOwnerByRepoByNumberMergePath = z.object({
+    owner: z.string().min(1),
+    repo: z.string().min(1),
+    number: z.string().min(1)
+});
+
+export const zPostPullRequestsByOwnerByRepoByNumberAssigneesBody = z.object({
+    add: z.array(z.string().min(1)).optional(),
+    remove: z.array(z.string().min(1)).optional()
+});
+
+export const zPostPullRequestsByOwnerByRepoByNumberAssigneesPath = z.object({
+    owner: z.string().min(1),
+    repo: z.string().min(1),
+    number: z.string().min(1)
+});
+
+export const zPostPullRequestsByOwnerByRepoByNumberReviewersBody = z.object({
+    add: z.array(z.string().min(1)).optional(),
+    remove: z.array(z.string().min(1)).optional()
+});
+
+export const zPostPullRequestsByOwnerByRepoByNumberReviewersPath = z.object({
+    owner: z.string().min(1),
+    repo: z.string().min(1),
+    number: z.string().min(1)
+});
+
+export const zPostPullRequestsByOwnerByRepoByNumberReadyPath = z.object({
+    owner: z.string().min(1),
+    repo: z.string().min(1),
+    number: z.string().min(1)
+});
+
+export const zPostPullRequestsByOwnerByRepoByNumberDraftPath = z.object({
     owner: z.string().min(1),
     repo: z.string().min(1),
     number: z.string().min(1)

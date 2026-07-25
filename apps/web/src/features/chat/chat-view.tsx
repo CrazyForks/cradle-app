@@ -105,7 +105,7 @@ export function ChatView({
   const remoteConnection = useRemoteHostConnection(remoteHostId)
   const remoteConnectionBlocked = remoteConnection.isBlocking
   const {
-    messageIds,
+    displayRows,
     messageCount,
     status,
     isStreaming,
@@ -172,7 +172,12 @@ export function ChatView({
     }),
     [composerRuntime, remoteConnectionBlocked],
   )
-  const scrollRuntime = useChatScrollRuntime({ active: chatActive, sessionId, messageIds, status })
+  const scrollRuntime = useChatScrollRuntime({
+    active: chatActive,
+    sessionId,
+    displayRows,
+    status,
+  })
   const loadEarlierMessages = useCallback(async () => {
     const viewport = scrollRuntime.viewportRef.current
     const previousScrollHeight = viewport?.scrollHeight ?? 0
@@ -766,7 +771,7 @@ export function ChatView({
     >
       <ChatMessageListPane
         sessionId={sessionId}
-        messageIds={messageIds}
+        displayRows={displayRows}
         messageCount={messageCount}
         status={status}
         error={describeChatExecutionError(error) ?? error}

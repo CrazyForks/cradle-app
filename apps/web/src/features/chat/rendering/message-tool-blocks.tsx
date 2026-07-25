@@ -4,6 +4,8 @@ import { useMemo } from 'react'
 import { useSessionBinding } from '../session/use-session-binding'
 import { GroupedToolCallBlock } from '../tool-blocks/containers/grouped-tool-call-block-container'
 import { ToolCallBlock } from '../tool-blocks/containers/tool-call-block-container'
+import { useMessageDisplayParts, useMessagePartAt } from '../transcript/lib/message-display-parts-context'
+import { readRenderableToolPart } from './chat-render-plan'
 import { useChatRenderStore } from './chat-render-store'
 import { toolNameFromPart } from './chat-tool-entities'
 import {
@@ -84,10 +86,19 @@ export function ToolCallBlockByPartIndex({
     () => workspaceId ? { workspaceId } : undefined,
     [workspaceId],
   )
-  const part = useChatRenderStore(
-    state => readRenderableToolPartFromState(state, sessionId, messageId, partIndex),
+  const displayPart = useMessagePartAt(partIndex)
+  const storePart = useChatRenderStore(
+    (state) => {
+      if (displayPart !== undefined) {
+        return null
+      }
+      return readRenderableToolPartFromState(state, sessionId, messageId, partIndex)
+    },
     areRenderableToolPartsEqual,
   )
+  const part = displayPart !== undefined
+    ? (displayPart ? readRenderableToolPart(displayPart) : null)
+    : storePart
   if (!part) {
     return null
   }
@@ -147,9 +158,13 @@ export function GroupedToolCallBlockByPartIndexes({
     () => workspaceId ? { workspaceId } : undefined,
     [workspaceId],
   )
-  const parts = useChatRenderStore(
-    state =>
-      items.flatMap((item) => {
+  const displayParts = useMessageDisplayParts()
+  const storeParts = useChatRenderStore(
+    (state) => {
+      if (displayParts) {
+        return []
+      }
+      return items.flatMap((item) => {
         const part = readRenderableToolPartFromState(
           state,
           sessionId,
@@ -157,9 +172,17 @@ export function GroupedToolCallBlockByPartIndexes({
           item.partIndex,
         )
         return part ? [{ key: item.key, part }] : []
-      }),
+      })
+    },
     areGroupedRenderableToolItemsEqual,
   )
+  const parts = displayParts
+    ? items.flatMap((item) => {
+        const part = displayParts[item.partIndex]
+        const toolPart = part ? readRenderableToolPart(part) : null
+        return toolPart ? [{ key: item.key, part: toolPart }] : []
+      })
+    : storeParts
   return (
     <GroupedToolCallBlockFromParts
       items={parts}

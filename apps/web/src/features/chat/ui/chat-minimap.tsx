@@ -314,7 +314,7 @@ function ChatMinimapInner({
         {anchors.map((anchor, i) => {
           return (
             <ChatMinimapBar
-              key={messageIds[anchor.messageIndex]}
+              key={`${messageIds[anchor.messageIndex]}:${anchor.messageIndex}`}
               index={i}
               anchor={anchor}
               hovered={uiState.hoverIdx === i}

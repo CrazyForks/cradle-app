@@ -57,9 +57,11 @@ export function projectCodexUserInput(message: CodexRuntimeMessageInput, runtime
     return [toTextUserInput(text)]
   }
 
+  const parts = projectProviderInputParts(message)
+  const textParts = parts.filter((part): part is Extract<ProviderInputPart, { type: 'text' }> => part.type === 'text')
   const input: CodexUserInput[] = []
   const unsupportedParts: string[] = []
-  for (const part of projectProviderInputParts(message)) {
+  for (const part of parts) {
     if (part.type === 'text') {
       const text = part.text.trim()
       if (text) {
@@ -81,6 +83,9 @@ export function projectCodexUserInput(message: CodexRuntimeMessageInput, runtime
       continue
     }
     if (part.type === 'skill') {
+      if (!textParts.some(textPart => textPart.text.includes(`$${part.skill.name}`))) {
+        appendCodexSkillInvocation(input, part.skill.name)
+      }
       input.push({ type: 'skill', name: part.skill.name, path: resolveCodexSkillFilePath(part.skill.path) })
       continue
     }
@@ -127,6 +132,18 @@ export function describeCodexUserInput(input: CodexUserInput[], text: string): s
 
 function toTextUserInput(text: string): CodexUserInput {
   return { type: 'text', text, text_elements: [] }
+}
+
+function appendCodexSkillInvocation(input: CodexUserInput[], skillName: string): void {
+  const invocation = `$${skillName}`
+  const previousInput = input.at(-1)
+  if (previousInput?.type === 'text') {
+    previousInput.text = previousInput.text.length === 0 || /\s$/.test(previousInput.text)
+      ? `${previousInput.text}${invocation}`
+      : `${previousInput.text} ${invocation}`
+    return
+  }
+  input.push(toTextUserInput(invocation))
 }
 
 function resolveCodexSkillFilePath(inputPath: string): string {

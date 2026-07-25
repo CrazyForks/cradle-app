@@ -28,10 +28,18 @@ export interface ChatScrollRuntime {
   handleComposerFocusChange: (focused: boolean) => void
 }
 
+interface ChatScrollDisplayRow {
+  messageId: string
+  allowStreaming?: boolean
+}
+
 interface UseChatScrollRuntimeOptions {
   active: boolean
   sessionId: string | null
-  messageIds: string[]
+  /** Virtualized transcript rows (display order). Prefer expanded steer rows. */
+  displayRows?: ChatScrollDisplayRow[]
+  /** @deprecated Prefer displayRows — kept for callers that only have canonical ids. */
+  messageIds?: string[]
   status: string
 }
 
@@ -66,9 +74,14 @@ function readIsAtBottom(metrics: ChatScrollMetrics): boolean {
 export function useChatScrollRuntime({
   active,
   sessionId,
-  messageIds,
+  displayRows,
+  messageIds: legacyMessageIds,
   status,
 }: UseChatScrollRuntimeOptions): ChatScrollRuntime {
+  const messageIds = useMemo(
+    () => displayRows?.map(row => row.messageId) ?? legacyMessageIds ?? [],
+    [displayRows, legacyMessageIds],
+  )
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const viewportRef = useRef<HTMLDivElement>(null)
   const composerOverlayRef = useRef<HTMLDivElement>(null)
@@ -134,13 +147,24 @@ export function useChatScrollRuntime({
     }
 
     const indices: number[] = []
-    for (let i = 0; i < messageIds.length; i++) {
-      if (streamingMessageIds.has(messageIds[i])) {
-        indices.push(i)
+    if (displayRows) {
+      for (let i = 0; i < displayRows.length; i++) {
+        const row = displayRows[i]
+        // Head/mid steer projections share the assistant id but must not stay mounted for stream paint.
+        if ((row.allowStreaming ?? true) && streamingMessageIds.has(row.messageId)) {
+          indices.push(i)
+        }
+      }
+    }
+    else {
+      for (let i = 0; i < messageIds.length; i++) {
+        if (streamingMessageIds.has(messageIds[i])) {
+          indices.push(i)
+        }
       }
     }
     return indices.length > 0 ? indices : undefined
-  }, [active, streamingMessageIds, messageIds])
+  }, [active, streamingMessageIds, messageIds, displayRows])
 
   const readScrollMetrics = useCallback((): ChatScrollMetrics | null => {
     const viewport = viewportRef.current

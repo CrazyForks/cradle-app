@@ -40,6 +40,9 @@ export function useChatSession(chatSessionId: string | null, active = true) {
   const messageIds = useChatStore(
     useShallow(chatSelectors.messageIds(chatSessionId ?? '')),
   )
+  const displayRows = useChatStore(
+    useShallow(chatSelectors.displayRows(chatSessionId ?? '')),
+  )
   const visibleStatus = useChatStore(
     chatSelectors.visibleStatus(chatSessionId ?? ''),
   )
@@ -127,6 +130,7 @@ export function useChatSession(chatSessionId: string | null, active = true) {
 
   return {
     messageIds,
+    displayRows,
     messageCount,
     status: visibleStatus,
     isStreaming,

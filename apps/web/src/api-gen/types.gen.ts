@@ -8847,6 +8847,9 @@ export type GetSessionsByIdPullRequestDetailResponses = {
                 conclusion: string | null;
                 url: string | null;
             }>;
+            allowedMergeMethods: Array<'merge' | 'squash' | 'rebase'>;
+            mergeBlockers: Array<string>;
+            canMerge: boolean;
         };
         timeline: Array<{
             id: string;
@@ -9031,6 +9034,31 @@ export type GetPullRequestsReviewingResponses = {
 
 export type GetPullRequestsReviewingResponse = GetPullRequestsReviewingResponses[keyof GetPullRequestsReviewingResponses];
 
+export type GetPullRequestsByOwnerByRepoAssignableUsersData = {
+    body?: never;
+    path: {
+        owner: string;
+        repo: string;
+    };
+    query?: never;
+    url: '/pull-requests/{owner}/{repo}/assignable-users';
+};
+
+export type GetPullRequestsByOwnerByRepoAssignableUsersResponses = {
+    /**
+     * Response for status 200
+     */
+    200: {
+        users: Array<{
+            login: string;
+            avatarUrl: string;
+            url: string;
+        }>;
+    };
+};
+
+export type GetPullRequestsByOwnerByRepoAssignableUsersResponse = GetPullRequestsByOwnerByRepoAssignableUsersResponses[keyof GetPullRequestsByOwnerByRepoAssignableUsersResponses];
+
 export type GetPullRequestsByOwnerByRepoByNumberDetailData = {
     body?: never;
     path: {
@@ -9101,6 +9129,9 @@ export type GetPullRequestsByOwnerByRepoByNumberDetailResponses = {
                 conclusion: string | null;
                 url: string | null;
             }>;
+            allowedMergeMethods: Array<'merge' | 'squash' | 'rebase'>;
+            mergeBlockers: Array<string>;
+            canMerge: boolean;
         };
         timeline: Array<{
             id: string;
@@ -9131,6 +9162,308 @@ export type GetPullRequestsByOwnerByRepoByNumberDetailResponses = {
 };
 
 export type GetPullRequestsByOwnerByRepoByNumberDetailResponse = GetPullRequestsByOwnerByRepoByNumberDetailResponses[keyof GetPullRequestsByOwnerByRepoByNumberDetailResponses];
+
+export type GetPullRequestsByOwnerByRepoByNumberFingerprintData = {
+    body?: never;
+    path: {
+        owner: string;
+        repo: string;
+        number: string;
+    };
+    query?: never;
+    url: '/pull-requests/{owner}/{repo}/{number}/fingerprint';
+};
+
+export type GetPullRequestsByOwnerByRepoByNumberFingerprintResponses = {
+    /**
+     * Response for status 200
+     */
+    200: {
+        fingerprint: {
+            updatedAt: string;
+            headSha: string;
+            state: 'open' | 'closed';
+            merged: boolean;
+            isDraft: boolean;
+            mergeableState: string;
+            comments: number;
+            reviewComments: number;
+            commits: number;
+            checksState: 'success' | 'failure' | 'pending' | 'neutral';
+        };
+        changed: boolean;
+    };
+};
+
+export type GetPullRequestsByOwnerByRepoByNumberFingerprintResponse = GetPullRequestsByOwnerByRepoByNumberFingerprintResponses[keyof GetPullRequestsByOwnerByRepoByNumberFingerprintResponses];
+
+export type PostPullRequestsByOwnerByRepoByNumberFingerprintProbeData = {
+    body: {
+        previous?: {
+            updatedAt: string;
+            headSha: string;
+            state: 'open' | 'closed';
+            merged: boolean;
+            isDraft: boolean;
+            mergeableState: string;
+            comments: number;
+            reviewComments: number;
+            commits: number;
+            checksState: 'success' | 'failure' | 'pending' | 'neutral';
+        } | null;
+    };
+    path: {
+        owner: string;
+        repo: string;
+        number: string;
+    };
+    query?: never;
+    url: '/pull-requests/{owner}/{repo}/{number}/fingerprint/probe';
+};
+
+export type PostPullRequestsByOwnerByRepoByNumberFingerprintProbeResponses = {
+    /**
+     * Response for status 200
+     */
+    200: {
+        fingerprint: {
+            updatedAt: string;
+            headSha: string;
+            state: 'open' | 'closed';
+            merged: boolean;
+            isDraft: boolean;
+            mergeableState: string;
+            comments: number;
+            reviewComments: number;
+            commits: number;
+            checksState: 'success' | 'failure' | 'pending' | 'neutral';
+        };
+        changed: boolean;
+    };
+};
+
+export type PostPullRequestsByOwnerByRepoByNumberFingerprintProbeResponse = PostPullRequestsByOwnerByRepoByNumberFingerprintProbeResponses[keyof PostPullRequestsByOwnerByRepoByNumberFingerprintProbeResponses];
+
+export type PostPullRequestsByOwnerByRepoByNumberCommentData = {
+    body: {
+        body: string;
+    };
+    path: {
+        owner: string;
+        repo: string;
+        number: string;
+    };
+    query?: never;
+    url: '/pull-requests/{owner}/{repo}/{number}/comment';
+};
+
+export type PostPullRequestsByOwnerByRepoByNumberCommentResponses = {
+    /**
+     * Response for status 200
+     */
+    200: {
+        id: string;
+        body: string;
+        url: string;
+        createdAt: string;
+    };
+};
+
+export type PostPullRequestsByOwnerByRepoByNumberCommentResponse = PostPullRequestsByOwnerByRepoByNumberCommentResponses[keyof PostPullRequestsByOwnerByRepoByNumberCommentResponses];
+
+export type PostPullRequestsByOwnerByRepoByNumberReviewData = {
+    body: {
+        event: 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT';
+        body?: string;
+    };
+    path: {
+        owner: string;
+        repo: string;
+        number: string;
+    };
+    query?: never;
+    url: '/pull-requests/{owner}/{repo}/{number}/review';
+};
+
+export type PostPullRequestsByOwnerByRepoByNumberReviewResponses = {
+    /**
+     * Response for status 200
+     */
+    200: {
+        id: number;
+        state: string;
+        body: string | null;
+        htmlUrl: string;
+    };
+};
+
+export type PostPullRequestsByOwnerByRepoByNumberReviewResponse = PostPullRequestsByOwnerByRepoByNumberReviewResponses[keyof PostPullRequestsByOwnerByRepoByNumberReviewResponses];
+
+export type PostPullRequestsByOwnerByRepoByNumberMergeData = {
+    body: {
+        mergeMethod: 'merge' | 'squash' | 'rebase';
+        commitTitle?: string;
+        commitMessage?: string;
+    };
+    path: {
+        owner: string;
+        repo: string;
+        number: string;
+    };
+    query?: never;
+    url: '/pull-requests/{owner}/{repo}/{number}/merge';
+};
+
+export type PostPullRequestsByOwnerByRepoByNumberMergeResponses = {
+    /**
+     * Response for status 200
+     */
+    200: {
+        sha: string;
+        merged: boolean;
+        message: string;
+    };
+};
+
+export type PostPullRequestsByOwnerByRepoByNumberMergeResponse = PostPullRequestsByOwnerByRepoByNumberMergeResponses[keyof PostPullRequestsByOwnerByRepoByNumberMergeResponses];
+
+export type PostPullRequestsByOwnerByRepoByNumberAssigneesData = {
+    body: {
+        add?: Array<string>;
+        remove?: Array<string>;
+    };
+    path: {
+        owner: string;
+        repo: string;
+        number: string;
+    };
+    query?: never;
+    url: '/pull-requests/{owner}/{repo}/{number}/assignees';
+};
+
+export type PostPullRequestsByOwnerByRepoByNumberAssigneesResponses = {
+    /**
+     * Response for status 200
+     */
+    200: {
+        added: Array<string>;
+        removed: Array<string>;
+    };
+};
+
+export type PostPullRequestsByOwnerByRepoByNumberAssigneesResponse = PostPullRequestsByOwnerByRepoByNumberAssigneesResponses[keyof PostPullRequestsByOwnerByRepoByNumberAssigneesResponses];
+
+export type PostPullRequestsByOwnerByRepoByNumberReviewersData = {
+    body: {
+        add?: Array<string>;
+        remove?: Array<string>;
+    };
+    path: {
+        owner: string;
+        repo: string;
+        number: string;
+    };
+    query?: never;
+    url: '/pull-requests/{owner}/{repo}/{number}/reviewers';
+};
+
+export type PostPullRequestsByOwnerByRepoByNumberReviewersResponses = {
+    /**
+     * Response for status 200
+     */
+    200: {
+        added: Array<string>;
+        removed: Array<string>;
+    };
+};
+
+export type PostPullRequestsByOwnerByRepoByNumberReviewersResponse = PostPullRequestsByOwnerByRepoByNumberReviewersResponses[keyof PostPullRequestsByOwnerByRepoByNumberReviewersResponses];
+
+export type PostPullRequestsByOwnerByRepoByNumberReadyData = {
+    body?: never;
+    path: {
+        owner: string;
+        repo: string;
+        number: string;
+    };
+    query?: never;
+    url: '/pull-requests/{owner}/{repo}/{number}/ready';
+};
+
+export type PostPullRequestsByOwnerByRepoByNumberReadyResponses = {
+    /**
+     * Response for status 200
+     */
+    200: {
+        pullRequest: {
+            owner: string;
+            repo: string;
+            number: number;
+            url: string;
+            title: string;
+            isDraft: boolean;
+            state: 'open' | 'closed';
+            merged: boolean;
+            headRef: string;
+            baseRef: string;
+            headSha: string | null;
+            createdAt: number;
+            updatedAt: number;
+            author?: {
+                login: string;
+                avatarUrl: string;
+                url: string;
+            } | null;
+            additions?: number;
+            deletions?: number;
+        };
+    };
+};
+
+export type PostPullRequestsByOwnerByRepoByNumberReadyResponse = PostPullRequestsByOwnerByRepoByNumberReadyResponses[keyof PostPullRequestsByOwnerByRepoByNumberReadyResponses];
+
+export type PostPullRequestsByOwnerByRepoByNumberDraftData = {
+    body?: never;
+    path: {
+        owner: string;
+        repo: string;
+        number: string;
+    };
+    query?: never;
+    url: '/pull-requests/{owner}/{repo}/{number}/draft';
+};
+
+export type PostPullRequestsByOwnerByRepoByNumberDraftResponses = {
+    /**
+     * Response for status 200
+     */
+    200: {
+        pullRequest: {
+            owner: string;
+            repo: string;
+            number: number;
+            url: string;
+            title: string;
+            isDraft: boolean;
+            state: 'open' | 'closed';
+            merged: boolean;
+            headRef: string;
+            baseRef: string;
+            headSha: string | null;
+            createdAt: number;
+            updatedAt: number;
+            author?: {
+                login: string;
+                avatarUrl: string;
+                url: string;
+            } | null;
+            additions?: number;
+            deletions?: number;
+        };
+    };
+};
+
+export type PostPullRequestsByOwnerByRepoByNumberDraftResponse = PostPullRequestsByOwnerByRepoByNumberDraftResponses[keyof PostPullRequestsByOwnerByRepoByNumberDraftResponses];
 
 export type GetSessionGroupsData = {
     body?: never;

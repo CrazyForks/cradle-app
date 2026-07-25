@@ -5438,6 +5438,94 @@ describe('codexProvider app-server integration', () => {
     }
   })
 
+  it('invokes selected skills through turn start and live steer', async () => {
+    const client = new FakeCodexAppServerClient({})
+    const provider = createProvider(client)
+    const runtimeSession = createRuntimeSession()
+    const stream = provider.streamTurn({
+      runId: 'run-codex-skill-steer',
+      runtimeSession,
+      profile: createProfile(),
+      message: createMessage([
+        { type: 'text', text: 'Start with' },
+        {
+          type: 'data-cradle-skill',
+          data: {
+            type: 'data-cradle-skill',
+            name: 'cradle-chat-runtime-sdk-update',
+            path: '/tmp/cradle-chat-runtime-sdk-update',
+            scope: 'workspace',
+            description: null,
+          },
+        },
+      ]),
+      workspaceId: 'workspace-1',
+    })
+
+    const firstChunkPromise = stream.next()
+
+    await vi.waitFor(() => {
+      expect(client.requests.map(request => request.method)).toEqual(['thread/start', 'turn/start'])
+    })
+    expect(client.requests[1]).toMatchObject({
+      method: 'turn/start',
+      params: {
+        input: [
+          { type: 'text', text: 'Start with $cradle-chat-runtime-sdk-update', text_elements: [] },
+          {
+            type: 'skill',
+            name: 'cradle-chat-runtime-sdk-update',
+            path: '/tmp/cradle-chat-runtime-sdk-update',
+          },
+        ],
+      },
+    })
+
+    await provider.steerTurn({
+      runtimeSession,
+      profile: createProfile(),
+      message: createMessage([
+        { type: 'text', text: 'Run' },
+        {
+          type: 'data-cradle-skill',
+          data: {
+            type: 'data-cradle-skill',
+            name: 'cradle-chat-runtime-sdk-update',
+            path: '/tmp/cradle-chat-runtime-sdk-update',
+            scope: 'workspace',
+            description: null,
+          },
+        },
+      ]),
+    })
+
+    expect(client.requests.at(-1)).toEqual({
+      method: 'turn/steer',
+      params: {
+        threadId: 'codex-thread-1',
+        expectedTurnId: 'codex-turn-1',
+        input: [
+          { type: 'text', text: 'Run $cradle-chat-runtime-sdk-update', text_elements: [] },
+          {
+            type: 'skill',
+            name: 'cradle-chat-runtime-sdk-update',
+            path: '/tmp/cradle-chat-runtime-sdk-update',
+          },
+        ],
+      },
+    })
+
+    client.pushNotification({
+      method: 'turn/completed',
+      params: {
+        threadId: 'codex-thread-1',
+        turn: { id: 'codex-turn-1', status: 'completed' },
+      },
+    })
+    await firstChunkPromise
+    await drainStream(stream)
+  })
+
   it('rejects non-image file attachments before starting Codex app-server work', async () => {
     const client = new FakeCodexAppServerClient({})
     const provider = createProvider(client)

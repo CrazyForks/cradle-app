@@ -1642,12 +1642,22 @@ describe.sequential('claudeAgentProvider MCP integration', () => {
           [
             [
               {
+                type: 'assistant',
+                session_id: 'claude-session-reused-permissions',
+                message: { content: [{ type: 'text', text: 'Plan reply' }] },
+              },
+              {
                 type: 'result',
                 session_id: 'claude-session-reused-permissions',
                 usage: { input_tokens: 1, output_tokens: 1 },
               },
             ],
             [
+              {
+                type: 'assistant',
+                session_id: 'claude-session-reused-permissions',
+                message: { content: [{ type: 'text', text: 'Bypass reply' }] },
+              },
               {
                 type: 'result',
                 session_id: 'claude-session-reused-permissions',
@@ -1746,12 +1756,22 @@ describe.sequential('claudeAgentProvider MCP integration', () => {
           [
             [
               {
+                type: 'assistant',
+                session_id: 'claude-session-harness',
+                message: { content: [{ type: 'text', text: 'Harness turn 1' }] },
+              },
+              {
                 type: 'result',
                 session_id: 'claude-session-harness',
                 usage: { input_tokens: 1, output_tokens: 1 },
               },
             ],
             [
+              {
+                type: 'assistant',
+                session_id: 'claude-session-harness',
+                message: { content: [{ type: 'text', text: 'Harness turn 2' }] },
+              },
               {
                 type: 'result',
                 session_id: 'claude-session-harness',
@@ -1857,12 +1877,22 @@ describe.sequential('claudeAgentProvider MCP integration', () => {
                 session_id: 'claude-session-harness-compact',
               },
               {
+                type: 'assistant',
+                session_id: 'claude-session-harness-compact',
+                message: { content: [{ type: 'text', text: 'Before compact' }] },
+              },
+              {
                 type: 'result',
                 session_id: 'claude-session-harness-compact',
                 usage: { input_tokens: 1, output_tokens: 1 },
               },
             ],
             [
+              {
+                type: 'assistant',
+                session_id: 'claude-session-harness-compact',
+                message: { content: [{ type: 'text', text: 'After compact' }] },
+              },
               {
                 type: 'result',
                 session_id: 'claude-session-harness-compact',
@@ -1957,12 +1987,22 @@ describe.sequential('claudeAgentProvider MCP integration', () => {
           [
             [
               {
+                type: 'assistant',
+                session_id: 'claude-session-ultracode-live',
+                message: { content: [{ type: 'text', text: 'Ultra reply' }] },
+              },
+              {
                 type: 'result',
                 session_id: 'claude-session-ultracode-live',
                 usage: { input_tokens: 1, output_tokens: 1 },
               },
             ],
             [
+              {
+                type: 'assistant',
+                session_id: 'claude-session-ultracode-live',
+                message: { content: [{ type: 'text', text: 'Standard reply' }] },
+              },
               {
                 type: 'result',
                 session_id: 'claude-session-ultracode-live',
@@ -2028,12 +2068,22 @@ describe.sequential('claudeAgentProvider MCP integration', () => {
           [
             [
               {
+                type: 'assistant',
+                session_id: 'claude-session-reused-approval',
+                message: { content: [{ type: 'text', text: 'Bypass reply' }] },
+              },
+              {
                 type: 'result',
                 session_id: 'claude-session-reused-approval',
                 usage: { input_tokens: 1, output_tokens: 1 },
               },
             ],
             [
+              {
+                type: 'assistant',
+                session_id: 'claude-session-reused-approval',
+                message: { content: [{ type: 'text', text: 'Approval reply' }] },
+              },
               {
                 type: 'result',
                 session_id: 'claude-session-reused-approval',
@@ -4028,35 +4078,108 @@ describe.sequential('claudeAgentProvider MCP integration', () => {
   it('keeps post-empty-result top-level output on the same user turn (no main synthetic)', async () => {
     // Regression for empty/early top-level `result` clearing currentTurn, then later
     // assistant work opening an origin:system synthetic run (b13→e11 failure mode).
+    // Gate between empty `result` and follow-on assistant so macrotask idle checks can
+    // run; prompt-driven pull ensures currentTurn is set before the empty result lands.
     const prompts: unknown[] = []
+    const followOnGate = deferred<void>()
     sdkMocks.query.mockImplementation(
-      (call: { prompt?: AsyncIterable<{ message: { content: unknown } }> }) => {
+      (call: { prompt?: AsyncIterable<{ message: { content: unknown }, shouldQuery?: boolean }> }) => {
         expect(call.prompt).toBeDefined()
-        return createPromptDrivenQuery(
-          call.prompt!,
-          [
-            [
-              {
-                type: 'result',
-                session_id: 'claude-session-empty-result-continue',
-                usage: { input_tokens: 1, output_tokens: 0 },
-              },
-              {
-                type: 'assistant',
-                session_id: 'claude-session-empty-result-continue',
-                message: {
-                  content: [{ type: 'text', text: 'Real work after empty result' }],
+        const promptIterator = call.prompt![Symbol.asyncIterator]()
+        let stage: 'await-prompt' | 'await-gate' | 'assistant' | 'result' | 'parked' = 'await-prompt'
+        let closed = false
+        return {
+          [Symbol.asyncIterator]() {
+            return this
+          },
+          async next() {
+            if (closed) {
+              return { done: true as const, value: undefined }
+            }
+            if (stage === 'await-prompt') {
+              const input = await promptIterator.next()
+              if (closed || input.done) {
+                return { done: true as const, value: undefined }
+              }
+              if (input.value.shouldQuery === false) {
+                return this.next()
+              }
+              prompts.push(input.value.message.content)
+              stage = 'await-gate'
+              return {
+                done: false as const,
+                value: {
+                  type: 'result',
+                  subtype: 'success',
+                  uuid: randomUUID(),
+                  session_id: 'claude-session-empty-result-continue',
+                  usage: { input_tokens: 1, output_tokens: 0 },
                 },
-              },
-              {
-                type: 'result',
-                session_id: 'claude-session-empty-result-continue',
-                usage: { input_tokens: 2, output_tokens: 4 },
-              },
-            ],
-          ],
-          prompts,
-        )
+              }
+            }
+            if (stage === 'await-gate') {
+              await followOnGate.promise
+              if (closed) {
+                return { done: true as const, value: undefined }
+              }
+              stage = 'assistant'
+              return {
+                done: false as const,
+                value: {
+                  type: 'assistant',
+                  session_id: 'claude-session-empty-result-continue',
+                  message: {
+                    content: [{ type: 'text', text: 'Real work after empty result' }],
+                  },
+                },
+              }
+            }
+            if (stage === 'assistant') {
+              stage = 'result'
+              return {
+                done: false as const,
+                value: {
+                  type: 'result',
+                  subtype: 'success',
+                  uuid: randomUUID(),
+                  session_id: 'claude-session-empty-result-continue',
+                  usage: { input_tokens: 2, output_tokens: 4 },
+                },
+              }
+            }
+            stage = 'parked'
+            const input = await promptIterator.next()
+            if (closed || input.done) {
+              return { done: true as const, value: undefined }
+            }
+            return this.next()
+          },
+          async return() {
+            closed = true
+            followOnGate.resolve()
+            await promptIterator.return?.()
+            return { done: true as const, value: undefined }
+          },
+          close: vi.fn(() => {
+            closed = true
+            followOnGate.resolve()
+            void promptIterator.return?.()
+          }),
+          applyFlagSettings: vi.fn().mockResolvedValue(undefined),
+          interrupt: vi.fn().mockResolvedValue(undefined),
+          setModel: vi.fn().mockResolvedValue(undefined),
+          setPermissionMode: vi.fn().mockResolvedValue(undefined),
+          supportedCommands: vi.fn().mockResolvedValue([]),
+          getContextUsage: vi.fn().mockResolvedValue(createContextUsageResponse()),
+          initializationResult: vi.fn().mockResolvedValue({
+            commands: [],
+            agents: [],
+            output_style: 'default',
+            available_output_styles: ['default'],
+            models: [],
+            account: {},
+          }),
+        }
       },
     )
 
@@ -4066,18 +4189,31 @@ describe.sequential('claudeAgentProvider MCP integration', () => {
     const runtimeSession = createRuntimeSession()
     const syntheticEvents: ProviderSyntheticTurnEvent[] = []
     const chunks: UIMessageChunk[] = []
-    for await (const chunk of provider.streamTurn({
-      runId: 'run-claude-agent-empty-result-continue',
-      runtimeSession,
-      profile: createProfile(),
-      message: createUserMessage('Continue after empty result'),
-      workspaceId: 'workspace-1',
-      onProviderSyntheticTurnEvent: (event) => {
-        syntheticEvents.push(event)
-      },
-    })) {
-      chunks.push(chunk)
+    const consumer = (async () => {
+      for await (const chunk of provider.streamTurn({
+        runId: 'run-claude-agent-empty-result-continue',
+        runtimeSession,
+        profile: createProfile(),
+        message: createUserMessage('Continue after empty result'),
+        workspaceId: 'workspace-1',
+        onProviderSyntheticTurnEvent: (event) => {
+          syntheticEvents.push(event)
+        },
+      })) {
+        chunks.push(chunk)
+      }
+    })()
+
+    await vi.waitFor(() => expect(prompts).toHaveLength(1))
+    // Empty result is deferred; give any waitingForPull idle finalize timers a chance.
+    for (let i = 0; i < 10; i += 1) {
+      await new Promise<void>(resolve => setTimeout(resolve, 0))
     }
+    expect(chunks).toEqual([])
+    expect(syntheticEvents).toEqual([])
+
+    followOnGate.resolve()
+    await consumer
 
     expect(chunks).toEqual(
       expect.arrayContaining([
@@ -4089,6 +4225,120 @@ describe.sequential('claudeAgentProvider MCP integration', () => {
       ]),
     )
     expect(syntheticEvents).toEqual([])
+    await provider.dispose()
+  })
+
+  it('aborts a deferred empty turn on cancelTurn without waiting for another result', async () => {
+    // After an empty main `result`, interrupt alone cannot settle the UI turn
+    // (native boundary already consumed). cancelTurn must abort-finalize.
+    const prompts: unknown[] = []
+    const followOnGate = deferred<void>()
+    sdkMocks.query.mockImplementation(
+      (call: { prompt?: AsyncIterable<{ message: { content: unknown }, shouldQuery?: boolean }> }) => {
+        expect(call.prompt).toBeDefined()
+        const promptIterator = call.prompt![Symbol.asyncIterator]()
+        let stage: 'await-prompt' | 'parked' = 'await-prompt'
+        let closed = false
+        return {
+          [Symbol.asyncIterator]() {
+            return this
+          },
+          async next() {
+            if (closed) {
+              return { done: true as const, value: undefined }
+            }
+            if (stage === 'await-prompt') {
+              const input = await promptIterator.next()
+              if (closed || input.done) {
+                return { done: true as const, value: undefined }
+              }
+              if (input.value.shouldQuery === false) {
+                return this.next()
+              }
+              prompts.push(input.value.message.content)
+              stage = 'parked'
+              return {
+                done: false as const,
+                value: {
+                  type: 'result',
+                  subtype: 'success',
+                  uuid: randomUUID(),
+                  session_id: 'claude-session-empty-result-cancel',
+                  usage: { input_tokens: 1, output_tokens: 0 },
+                },
+              }
+            }
+            await followOnGate.promise
+            if (closed) {
+              return { done: true as const, value: undefined }
+            }
+            const input = await promptIterator.next()
+            if (closed || input.done) {
+              return { done: true as const, value: undefined }
+            }
+            return this.next()
+          },
+          async return() {
+            closed = true
+            followOnGate.resolve()
+            await promptIterator.return?.()
+            return { done: true as const, value: undefined }
+          },
+          close: vi.fn(() => {
+            closed = true
+            followOnGate.resolve()
+            void promptIterator.return?.()
+          }),
+          interrupt: vi.fn().mockResolvedValue(undefined),
+          setModel: vi.fn().mockResolvedValue(undefined),
+          setPermissionMode: vi.fn().mockResolvedValue(undefined),
+          supportedCommands: vi.fn().mockResolvedValue([]),
+          getContextUsage: vi.fn().mockResolvedValue(createContextUsageResponse()),
+          initializationResult: vi.fn().mockResolvedValue({
+            commands: [],
+            agents: [],
+            output_style: 'default',
+            available_output_styles: ['default'],
+            models: [],
+            account: {},
+          }),
+        }
+      },
+    )
+
+    const provider = new ClaudeAgentProvider({ readSecret: () => 'sk-ant-test' })
+    const runtimeSession = createRuntimeSession()
+    const chunks: UIMessageChunk[] = []
+    const consumer = (async () => {
+      for await (const chunk of provider.streamTurn({
+        runId: 'run-claude-agent-empty-result-cancel',
+        runtimeSession,
+        profile: createProfile(),
+        message: createUserMessage('Cancel after empty result'),
+        workspaceId: 'workspace-1',
+      })) {
+        chunks.push(chunk)
+      }
+    })()
+
+    await vi.waitFor(() => expect(prompts).toHaveLength(1))
+    for (let i = 0; i < 10; i += 1) {
+      await new Promise<void>(resolve => setTimeout(resolve, 0))
+    }
+    expect(chunks).toEqual([])
+
+    await provider.cancelTurn({
+      runtimeSession,
+      profile: createProfile(),
+    })
+    await consumer
+
+    expect(chunks).toEqual([
+      expect.objectContaining({ type: 'abort', reason: 'user' }),
+    ])
+    const queryInstance = sdkMocks.query.mock.results[0]?.value as { interrupt: ReturnType<typeof vi.fn> }
+    expect(queryInstance.interrupt).toHaveBeenCalledOnce()
+    await provider.dispose()
   })
 
   it('keeps task notifications out of the main turn and persists the following top-level reply', async () => {
@@ -4764,10 +5014,9 @@ describe.sequential('claudeAgentProvider MCP integration', () => {
     await provider.dispose()
   })
 
-  it('releases the Claude turn before yielding its native result terminal chunk', async () => {
-    // Empty success `result` with no projected output is deferred until the SDK
-    // parks on the next prompt pull. Use a prompt-driven query so idle matches
-    // the real Query (controllable mocks never pull the input stream).
+  it('finalizes a deferred empty turn when the next user streamTurn starts', async () => {
+    // Empty success `result` keeps currentTurn open (no isWaitingForPull finalize).
+    // The next user streamTurn closes that empty prior turn so the new send can start.
     const prompts: unknown[] = []
     sdkMocks.query.mockImplementation(
       (call: { prompt?: AsyncIterable<{ message: { content: unknown }, shouldQuery?: boolean }> }) => {
@@ -4785,6 +5034,13 @@ describe.sequential('claudeAgentProvider MCP integration', () => {
               },
             ],
             [
+              {
+                type: 'assistant',
+                session_id: 'claude-session-result-release',
+                message: {
+                  content: [{ type: 'text', text: 'Second reply' }],
+                },
+              },
               {
                 type: 'result',
                 subtype: 'success',
@@ -4809,29 +5065,44 @@ describe.sequential('claudeAgentProvider MCP integration', () => {
       workspaceId: 'workspace-1',
     })
     const firstTerminal = firstStream.next()
+    let firstSettled = false
+    void firstTerminal.then(() => {
+      firstSettled = true
+    })
 
     await vi.waitFor(() => expect(sdkMocks.query).toHaveBeenCalledOnce())
+    for (let i = 0; i < 10; i += 1) {
+      await new Promise<void>(resolve => setTimeout(resolve, 0))
+    }
+    expect(firstSettled).toBe(false)
+    expect(prompts).toEqual(['First task'])
+
+    const secondChunks: UIMessageChunk[] = []
+    const secondConsumer = (async () => {
+      for await (const chunk of provider.streamTurn({
+        runId: 'run-claude-agent-result-release-2',
+        runtimeSession,
+        profile: createProfile(),
+        message: createUserMessage('Second task'),
+        workspaceId: 'workspace-1',
+      })) {
+        secondChunks.push(chunk)
+      }
+    })()
+
     await expect(firstTerminal).resolves.toEqual(
       expect.objectContaining({ value: expect.objectContaining({ type: 'finish' }) }),
     )
-    expect(prompts).toEqual(['First task'])
-
-    const secondStream = provider.streamTurn({
-      runId: 'run-claude-agent-result-release-2',
-      runtimeSession,
-      profile: createProfile(),
-      message: createUserMessage('Second task'),
-      workspaceId: 'workspace-1',
-    })
-    const secondTerminal = secondStream.next()
-
-    await expect(secondTerminal).resolves.toEqual(
-      expect.objectContaining({ value: expect.objectContaining({ type: 'finish' }) }),
-    )
-    expect(prompts).toEqual(['First task', 'Second task'])
-
     await firstStream.return(undefined)
-    await secondStream.return(undefined)
+    await secondConsumer
+
+    expect(prompts).toEqual(['First task', 'Second task'])
+    expect(secondChunks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'text-delta', delta: 'Second reply' }),
+        expect.objectContaining({ type: 'finish', finishReason: 'stop' }),
+      ]),
+    )
     await provider.dispose()
   })
 

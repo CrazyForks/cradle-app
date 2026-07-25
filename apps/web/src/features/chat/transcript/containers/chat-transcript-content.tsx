@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import type { ChatDisplayRow } from '~/store/chat'
+
 import type { MessageTextTransform } from '../../rendering/message-bubble-selectors'
 import type { useChatSession } from '../../session/use-chat-session'
 import type { ChatScrollRuntime } from '../../ui/use-chat-scroll-runtime'
@@ -12,7 +14,7 @@ type ChatSessionProjection = ReturnType<typeof useChatSession>
 
 export interface ChatTranscriptContentProps {
   sessionId: string | null
-  messageIds: ChatSessionProjection['messageIds']
+  displayRows: ChatDisplayRow[]
   messageCount: ChatSessionProjection['messageCount']
   status: ChatSessionProjection['status']
   error: ChatSessionProjection['error']
@@ -29,10 +31,10 @@ export interface ChatTranscriptContentProps {
   historyControl?: ReactNode
 }
 
-/** Runtime adapter that translates session message IDs into bounded bubble subscriptions. */
+/** Runtime adapter that translates display rows into bounded bubble subscriptions. */
 export function ChatTranscriptContent({
   sessionId,
-  messageIds,
+  displayRows,
   messageCount,
   status,
   error,
@@ -52,14 +54,16 @@ export function ChatTranscriptContent({
 
   return (
     <ChatTranscriptView
-      messages={messageIds}
-      renderMessage={messageId => (
+      messages={displayRows}
+      renderMessage={row => (
         <MessageBubbleById
-          key={messageId}
+          key={row.rowKey}
           sessionId={sessionId}
-          messageId={messageId}
+          messageId={row.messageId}
+          partsProjection={row.partsProjection}
+          allowStreaming={row.allowStreaming}
           onToolApprovalResponse={onToolApprovalResponse}
-          editAction={messageId === editPreviousMessageId ? editPreviousAction : undefined}
+          editAction={row.messageId === editPreviousMessageId ? editPreviousAction : undefined}
           textTransform={messageTextTransform}
         />
       )}

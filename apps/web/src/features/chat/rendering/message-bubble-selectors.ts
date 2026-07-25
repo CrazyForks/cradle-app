@@ -175,9 +175,10 @@ export function readMessageFrameFromState(
   textTransform?: MessageTextTransform,
 ): MessageFrame | null {
   const message = readMessageFromState(state, sessionId, messageId, textTransform)
-  if (!message) {
-    return null
-  }
+  return message ? readMessageFrame(message) : null
+}
+
+export function readMessageFrame(message: UIMessage): MessageFrame {
   const continuationMetadata = readChatContinuationMetadata(message)
   return {
     id: message.id,
@@ -237,9 +238,10 @@ export function readRenderSegmentsFromState(
   textTransform?: MessageTextTransform,
 ): ChatRenderSegment[] {
   const message = readMessageFromState(state, sessionId, messageId, textTransform)
-  if (!message) {
-    return EMPTY_RENDER_SEGMENTS
-  }
+  return message ? readRenderSegments(message) : EMPTY_RENDER_SEGMENTS
+}
+
+export function readRenderSegments(message: UIMessage): ChatRenderSegment[] {
   return groupMessagePartRefs({
     parts: message.parts,
     messageId: message.id,
@@ -386,11 +388,37 @@ export function readMessageImageAttachmentsFromState(
   sessionId: string,
   segments: ChatRenderSegment[],
 ): MessageImageAttachment[] {
+  return readMessageImageAttachmentsFromParts(
+    segments,
+    (messageId, partIndex) => readFilePartFromState(state, sessionId, messageId, partIndex),
+  )
+}
+
+export function readMessageImageAttachmentsFromMessage(
+  message: UIMessage | undefined,
+  segments: ChatRenderSegment[],
+): MessageImageAttachment[] {
+  if (!message) {
+    return []
+  }
+  return readMessageImageAttachmentsFromParts(
+    segments,
+    (_messageId, partIndex) => {
+      const part = message.parts[partIndex]
+      return part?.type === 'file' ? part : null
+    },
+  )
+}
+
+function readMessageImageAttachmentsFromParts(
+  segments: ChatRenderSegment[],
+  readFilePart: (messageId: string, partIndex: number) => FileMessagePart | null,
+): MessageImageAttachment[] {
   return segments.flatMap((segment) => {
     if (segment.kind !== 'file-attachment') {
       return []
     }
-    const part = readFilePartFromState(state, sessionId, segment.messageId, segment.partIndex)
+    const part = readFilePart(segment.messageId, segment.partIndex)
     return part?.mediaType.startsWith('image/') ? [{ segmentKey: segment.key, part }] : []
   })
 }

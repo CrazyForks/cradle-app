@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 
 import { cn } from '~/lib/cn'
+import type { ChatDisplayRow } from '~/store/chat'
 
 import type { MessageTextTransform } from '../../rendering/message-bubble-selectors'
 import type { useChatSession } from '../../session/use-chat-session'
@@ -13,7 +14,7 @@ type ChatSessionProjection = ReturnType<typeof useChatSession>
 
 export function ChatMessageListPane({
   sessionId,
-  messageIds,
+  displayRows,
   messageCount,
   status,
   error,
@@ -38,7 +39,7 @@ export function ChatMessageListPane({
   historyControl,
 }: {
   sessionId: string | null
-  messageIds: ChatSessionProjection['messageIds']
+  displayRows: ChatDisplayRow[]
   messageCount: ChatSessionProjection['messageCount']
   status: ChatSessionProjection['status']
   error: ChatSessionProjection['error']
@@ -66,7 +67,7 @@ export function ChatMessageListPane({
     <div ref={scrollContainerRef} className="relative min-h-0 flex-1 overflow-hidden">
       <ChatTranscriptContent
         sessionId={sessionId}
-        messageIds={messageIds}
+        displayRows={displayRows}
         messageCount={messageCount}
         status={status}
         error={error}
@@ -100,7 +101,7 @@ export function ChatMessageListPane({
             <ChatMinimap
               ref={minimapRef}
               sessionId={sessionId}
-              messageIds={messageIds}
+              messageIds={displayRows.map(row => row.messageId)}
               scrollHeight={scrollMetrics.scrollHeight}
               viewportHeight={scrollMetrics.viewportHeight}
               onScrollToIndex={onScrollToMessageIndex}
