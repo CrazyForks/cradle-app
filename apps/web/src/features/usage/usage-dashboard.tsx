@@ -1,10 +1,16 @@
+import { useState } from 'react'
+
 import { useResolvedThemeMode } from '~/store/theme'
 
 import { UsageDashboardView } from './usage-dashboard-view'
+import type { UsageRangeKey } from './usage-time-range'
 import { useUsageOverview } from './use-usage-overview'
 
 export function UsageDashboard() {
-  const usage = useUsageOverview()
+  // Range lives here (not in the View) because the tools query is
+  // server-aggregated per range — see useUsageOverview.
+  const [range, setRange] = useState<UsageRangeKey>('30d')
+  const usage = useUsageOverview(range)
   const themeMode = useResolvedThemeMode()
 
   return (
@@ -19,6 +25,8 @@ export function UsageDashboard() {
       tools={usage.tools}
       costEfficiency={usage.costEfficiency}
       usageReady={usage.usageReady}
+      range={range}
+      onRangeChange={setRange}
       themeMode={themeMode}
     />
   )

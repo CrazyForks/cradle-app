@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Skeleton } from '~/components/ui/skeleton'
@@ -11,9 +10,9 @@ import { CostEfficiencyTrend } from './usage-cost-efficiency'
 import { UsageHeatmap } from './usage-heatmap'
 import { UsageHeroCards } from './usage-hero-cards'
 import { UsagePatterns } from './usage-patterns'
-import { ToolBreakdown } from './usage-tool-breakdown'
 import type { UsageRangeKey } from './usage-time-range'
 import { USAGE_RANGE_OPTIONS } from './usage-time-range'
+import { UsageToolUsageView } from './usage-tool-usage-view'
 import { UsageTrendChartView } from './usage-trend-chart-view'
 import type {
   CostEfficiency,
@@ -38,6 +37,8 @@ export interface UsageDashboardViewProps {
   tools: ToolUsageBreakdown | null
   costEfficiency: CostEfficiency[]
   usageReady: boolean
+  range: UsageRangeKey
+  onRangeChange: (range: UsageRangeKey) => void
   themeMode: 'light' | 'dark'
 }
 
@@ -52,10 +53,11 @@ export function UsageDashboardView({
   tools,
   costEfficiency,
   usageReady,
+  range,
+  onRangeChange,
   themeMode,
 }: UsageDashboardViewProps) {
   const { t } = useTranslation('usage')
-  const [range, setRange] = useState<UsageRangeKey>('30d')
   const hasData = Boolean(summary && summary.totalTokens > 0)
 
   const hasCost = Boolean(costSummary && costSummary.totalCostUsd > 0)
@@ -63,7 +65,6 @@ export function UsageDashboardView({
     summary
     && (summary.byModel.length > 0 || summary.byAgent.length > 0 || summary.byProviderTarget.length > 0),
   )
-  const hasTools = Boolean(tools && tools.overall.length > 0)
   const hasEfficiency = costEfficiency.length > 0
 
   return (
@@ -91,7 +92,7 @@ export function UsageDashboardView({
               type="single"
               value={range}
               onValueChange={(value) => {
-                if (value) { setRange(value as UsageRangeKey) }
+                if (value) { onRangeChange(value as UsageRangeKey) }
               }}
               variant="outline"
               size="sm"
@@ -159,15 +160,15 @@ export function UsageDashboardView({
                 <UsagePatterns daily={daily} dailyByModel={dailyByModel} hourly={hourly} />
               </SectionCard>
 
-              {hasTools && tools && (
+              {tools && (
                 <SectionCard>
-                  <ToolBreakdown tools={tools} />
+                  <UsageToolUsageView tools={tools} range={range} themeMode={themeMode} />
                 </SectionCard>
               )}
 
               {hasEfficiency && (
                 <SectionCard>
-                  <CostEfficiencyTrend data={costEfficiency} hasCost={hasCost} themeMode={themeMode} />
+                  <CostEfficiencyTrend data={costEfficiency} hasCost={hasCost} range={range} themeMode={themeMode} />
                 </SectionCard>
               )}
             </div>

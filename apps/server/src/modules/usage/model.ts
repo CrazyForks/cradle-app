@@ -58,7 +58,6 @@ export const UsageModel = {
       totalTokens: t.Number(),
     })),
     todayTokens: t.Number(),
-    peakConcurrentRuns: t.Number(),
   }),
 
   sessionUsage: t.Object({
@@ -182,7 +181,8 @@ export const UsageModel = {
     successCount: t.Number(),
     failureCount: t.Number(),
     deniedCount: t.Number(),
-    avgDurationMs: t.Nullable(t.Number()),
+    interruptedCount: t.Number(),
+    medianDurationMs: t.Nullable(t.Number()),
   }),
 
   toolUsageBreakdown: t.Object({
@@ -192,7 +192,8 @@ export const UsageModel = {
       successCount: t.Number(),
       failureCount: t.Number(),
       deniedCount: t.Number(),
-      avgDurationMs: t.Nullable(t.Number()),
+      interruptedCount: t.Number(),
+      medianDurationMs: t.Nullable(t.Number()),
     })),
     byRuntime: t.Array(t.Object({
       runtimeKind: t.String(),
@@ -202,7 +203,8 @@ export const UsageModel = {
         successCount: t.Number(),
         failureCount: t.Number(),
         deniedCount: t.Number(),
-        avgDurationMs: t.Nullable(t.Number()),
+        interruptedCount: t.Number(),
+        medianDurationMs: t.Nullable(t.Number()),
       })),
     })),
     byModel: t.Array(t.Object({
@@ -213,8 +215,24 @@ export const UsageModel = {
         successCount: t.Number(),
         failureCount: t.Number(),
         deniedCount: t.Number(),
-        avgDurationMs: t.Nullable(t.Number()),
+        interruptedCount: t.Number(),
+        medianDurationMs: t.Nullable(t.Number()),
       })),
+    })),
+    summary: t.Object({
+      totalCalls: t.Number(),
+      successCount: t.Number(),
+      failureCount: t.Number(),
+      deniedCount: t.Number(),
+      interruptedCount: t.Number(),
+      successRatePct: t.Number(),
+      uniqueToolCount: t.Number(),
+      medianDurationMs: t.Nullable(t.Number()),
+    }),
+    daily: t.Array(t.Object({
+      date: t.String(),
+      toolName: t.String(),
+      count: t.Number(),
     })),
   }),
 

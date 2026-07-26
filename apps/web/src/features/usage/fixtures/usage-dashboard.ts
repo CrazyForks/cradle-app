@@ -151,8 +151,38 @@ const stats: UsageStats = {
   avgDailyTokens: Math.round(totalTokens / activeDays.length),
   peakDay: { date: peakDay.date, totalTokens: peakDay.totalTokens },
   todayTokens: daily.at(-1)?.totalTokens ?? 0,
-  peakConcurrentRuns: 3,
 }
+
+const toolOverall = [
+  { toolName: 'Read', count: 1240, successCount: 1228, failureCount: 8, deniedCount: 2, interruptedCount: 2, medianDurationMs: 45 },
+  { toolName: 'Edit', count: 890, successCount: 878, failureCount: 10, deniedCount: 0, interruptedCount: 2, medianDurationMs: 120 },
+  { toolName: 'Write', count: 450, successCount: 444, failureCount: 5, deniedCount: 0, interruptedCount: 1, medianDurationMs: 80 },
+  { toolName: 'Bash', count: 320, successCount: 296, failureCount: 18, deniedCount: 2, interruptedCount: 4, medianDurationMs: 2500 },
+  { toolName: 'Grep', count: 280, successCount: 279, failureCount: 0, deniedCount: 0, interruptedCount: 1, medianDurationMs: 30 },
+  { toolName: 'Glob', count: 190, successCount: 190, failureCount: 0, deniedCount: 0, interruptedCount: 0, medianDurationMs: 25 },
+  { toolName: 'Agent', count: 96, successCount: 90, failureCount: 4, deniedCount: 0, interruptedCount: 2, medianDurationMs: 48_000 },
+]
+
+const toolTotals = toolOverall.reduce(
+  (acc, tool) => ({
+    totalCalls: acc.totalCalls + tool.count,
+    successCount: acc.successCount + tool.successCount,
+    failureCount: acc.failureCount + tool.failureCount,
+    deniedCount: acc.deniedCount + tool.deniedCount,
+    interruptedCount: acc.interruptedCount + tool.interruptedCount,
+  }),
+  { totalCalls: 0, successCount: 0, failureCount: 0, deniedCount: 0, interruptedCount: 0 },
+)
+
+const toolDaily = daily.flatMap((entry, dayIndex) => {
+  if (entry.count === 0) { return [] }
+  const dayTotal = 12 + ((dayIndex * 29) % 160)
+  return toolOverall.slice(0, 6).map((tool, toolIndex) => ({
+    date: entry.date,
+    toolName: tool.toolName,
+    count: Math.max(1, Math.round(dayTotal * [0.32, 0.24, 0.16, 0.12, 0.09, 0.07][toolIndex])),
+  }))
+})
 
 export const populatedUsageDashboardFixture: UsageDashboardViewProps = {
   daily,
@@ -163,35 +193,36 @@ export const populatedUsageDashboardFixture: UsageDashboardViewProps = {
   costSummary,
   dailyCost,
   tools: {
-    overall: [
-      { toolName: 'Read', count: 1240, successCount: 1230, failureCount: 8, deniedCount: 2, avgDurationMs: 45 },
-      { toolName: 'Edit', count: 890, successCount: 880, failureCount: 10, deniedCount: 0, avgDurationMs: 120 },
-      { toolName: 'Write', count: 450, successCount: 445, failureCount: 5, deniedCount: 0, avgDurationMs: 80 },
-      { toolName: 'Bash', count: 320, successCount: 300, failureCount: 18, deniedCount: 2, avgDurationMs: 2500 },
-      { toolName: 'Grep', count: 280, successCount: 280, failureCount: 0, deniedCount: 0, avgDurationMs: 30 },
-    ],
+    summary: {
+      ...toolTotals,
+      successRatePct: (toolTotals.successCount / (toolTotals.successCount + toolTotals.failureCount)) * 100,
+      uniqueToolCount: toolOverall.length,
+      medianDurationMs: 820,
+    },
+    daily: toolDaily,
+    overall: toolOverall,
     byRuntime: [
       { runtimeKind: 'opencode', tools: [
-        { toolName: 'Read', count: 800, successCount: 795, failureCount: 5, deniedCount: 0, avgDurationMs: 40 },
-        { toolName: 'Edit', count: 600, successCount: 595, failureCount: 5, deniedCount: 0, avgDurationMs: 110 },
+        { toolName: 'Read', count: 800, successCount: 793, failureCount: 5, deniedCount: 0, interruptedCount: 2, medianDurationMs: 40 },
+        { toolName: 'Edit', count: 600, successCount: 593, failureCount: 5, deniedCount: 0, interruptedCount: 2, medianDurationMs: 110 },
       ]},
       { runtimeKind: 'codex', tools: [
-        { toolName: 'Read', count: 440, successCount: 435, failureCount: 3, deniedCount: 2, avgDurationMs: 55 },
-        { toolName: 'Edit', count: 290, successCount: 285, failureCount: 5, deniedCount: 0, avgDurationMs: 135 },
+        { toolName: 'Read', count: 440, successCount: 435, failureCount: 3, deniedCount: 2, interruptedCount: 0, medianDurationMs: 55 },
+        { toolName: 'Edit', count: 290, successCount: 285, failureCount: 5, deniedCount: 0, interruptedCount: 0, medianDurationMs: 135 },
       ]},
     ],
     byModel: [
       { modelId: 'gpt-5.2', tools: [
-        { toolName: 'Read', count: 600, successCount: 595, failureCount: 5, deniedCount: 0, avgDurationMs: 42 },
-        { toolName: 'Edit', count: 420, successCount: 415, failureCount: 5, deniedCount: 0, avgDurationMs: 115 },
+        { toolName: 'Read', count: 600, successCount: 594, failureCount: 5, deniedCount: 0, interruptedCount: 1, medianDurationMs: 42 },
+        { toolName: 'Edit', count: 420, successCount: 414, failureCount: 5, deniedCount: 0, interruptedCount: 1, medianDurationMs: 115 },
       ]},
       { modelId: 'claude-opus-4.6', tools: [
-        { toolName: 'Read', count: 420, successCount: 418, failureCount: 2, deniedCount: 0, avgDurationMs: 48 },
-        { toolName: 'Edit', count: 310, successCount: 308, failureCount: 2, deniedCount: 0, avgDurationMs: 125 },
+        { toolName: 'Read', count: 420, successCount: 417, failureCount: 2, deniedCount: 0, interruptedCount: 1, medianDurationMs: 48 },
+        { toolName: 'Edit', count: 310, successCount: 307, failureCount: 2, deniedCount: 0, interruptedCount: 1, medianDurationMs: 125 },
       ]},
     ],
   },
-  costEfficiency: daily.slice(-30).map((entry, index) => ({
+  costEfficiency: daily.slice(-30).map(entry => ({
     date: entry.date,
     totalTokens: entry.totalTokens,
     runCount: entry.count,
@@ -200,6 +231,8 @@ export const populatedUsageDashboardFixture: UsageDashboardViewProps = {
     avgCostPerRun: entry.count > 0 ? dailyCost.filter(c => c.date === entry.date).reduce((sum, c) => sum + c.costUsd, 0) / entry.count : 0,
   })),
   usageReady: true,
+  range: '30d',
+  onRangeChange: () => {},
   themeMode: 'light',
 }
 
@@ -223,12 +256,13 @@ export const emptyUsageDashboardFixture: UsageDashboardViewProps = {
     avgDailyTokens: 0,
     peakDay: null,
     todayTokens: 0,
-    peakConcurrentRuns: 0,
   },
   costSummary: null,
   dailyCost: [],
   tools: null,
   costEfficiency: [],
   usageReady: true,
+  range: '30d',
+  onRangeChange: () => {},
   themeMode: 'light',
 }

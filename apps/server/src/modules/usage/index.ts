@@ -114,13 +114,15 @@ export const usage = new Elysia({
     query: UsageModel.dateRangeQuery,
     response: { 200: UsageModel.dailyCost },
   })
-  .get('/tools', () => Usage.getToolUsageBreakdown(), {
+  // occurred_at on snapshot events is millisecond epoch, so `from` stays in ms.
+  .get('/tools', ({ query }) => Usage.getToolUsageBreakdown(query.from ? new Date(query.from).getTime() : undefined), {
     detail: {
       'summary': 'Get tool usage breakdown by runtime and model',
       'x-cradle-cli': {
         command: ['usage', 'tools'],
       },
     },
+    query: UsageModel.dateRangeQuery,
     response: { 200: UsageModel.toolUsageBreakdown },
   })
   .get('/cost-efficiency', ({ query }) => Usage.getCostEfficiencyTrend(query.days), {

@@ -8,7 +8,7 @@
 // Absolute totals follow the selected range (7D/30D/…): densified series are
 // built for 2× the window so comparePeriods can contrast "current N days" vs
 // the N days immediately before. Streak is all-history by nature.
-import { FireFill, FireLine, TrendingDownLine, TrendingUpLine } from '@mingcute/react'
+import { FireFill, FireLine } from '@mingcute/react'
 import { Fragment } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -16,6 +16,7 @@ import { cn } from '~/lib/cn'
 import { formatTokenCount, formatUsd } from '~/lib/number-format'
 
 import { AnimatedNumber } from './animated-number'
+import { UsageDeltaBadge } from './usage-delta-badge'
 import { comparePeriods, denseCostSeries, denseTokenSeries } from './usage-insights'
 import type { UsageRangeKey } from './usage-time-range'
 import { rangeDays } from './usage-time-range'
@@ -37,7 +38,6 @@ const DOT = {
   tokens: 'bg-blue-500',
   turns: 'bg-sky-500',
   streak: 'bg-rose-500',
-  concurrency: 'bg-amber-500',
 } as const
 
 export function UsageHeroCards({ daily, dailyCost, stats, range, hasCost }: UsageHeroCardsProps) {
@@ -96,15 +96,6 @@ export function UsageHeroCards({ daily, dailyCost, stats, range, hasCost }: Usag
       deltaLabel: t('hero.bestStreakValue', { days: stats.longestStreak }),
       dataTestId: 'usage-hero-streak',
     },
-    {
-      key: 'concurrency',
-      dot: DOT.concurrency,
-      label: t('hero.peakConcurrency'),
-      value: <AnimatedNumber value={stats.peakConcurrentRuns} formatter={value => String(value)} className="text-3xl font-semibold tabular-nums text-foreground" />,
-      delta: null,
-      deltaLabel: t('hero.peakConcurrencyValue', { count: stats.peakConcurrentRuns }),
-      dataTestId: 'usage-hero-concurrency',
-    },
   ].filter(Boolean) as Array<{ key: string, dot: string, label: string, value: React.ReactNode, delta: number | null, deltaLabel: string, dataTestId: string }>
 
   return (
@@ -119,7 +110,7 @@ export function UsageHeroCards({ daily, dailyCost, stats, range, hasCost }: Usag
             </div>
             <div className="mt-1.5">{item.value}</div>
             <div className="mt-1 flex items-center gap-1 text-[10.5px] text-muted-foreground">
-              {item.delta !== null && <DeltaBadge changePct={item.delta} />}
+              <UsageDeltaBadge changePct={item.delta} />
               <span className="truncate">{item.deltaLabel}</span>
             </div>
           </div>
@@ -132,20 +123,4 @@ export function UsageHeroCards({ daily, dailyCost, stats, range, hasCost }: Usag
 function FlameIcon({ active }: { active: boolean }) {
   const Icon = active ? FireFill : FireLine
   return <Icon className={cn('!size-5 shrink-0', active ? 'text-rose-500' : 'text-muted-foreground/40')} />
-}
-
-function DeltaBadge({ changePct }: { changePct: number }) {
-  const rounded = Math.round(changePct)
-  if (rounded === 0) {
-    return <span className="tabular-nums text-muted-foreground/70">·</span>
-  }
-  const isUp = rounded > 0
-  const TrendIcon = isUp ? TrendingUpLine : TrendingDownLine
-  return (
-    <span className={cn('flex items-center gap-0.5 font-medium tabular-nums', isUp ? 'text-success' : 'text-muted-foreground')}>
-      <TrendIcon className="!size-3 shrink-0" />
-      {Math.abs(rounded)}
-%
-    </span>
-  )
 }

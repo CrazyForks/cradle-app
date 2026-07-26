@@ -1,5 +1,4 @@
 import { clamp } from 'es-toolkit'
-import formatDuration from 'format-duration'
 import prettyBytes from 'pretty-bytes'
 
 export function clampRatio(value: number): number {
@@ -130,10 +129,23 @@ export function formatShortDurationMs(valueMs: number): string {
   if (safeValueMs < 1_000) {
     return `${safeValueMs} ms`
   }
-  if (safeValueMs < 60_000) {
-    return `${(safeValueMs / 1_000).toFixed(1)} s`
+  const totalSeconds = safeValueMs / 1_000
+  if (totalSeconds < 60) {
+    return `${totalSeconds.toFixed(1)} s`
   }
-  return formatDuration(safeValueMs, { leading: true })
+  const totalMinutes = Math.floor(totalSeconds / 60)
+  const remainderSeconds = Math.round(totalSeconds % 60)
+  if (totalMinutes < 60) {
+    return remainderSeconds > 0 ? `${totalMinutes}m ${remainderSeconds}s` : `${totalMinutes}m`
+  }
+  const hours = Math.floor(totalMinutes / 60)
+  const remainderMinutes = totalMinutes % 60
+  if (hours < 24) {
+    return remainderMinutes > 0 ? `${hours}h ${remainderMinutes}m` : `${hours}h`
+  }
+  const days = Math.floor(hours / 24)
+  const remainderHours = hours % 24
+  return remainderHours > 0 ? `${days}d ${remainderHours}h` : `${days}d`
 }
 
 export function formatElapsedRangeMs(

@@ -313,6 +313,11 @@ export const zGetUsageCostDailyQuery = z.object({
     to: z.iso.date().optional()
 });
 
+export const zGetUsageToolsQuery = z.object({
+    from: z.iso.date().optional(),
+    to: z.iso.date().optional()
+});
+
 export const zGetUsageCostEfficiencyQuery = z.object({
     days: z.union([
         z.string(),
@@ -2306,6 +2311,25 @@ export const zGetSearchChronicleQuery = z.object({
         z.string(),
         z.number().gte(1)
     ]).optional()
+});
+
+export const zPostRecallQueryBody = z.object({
+    chatSessionId: z.string().min(1),
+    code: z.string().min(1)
+});
+
+export const zPostRecallAttuneBody = z.object({
+    chatSessionId: z.string().min(1),
+    code: z.string().min(1)
+});
+
+export const zPostRecallAttuneByIdResolveBody = z.object({
+    chatSessionId: z.string().min(1),
+    approved: z.boolean()
+});
+
+export const zPostRecallAttuneByIdResolvePath = z.object({
+    id: z.string().min(1)
 });
 
 export const zPostPluginsSourcesBody = z.object({

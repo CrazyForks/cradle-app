@@ -1501,7 +1501,6 @@ export type GetUsageStatsResponses = {
             totalTokens: number;
         } | null;
         todayTokens: number;
-        peakConcurrentRuns: number;
     };
 };
 
@@ -1675,7 +1674,10 @@ export type GetUsageCostDailyResponse = GetUsageCostDailyResponses[keyof GetUsag
 export type GetUsageToolsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        from?: string;
+        to?: string;
+    };
     url: '/usage/tools';
 };
 
@@ -1690,7 +1692,8 @@ export type GetUsageToolsResponses = {
             successCount: number;
             failureCount: number;
             deniedCount: number;
-            avgDurationMs: number | null;
+            interruptedCount: number;
+            medianDurationMs: number | null;
         }>;
         byRuntime: Array<{
             runtimeKind: string;
@@ -1700,7 +1703,8 @@ export type GetUsageToolsResponses = {
                 successCount: number;
                 failureCount: number;
                 deniedCount: number;
-                avgDurationMs: number | null;
+                interruptedCount: number;
+                medianDurationMs: number | null;
             }>;
         }>;
         byModel: Array<{
@@ -1711,8 +1715,24 @@ export type GetUsageToolsResponses = {
                 successCount: number;
                 failureCount: number;
                 deniedCount: number;
-                avgDurationMs: number | null;
+                interruptedCount: number;
+                medianDurationMs: number | null;
             }>;
+        }>;
+        summary: {
+            totalCalls: number;
+            successCount: number;
+            failureCount: number;
+            deniedCount: number;
+            interruptedCount: number;
+            successRatePct: number;
+            uniqueToolCount: number;
+            medianDurationMs: number | null;
+        };
+        daily: Array<{
+            date: string;
+            toolName: string;
+            count: number;
         }>;
     };
 };
@@ -11730,6 +11750,51 @@ export type GetSearchChronicleResponses = {
 };
 
 export type GetSearchChronicleResponse = GetSearchChronicleResponses[keyof GetSearchChronicleResponses];
+
+export type PostRecallQueryData = {
+    body: {
+        chatSessionId: string;
+        code: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/recall/query';
+};
+
+export type PostRecallQueryResponses = {
+    /**
+     * Response for status 200
+     */
+    200: {
+        kind: string;
+        result?: unknown;
+        error?: string;
+    };
+};
+
+export type PostRecallQueryResponse = PostRecallQueryResponses[keyof PostRecallQueryResponses];
+
+export type PostRecallAttuneData = {
+    body: {
+        chatSessionId: string;
+        code: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/recall/attune';
+};
+
+export type PostRecallAttuneByIdResolveData = {
+    body: {
+        chatSessionId: string;
+        approved: boolean;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/recall/attune/{id}/resolve';
+};
 
 export type GetPluginsMarketplaceData = {
     body?: never;

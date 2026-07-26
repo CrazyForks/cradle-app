@@ -5,7 +5,7 @@ import type { TFunction } from 'i18next'
 
 import { buildDenseDailySeries, lastDateKeys, weekdayIndexFromDateKey } from './usage-date'
 import { categoryColor } from './usage-palette'
-import type { DailyCost, DailyUsage, DailyUsageByModel } from './use-usage-overview'
+import type { DailyCost, DailyToolUsage, DailyUsage, DailyUsageByModel } from './use-usage-overview'
 
 export { weekdayLabel } from './usage-date'
 
@@ -261,6 +261,46 @@ export function denseCostModelStackSeries(
   })
 
   return { series, models }
+}
+
+/**
+ * Pivots the daily tool-call series into one stacked-bar datum per calendar
+ * day, for the tool usage trend chart. Same shape as denseModelStackSeries
+ * but stacking call counts by tool name; everything past the top `limit`
+ * collapses into the OTHER_MODEL_KEY bucket (labeled "Other tools" by the caller).
+ */
+export function denseToolStackSeries(
+  daily: DailyToolUsage[],
+  days: number,
+  limit = 6,
+): ModelStackSeries {
+  const totalsByTool = new Map<string, number>()
+  for (const row of daily) {
+    totalsByTool.set(row.toolName, (totalsByTool.get(row.toolName) ?? 0) + row.count)
+  }
+  const ranked = [...totalsByTool.entries()].sort((a, b) => b[1] - a[1]).map(([toolName]) => toolName)
+  const top = ranked.slice(0, limit)
+  const topSet = new Set(top)
+  const tools = ranked.length > limit ? [...top, OTHER_MODEL_KEY] : [...top]
+
+  const byDate = new Map<string, Map<string, number>>()
+  for (const row of daily) {
+    const key = topSet.has(row.toolName) ? row.toolName : OTHER_MODEL_KEY
+    const bucket = byDate.get(row.date) ?? new Map<string, number>()
+    bucket.set(key, (bucket.get(key) ?? 0) + row.count)
+    byDate.set(row.date, bucket)
+  }
+
+  const series: ModelStackDatum[] = lastDateKeys(days).map((date) => {
+    const bucket = byDate.get(date)
+    const datum: ModelStackDatum = { date }
+    for (const toolName of tools) {
+      datum[toolName] = bucket?.get(toolName) ?? 0
+    }
+    return datum
+  })
+
+  return { series, models: tools }
 }
 
 /** Groups the daily-by-model series by weekday, for the "which model" line in the by-weekday pattern chart tooltip. */

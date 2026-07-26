@@ -1,4 +1,4 @@
-import { agents, backendRunSnapshotEvents, backendRunSnapshots, backendRuns, providerTargets, sessions, usageLogs } from '@cradle/db'
+import { agents, backendRunSnapshotEvents, backendRunSnapshots, providerTargets, sessions, usageLogs } from '@cradle/db'
 import { sql } from 'drizzle-orm'
 
 import { db } from '../../infra'
@@ -241,7 +241,6 @@ export function getUsageStats(): {
   avgDailyTokens: number
   peakDay: { date: string, totalTokens: number } | null
   todayTokens: number
-  peakConcurrentRuns: number
 } {
   const activeDateRows = db().all<{ date: string }>(sql`
     SELECT DISTINCT date(${usageLogs.createdAt}, 'unixepoch', 'localtime') AS date
@@ -318,8 +317,6 @@ export function getUsageStats(): {
     WHERE date(${usageLogs.createdAt}, 'unixepoch', 'localtime') = date('now', 'localtime')
   `)
 
-  const { peakConcurrent } = getPeakConcurrentRuns()
-
   return {
     currentStreak,
     longestStreak,
@@ -327,40 +324,7 @@ export function getUsageStats(): {
     avgDailyTokens,
     peakDay,
     todayTokens: todayRow?.total ?? 0,
-    peakConcurrentRuns: peakConcurrent,
   }
-}
-
-export function getPeakConcurrentRuns(): { peakConcurrent: number } {
-  const rows = db().all<{ started_at: number, finished_at: number | null }>(sql`
-    SELECT ${backendRuns.startedAt} AS started_at, ${backendRuns.finishedAt} AS finished_at
-    FROM ${backendRuns}
-    ORDER BY ${backendRuns.startedAt} ASC
-  `)
-
-  if (rows.length === 0) {
-    return { peakConcurrent: 0 }
-  }
-
-  const now = Math.floor(Date.now() / 1000)
-  const events: Array<[number, 1] | [number, -1]> = []
-  for (const row of rows) {
-    events.push([row.started_at, 1])
-    events.push([row.finished_at ?? now, -1])
-  }
-
-  events.sort((a, b) => a[0] - b[0] || a[1] - b[1])
-
-  let current = 0
-  let peak = 0
-  for (const [, delta] of events) {
-    current += delta
-    if (current > peak) {
-      peak = current
-    }
-  }
-
-  return { peakConcurrent: peak }
 }
 
 export function getSessionUsage(sessionId: string): {
@@ -834,7 +798,8 @@ export interface ToolUsageEntry {
   successCount: number
   failureCount: number
   deniedCount: number
-  avgDurationMs: number | null
+  interruptedCount: number
+  medianDurationMs: number | null
 }
 
 export interface ToolUsageByRuntime {
@@ -847,79 +812,98 @@ export interface ToolUsageByModel {
   tools: ToolUsageEntry[]
 }
 
+export interface ToolUsageSummary {
+  totalCalls: number
+  successCount: number
+  failureCount: number
+  deniedCount: number
+  interruptedCount: number
+  successRatePct: number
+  uniqueToolCount: number
+  medianDurationMs: number | null
+}
+
+export interface DailyToolUsage {
+  date: string
+  toolName: string
+  count: number
+}
+
 export interface ToolUsageBreakdown {
   overall: ToolUsageEntry[]
   byRuntime: ToolUsageByRuntime[]
   byModel: ToolUsageByModel[]
+  summary: ToolUsageSummary
+  daily: DailyToolUsage[]
 }
 
-export function getToolUsageBreakdown(): ToolUsageBreakdown {
-  const toolEvents = db().all<{
-    tool_name: string
+type ToolCallOutcome = 'success' | 'failure' | 'denied' | 'interrupted'
+
+interface ToolCallRecord {
+  toolName: string
+  runtimeKind: string
+  modelId: string
+  outcome: ToolCallOutcome
+  durationMs: number | null
+  startMs: number
+}
+
+// Aggregates per tool CALL (grouped by tool_call_id), not per event row: only
+// the started/input_available phases carry a tool_name, while terminal phases
+// only carry the tool_call_id, so row-counting double-counts calls and never
+// sees outcomes.
+export function getToolUsageBreakdown(from?: number): ToolUsageBreakdown {
+  const rows = db().all<{
+    tool_call_id: string
+    tool_name: string | null
     phase: string
-    duration_ms: number | null
+    occurred_at: number
     runtime_kind: string
     model_id: string | null
   }>(sql`
     SELECT
+      ${backendRunSnapshotEvents.toolCallId} AS tool_call_id,
       ${backendRunSnapshotEvents.toolName} AS tool_name,
       ${backendRunSnapshotEvents.phase} AS phase,
-      ${backendRunSnapshotEvents.durationMs} AS duration_ms,
+      ${backendRunSnapshotEvents.occurredAt} AS occurred_at,
       ${backendRunSnapshots.runtimeKind} AS runtime_kind,
       ${backendRunSnapshots.modelId} AS model_id
     FROM ${backendRunSnapshotEvents}
     INNER JOIN ${backendRunSnapshots} ON ${backendRunSnapshots.id} = ${backendRunSnapshotEvents.snapshotId}
-    WHERE ${backendRunSnapshotEvents.toolName} IS NOT NULL
-      AND ${backendRunSnapshotEvents.toolName} != ''
+    WHERE ${backendRunSnapshotEvents.toolCallId} IS NOT NULL
+      ${from !== undefined ? sql`AND ${backendRunSnapshotEvents.occurredAt} >= ${from}` : sql``}
   `)
 
-  // Build overall breakdown
-  const overallMap = new Map<string, { count: number, successCount: number, failureCount: number, deniedCount: number, totalDurationMs: number, durationCount: number }>()
-  const runtimeMap = new Map<string, Map<string, { count: number, successCount: number, failureCount: number, deniedCount: number, totalDurationMs: number, durationCount: number }>>()
-  const modelMap = new Map<string, Map<string, { count: number, successCount: number, failureCount: number, deniedCount: number, totalDurationMs: number, durationCount: number }>>()
+  const calls = collectToolCalls(rows)
 
-  for (const event of toolEvents) {
-    const toolName = event.tool_name
-    const isFailure = event.phase === 'tool_call_output_failed' || event.phase === 'tool_call_input_failed'
-    const isDenied = event.phase === 'tool_call_denied'
-    const isSuccess = event.phase === 'tool_call_output_available'
-    const durationMs = event.duration_ms ?? 0
-    const hasDuration = durationMs > 0
+  const overallMap = new Map<string, ToolAccumulator>()
+  const runtimeMap = new Map<string, Map<string, ToolAccumulator>>()
+  const modelMap = new Map<string, Map<string, ToolAccumulator>>()
+  const dailyMap = new Map<string, number>()
+  const summaryAcc = createToolAccumulator()
 
-    // Overall
-    const overall = ensureToolEntry(overallMap, toolName)
-    overall.count++
-    if (isSuccess) { overall.successCount++ }
-    if (isFailure) { overall.failureCount++ }
-    if (isDenied) { overall.deniedCount++ }
-    if (hasDuration) {
-      overall.totalDurationMs += durationMs
-      overall.durationCount++
-    }
+  for (const call of calls) {
+    recordCall(ensureToolEntry(overallMap, call.toolName), call)
+    recordCall(ensureNestedMap(runtimeMap, call.runtimeKind, call.toolName), call)
+    recordCall(ensureNestedMap(modelMap, call.modelId, call.toolName), call)
+    recordCall(summaryAcc, call)
 
-    // By runtime
-    const runtimeTools = ensureNestedMap(runtimeMap, event.runtime_kind, toolName)
-    runtimeTools.count++
-    if (isSuccess) { runtimeTools.successCount++ }
-    if (isFailure) { runtimeTools.failureCount++ }
-    if (isDenied) { runtimeTools.deniedCount++ }
-    if (hasDuration) {
-      runtimeTools.totalDurationMs += durationMs
-      runtimeTools.durationCount++
-    }
-
-    // By model
-    const modelId = event.model_id ?? 'unknown'
-    const modelTools = ensureNestedMap(modelMap, modelId, toolName)
-    modelTools.count++
-    if (isSuccess) { modelTools.successCount++ }
-    if (isFailure) { modelTools.failureCount++ }
-    if (isDenied) { modelTools.deniedCount++ }
-    if (hasDuration) {
-      modelTools.totalDurationMs += durationMs
-      modelTools.durationCount++
-    }
+    // Local-time date key, matching the other daily series (SQL 'localtime')
+    // and the client's day-window bucketing. startMs is millisecond epoch.
+    const startDate = new Date(call.startMs)
+    const date = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`
+    const dailyKey = `${date}|${call.toolName}`
+    dailyMap.set(dailyKey, (dailyMap.get(dailyKey) ?? 0) + 1)
   }
+
+  const daily = Array.from(dailyMap.entries())
+    .map(([key, count]) => {
+      const [date, toolName] = key.split('|')
+      return { date, toolName, count }
+    })
+    .sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
+
+  const successDenominator = summaryAcc.successCount + summaryAcc.failureCount
 
   return {
     overall: mapToToolEntries(overallMap),
@@ -929,15 +913,123 @@ export function getToolUsageBreakdown(): ToolUsageBreakdown {
     byModel: Array.from(modelMap.entries())
       .map(([modelId, tools]) => ({ modelId, tools: mapToToolEntries(tools) }))
       .sort((a, b) => b.tools.reduce((s, t) => s + t.count, 0) - a.tools.reduce((s, t) => s + t.count, 0)),
+    summary: {
+      totalCalls: summaryAcc.count,
+      successCount: summaryAcc.successCount,
+      failureCount: summaryAcc.failureCount,
+      deniedCount: summaryAcc.deniedCount,
+      interruptedCount: summaryAcc.interruptedCount,
+      // Denied and interrupted calls never resolved, so they are excluded
+      // from the rate denominator.
+      successRatePct: successDenominator > 0 ? Math.round((summaryAcc.successCount / successDenominator) * 100) : 0,
+      uniqueToolCount: overallMap.size,
+      medianDurationMs: medianDurationMs(summaryAcc.durationsMs),
+    },
+    daily,
   }
 }
 
-type ToolAccumulator = { count: number, successCount: number, failureCount: number, deniedCount: number, totalDurationMs: number, durationCount: number }
+const START_PHASES = new Set(['tool_call_started', 'tool_call_input_available'])
+const TERMINAL_PHASES = new Set(['tool_call_output_available', 'tool_call_output_failed', 'tool_call_input_failed', 'tool_call_denied'])
+
+interface ToolEventRow {
+  tool_call_id: string
+  tool_name: string | null
+  phase: string
+  occurred_at: number
+  runtime_kind: string
+  model_id: string | null
+}
+
+function collectToolCalls(rows: ToolEventRow[]): ToolCallRecord[] {
+  const byCallId = new Map<string, ToolEventRow[]>()
+  for (const row of rows) {
+    const group = byCallId.get(row.tool_call_id)
+    if (group) {
+      group.push(row)
+    }
+    else {
+      byCallId.set(row.tool_call_id, [row])
+    }
+  }
+
+  const calls: ToolCallRecord[] = []
+  for (const group of byCallId.values()) {
+    const toolName = group.find(row => row.tool_name && row.tool_name !== '')?.tool_name
+    if (!toolName) {
+      continue
+    }
+
+    let outcome: ToolCallOutcome = 'interrupted'
+    if (group.some(row => row.phase === 'tool_call_output_available')) {
+      outcome = 'success'
+    }
+    else if (group.some(row => row.phase === 'tool_call_output_failed' || row.phase === 'tool_call_input_failed')) {
+      outcome = 'failure'
+    }
+    else if (group.some(row => row.phase === 'tool_call_denied')) {
+      outcome = 'denied'
+    }
+
+    const occurredAts = group.map(row => row.occurred_at)
+    const startTimes = group.filter(row => START_PHASES.has(row.phase)).map(row => row.occurred_at)
+    const endTimes = group.filter(row => TERMINAL_PHASES.has(row.phase)).map(row => row.occurred_at)
+    const startMs = startTimes.length > 0 ? Math.min(...startTimes) : Math.min(...occurredAts)
+
+    // occurred_at is millisecond epoch (backend_run_snapshot_events), so the
+    // delta is already in ms.
+    let durationMs: number | null = null
+    if (startTimes.length > 0 && endTimes.length > 0) {
+      const deltaMs = Math.max(...endTimes) - Math.min(...startTimes)
+      durationMs = deltaMs >= 0 ? deltaMs : null
+    }
+
+    calls.push({
+      toolName,
+      runtimeKind: group[0].runtime_kind,
+      modelId: group[0].model_id ?? 'unknown',
+      outcome,
+      durationMs,
+      startMs,
+    })
+  }
+  return calls
+}
+
+type ToolAccumulator = { count: number, successCount: number, failureCount: number, deniedCount: number, interruptedCount: number, durationsMs: number[] }
+
+function createToolAccumulator(): ToolAccumulator {
+  return { count: 0, successCount: 0, failureCount: 0, deniedCount: 0, interruptedCount: 0, durationsMs: [] }
+}
+
+function recordCall(acc: ToolAccumulator, call: ToolCallRecord): void {
+  acc.count++
+  if (call.outcome === 'success') { acc.successCount++ }
+  if (call.outcome === 'failure') { acc.failureCount++ }
+  if (call.outcome === 'denied') { acc.deniedCount++ }
+  if (call.outcome === 'interrupted') { acc.interruptedCount++ }
+  if (call.durationMs !== null) {
+    acc.durationsMs.push(call.durationMs)
+  }
+}
+
+// Median, not mean: a handful of hour-long background/sleep calls drag the
+// mean into days (observed: 28h "average" for Bash) while the typical call
+// finishes in seconds.
+function medianDurationMs(durationsMs: number[]): number | null {
+  if (durationsMs.length === 0) {
+    return null
+  }
+  const sorted = [...durationsMs].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  const median = sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
+  return Math.round(median)
+}
 
 function ensureToolEntry(map: Map<string, ToolAccumulator>, toolName: string): ToolAccumulator {
   let entry = map.get(toolName)
   if (!entry) {
-    entry = { count: 0, successCount: 0, failureCount: 0, deniedCount: 0, totalDurationMs: 0, durationCount: 0 }
+    entry = createToolAccumulator()
     map.set(toolName, entry)
   }
   return entry
@@ -964,7 +1056,8 @@ function mapToToolEntries(map: Map<string, ToolAccumulator>): ToolUsageEntry[] {
       successCount: data.successCount,
       failureCount: data.failureCount,
       deniedCount: data.deniedCount,
-      avgDurationMs: data.durationCount > 0 ? Math.round(data.totalDurationMs / data.durationCount) : null,
+      interruptedCount: data.interruptedCount,
+      medianDurationMs: medianDurationMs(data.durationsMs),
     }))
     .sort((a, b) => b.count - a.count)
 }

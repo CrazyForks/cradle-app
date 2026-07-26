@@ -1,5 +1,6 @@
 // Reads global Usage API data for dashboard and profile surfaces.
 import { useQuery } from '@tanstack/react-query'
+import { useMemo } from 'react'
 
 import {
   getUsageCostDailyOptions,
@@ -24,6 +25,9 @@ import type {
   GetUsageToolsResponse,
 } from '~/api-gen/types.gen'
 
+import type { UsageRangeKey } from './usage-time-range'
+import { rangeDays } from './usage-time-range'
+
 export type DailyUsage = GetUsageDailyResponse[number]
 export type DailyUsageByModel = GetUsageDailyByModelResponse[number]
 export type HourlyUsage = GetUsagePatternsHourlyResponse[number]
@@ -32,6 +36,8 @@ export type UsageStats = GetUsageStatsResponse
 export type CostSummary = GetUsageCostSummaryResponse
 export type DailyCost = GetUsageCostDailyResponse[number]
 export type ToolUsageBreakdown = GetUsageToolsResponse
+export type ToolUsageEntry = ToolUsageBreakdown['overall'][number]
+export type DailyToolUsage = ToolUsageBreakdown['daily'][number]
 export type CostEfficiency = GetUsageCostEfficiencyResponse[number]
 
 const EMPTY_DAILY_USAGE: GetUsageDailyResponse = []
@@ -40,7 +46,7 @@ const EMPTY_HOURLY_USAGE: GetUsagePatternsHourlyResponse = []
 const EMPTY_DAILY_COST: GetUsageCostDailyResponse = []
 const EMPTY_COST_EFFICIENCY: GetUsageCostEfficiencyResponse = []
 
-export function useUsageOverview() {
+export function useUsageOverview(range: UsageRangeKey) {
   const dailyQuery = useQuery({
     ...getUsageDailyOptions({ query: { days: '365' } }),
   })
@@ -62,11 +68,21 @@ export function useUsageOverview() {
   const dailyCostQuery = useQuery({
     ...getUsageCostDailyOptions(),
   })
+  // Tool stats are server-aggregated over the selected range (rankings and
+  // summary can't be sliced client-side like the dense daily series), so the
+  // range change does trigger one refetch here — cached per range by React Query.
+  // `from` must be a bare YYYY-MM-DD date: the contract is `format: 'date'`,
+  // and the generated client zod-validates it (full ISO datetimes are rejected).
+  const toolsFrom = useMemo(() => {
+    const date = new Date()
+    date.setDate(date.getDate() - rangeDays(range))
+    return date.toISOString().slice(0, 10)
+  }, [range])
   const toolsQuery = useQuery({
-    ...getUsageToolsOptions(),
+    ...getUsageToolsOptions({ query: { from: toolsFrom } }),
   })
   const costEfficiencyQuery = useQuery({
-    ...getUsageCostEfficiencyOptions({ query: { days: '90' } }),
+    ...getUsageCostEfficiencyOptions({ query: { days: '365' } }),
   })
 
   const summary = summaryQuery.data ?? null
