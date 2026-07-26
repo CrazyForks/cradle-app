@@ -37,6 +37,7 @@ const DOT = {
   tokens: 'bg-blue-500',
   turns: 'bg-sky-500',
   streak: 'bg-rose-500',
+  concurrency: 'bg-amber-500',
 } as const
 
 export function UsageHeroCards({ daily, dailyCost, stats, range, hasCost }: UsageHeroCardsProps) {
@@ -94,6 +95,15 @@ export function UsageHeroCards({ daily, dailyCost, stats, range, hasCost }: Usag
       delta: null,
       deltaLabel: t('hero.bestStreakValue', { days: stats.longestStreak }),
       dataTestId: 'usage-hero-streak',
+    },
+    {
+      key: 'concurrency',
+      dot: DOT.concurrency,
+      label: t('hero.peakConcurrency'),
+      value: <AnimatedNumber value={stats.peakConcurrentRuns} formatter={value => String(value)} className="text-3xl font-semibold tabular-nums text-foreground" />,
+      delta: null,
+      deltaLabel: t('hero.peakConcurrencyValue', { count: stats.peakConcurrentRuns }),
+      dataTestId: 'usage-hero-concurrency',
     },
   ].filter(Boolean) as Array<{ key: string, dot: string, label: string, value: React.ReactNode, delta: number | null, deltaLabel: string, dataTestId: string }>
 

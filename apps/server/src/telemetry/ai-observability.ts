@@ -55,6 +55,9 @@ export async function observeAiGeneration<T extends AiGenerationObservationResul
   const captureMode = config.posthogAiCaptureMode
 
   return aiTracer.startActiveSpan('gen_ai.chat', {
+    // One Cradle agent run is one PostHog AI trace. Do not inherit an ambient
+    // HTTP or background-job trace, which could merge unrelated agent runs.
+    root: true,
     attributes: buildAiGenerationStartAttributes(input, captureMode),
   }, async (span) => {
     const spanContext = span.spanContext()

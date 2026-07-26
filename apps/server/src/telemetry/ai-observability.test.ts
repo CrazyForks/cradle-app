@@ -87,13 +87,16 @@ describe('postHog AI generation attributes', () => {
 
     expect(attributes).toMatchObject({
       'cradle.ai.schema_version': 2,
-      'cradle.ai.correlation_version': 1,
+      'cradle.ai.correlation_version': 2,
     })
+    expect(attributes.$ai_session_id).toBe(attributes.session_id)
+    expect(attributes.$ai_session_id).toBe(repeatedAttributes.$ai_session_id)
     expect(attributes.session_id).toBe(repeatedAttributes.session_id)
     expect(attributes.run_id).toBe(repeatedAttributes.run_id)
     expect(attributes.session_id).toMatch(/^[a-f0-9]{32}$/)
     expect(attributes.run_id).toMatch(/^[a-f0-9]{32}$/)
     expect(attributes.session_id).not.toContain(input.correlation.sessionId)
+    expect(attributes.$ai_session_id).not.toContain(input.correlation.sessionId)
     expect(attributes.run_id).not.toContain(input.correlation.runId)
   })
 

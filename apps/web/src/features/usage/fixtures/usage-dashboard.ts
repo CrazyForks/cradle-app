@@ -151,6 +151,7 @@ const stats: UsageStats = {
   avgDailyTokens: Math.round(totalTokens / activeDays.length),
   peakDay: { date: peakDay.date, totalTokens: peakDay.totalTokens },
   todayTokens: daily.at(-1)?.totalTokens ?? 0,
+  peakConcurrentRuns: 3,
 }
 
 export const populatedUsageDashboardFixture: UsageDashboardViewProps = {
@@ -161,6 +162,43 @@ export const populatedUsageDashboardFixture: UsageDashboardViewProps = {
   stats,
   costSummary,
   dailyCost,
+  tools: {
+    overall: [
+      { toolName: 'Read', count: 1240, successCount: 1230, failureCount: 8, deniedCount: 2, avgDurationMs: 45 },
+      { toolName: 'Edit', count: 890, successCount: 880, failureCount: 10, deniedCount: 0, avgDurationMs: 120 },
+      { toolName: 'Write', count: 450, successCount: 445, failureCount: 5, deniedCount: 0, avgDurationMs: 80 },
+      { toolName: 'Bash', count: 320, successCount: 300, failureCount: 18, deniedCount: 2, avgDurationMs: 2500 },
+      { toolName: 'Grep', count: 280, successCount: 280, failureCount: 0, deniedCount: 0, avgDurationMs: 30 },
+    ],
+    byRuntime: [
+      { runtimeKind: 'opencode', tools: [
+        { toolName: 'Read', count: 800, successCount: 795, failureCount: 5, deniedCount: 0, avgDurationMs: 40 },
+        { toolName: 'Edit', count: 600, successCount: 595, failureCount: 5, deniedCount: 0, avgDurationMs: 110 },
+      ]},
+      { runtimeKind: 'codex', tools: [
+        { toolName: 'Read', count: 440, successCount: 435, failureCount: 3, deniedCount: 2, avgDurationMs: 55 },
+        { toolName: 'Edit', count: 290, successCount: 285, failureCount: 5, deniedCount: 0, avgDurationMs: 135 },
+      ]},
+    ],
+    byModel: [
+      { modelId: 'gpt-5.2', tools: [
+        { toolName: 'Read', count: 600, successCount: 595, failureCount: 5, deniedCount: 0, avgDurationMs: 42 },
+        { toolName: 'Edit', count: 420, successCount: 415, failureCount: 5, deniedCount: 0, avgDurationMs: 115 },
+      ]},
+      { modelId: 'claude-opus-4.6', tools: [
+        { toolName: 'Read', count: 420, successCount: 418, failureCount: 2, deniedCount: 0, avgDurationMs: 48 },
+        { toolName: 'Edit', count: 310, successCount: 308, failureCount: 2, deniedCount: 0, avgDurationMs: 125 },
+      ]},
+    ],
+  },
+  costEfficiency: daily.slice(-30).map((entry, index) => ({
+    date: entry.date,
+    totalTokens: entry.totalTokens,
+    runCount: entry.count,
+    avgTokensPerRun: entry.count > 0 ? Math.round(entry.totalTokens / entry.count) : 0,
+    totalCostUsd: dailyCost.filter(c => c.date === entry.date).reduce((sum, c) => sum + c.costUsd, 0),
+    avgCostPerRun: entry.count > 0 ? dailyCost.filter(c => c.date === entry.date).reduce((sum, c) => sum + c.costUsd, 0) / entry.count : 0,
+  })),
   usageReady: true,
   themeMode: 'light',
 }
@@ -185,9 +223,12 @@ export const emptyUsageDashboardFixture: UsageDashboardViewProps = {
     avgDailyTokens: 0,
     peakDay: null,
     todayTokens: 0,
+    peakConcurrentRuns: 0,
   },
   costSummary: null,
   dailyCost: [],
+  tools: null,
+  costEfficiency: [],
   usageReady: true,
   themeMode: 'light',
 }

@@ -16,6 +16,8 @@ export function UsageDashboard() {
       stats={usage.stats}
       costSummary={usage.costSummary}
       dailyCost={usage.dailyCost}
+      tools={usage.tools}
+      costEfficiency={usage.costEfficiency}
       usageReady={usage.usageReady}
       themeMode={themeMode}
     />

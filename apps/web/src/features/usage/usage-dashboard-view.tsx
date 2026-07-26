@@ -7,18 +7,22 @@ import { cn } from '~/lib/cn'
 import { formatTokenCount } from '~/lib/number-format'
 
 import { UsageBreakdown } from './usage-breakdown'
+import { CostEfficiencyTrend } from './usage-cost-efficiency'
 import { UsageHeatmap } from './usage-heatmap'
 import { UsageHeroCards } from './usage-hero-cards'
 import { UsagePatterns } from './usage-patterns'
+import { ToolBreakdown } from './usage-tool-breakdown'
 import type { UsageRangeKey } from './usage-time-range'
 import { USAGE_RANGE_OPTIONS } from './usage-time-range'
 import { UsageTrendChartView } from './usage-trend-chart-view'
 import type {
+  CostEfficiency,
   CostSummary,
   DailyCost,
   DailyUsage,
   DailyUsageByModel,
   HourlyUsage,
+  ToolUsageBreakdown,
   UsageStats,
   UsageSummary,
 } from './use-usage-overview'
@@ -31,6 +35,8 @@ export interface UsageDashboardViewProps {
   stats: UsageStats | null
   costSummary: CostSummary | null
   dailyCost: DailyCost[]
+  tools: ToolUsageBreakdown | null
+  costEfficiency: CostEfficiency[]
   usageReady: boolean
   themeMode: 'light' | 'dark'
 }
@@ -43,6 +49,8 @@ export function UsageDashboardView({
   stats,
   costSummary,
   dailyCost,
+  tools,
+  costEfficiency,
   usageReady,
   themeMode,
 }: UsageDashboardViewProps) {
@@ -55,6 +63,8 @@ export function UsageDashboardView({
     summary
     && (summary.byModel.length > 0 || summary.byAgent.length > 0 || summary.byProviderTarget.length > 0),
   )
+  const hasTools = Boolean(tools && tools.overall.length > 0)
+  const hasEfficiency = costEfficiency.length > 0
 
   return (
     <div
@@ -148,6 +158,18 @@ export function UsageDashboardView({
               <SectionCard>
                 <UsagePatterns daily={daily} dailyByModel={dailyByModel} hourly={hourly} />
               </SectionCard>
+
+              {hasTools && tools && (
+                <SectionCard>
+                  <ToolBreakdown tools={tools} />
+                </SectionCard>
+              )}
+
+              {hasEfficiency && (
+                <SectionCard>
+                  <CostEfficiencyTrend data={costEfficiency} hasCost={hasCost} themeMode={themeMode} />
+                </SectionCard>
+              )}
             </div>
           </div>
         )}

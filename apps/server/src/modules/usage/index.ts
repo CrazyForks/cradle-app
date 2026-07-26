@@ -114,3 +114,22 @@ export const usage = new Elysia({
     query: UsageModel.dateRangeQuery,
     response: { 200: UsageModel.dailyCost },
   })
+  .get('/tools', () => Usage.getToolUsageBreakdown(), {
+    detail: {
+      'summary': 'Get tool usage breakdown by runtime and model',
+      'x-cradle-cli': {
+        command: ['usage', 'tools'],
+      },
+    },
+    response: { 200: UsageModel.toolUsageBreakdown },
+  })
+  .get('/cost-efficiency', ({ query }) => Usage.getCostEfficiencyTrend(query.days), {
+    detail: {
+      'summary': 'Get cost efficiency trend (avg tokens per run over time)',
+      'x-cradle-cli': {
+        command: ['usage', 'cost-efficiency'],
+      },
+    },
+    query: UsageModel.dailyQuery,
+    response: { 200: t.Array(UsageModel.dailyCostEfficiency) },
+  })

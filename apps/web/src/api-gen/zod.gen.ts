@@ -313,6 +313,13 @@ export const zGetUsageCostDailyQuery = z.object({
     to: z.iso.date().optional()
 });
 
+export const zGetUsageCostEfficiencyQuery = z.object({
+    days: z.union([
+        z.string(),
+        z.number().gte(1)
+    ]).optional()
+});
+
 export const zDeleteProfilesByIdPath = z.object({
     id: z.string().min(1)
 });
@@ -2093,6 +2100,27 @@ export const zPostIssuesBody = z.object({
     dueDate: z.number().nullish(),
     assigneeKind: z.string().nullish(),
     assigneeId: z.string().nullish()
+});
+
+export const zPostIssuesReorderBody = z.object({
+    workspaceId: z.string().min(1),
+    orderedIds: z.array(z.string()),
+    patch: z.object({
+        issueIds: z.array(z.string()),
+        fields: z.object({
+            priority: z.enum([
+                'none',
+                'low',
+                'medium',
+                'high',
+                'urgent'
+            ]).optional(),
+            milestoneId: z.string().nullish(),
+            statusId: z.string().nullish(),
+            assigneeKind: z.string().nullish(),
+            assigneeId: z.string().nullish()
+        })
+    }).optional()
 });
 
 export const zDeleteIssuesByIdPath = z.object({

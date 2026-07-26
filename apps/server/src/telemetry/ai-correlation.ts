@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 
 const AI_CORRELATION_NAMESPACE = 'cradle-ai-telemetry-v1'
 
-export const AI_CORRELATION_SCHEMA_VERSION = 1
+export const AI_CORRELATION_SCHEMA_VERSION = 2
 
 export interface AiTelemetryCorrelationContext {
   sessionId: string
@@ -36,6 +36,7 @@ export function buildAiTelemetryCorrelationAttributes(
   const ids = buildAiTelemetryCorrelationIds(input)
   return {
     'cradle.ai.correlation_version': AI_CORRELATION_SCHEMA_VERSION,
+    '$ai_session_id': ids.sessionId,
     'session_id': ids.sessionId,
     'run_id': ids.runId,
   }

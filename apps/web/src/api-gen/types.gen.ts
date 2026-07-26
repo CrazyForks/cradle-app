@@ -1501,6 +1501,7 @@ export type GetUsageStatsResponses = {
             totalTokens: number;
         } | null;
         todayTokens: number;
+        peakConcurrentRuns: number;
     };
 };
 
@@ -1670,6 +1671,78 @@ export type GetUsageCostDailyResponses = {
 };
 
 export type GetUsageCostDailyResponse = GetUsageCostDailyResponses[keyof GetUsageCostDailyResponses];
+
+export type GetUsageToolsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/usage/tools';
+};
+
+export type GetUsageToolsResponses = {
+    /**
+     * Response for status 200
+     */
+    200: {
+        overall: Array<{
+            toolName: string;
+            count: number;
+            successCount: number;
+            failureCount: number;
+            deniedCount: number;
+            avgDurationMs: number | null;
+        }>;
+        byRuntime: Array<{
+            runtimeKind: string;
+            tools: Array<{
+                toolName: string;
+                count: number;
+                successCount: number;
+                failureCount: number;
+                deniedCount: number;
+                avgDurationMs: number | null;
+            }>;
+        }>;
+        byModel: Array<{
+            modelId: string;
+            tools: Array<{
+                toolName: string;
+                count: number;
+                successCount: number;
+                failureCount: number;
+                deniedCount: number;
+                avgDurationMs: number | null;
+            }>;
+        }>;
+    };
+};
+
+export type GetUsageToolsResponse = GetUsageToolsResponses[keyof GetUsageToolsResponses];
+
+export type GetUsageCostEfficiencyData = {
+    body?: never;
+    path?: never;
+    query?: {
+        days?: string | number;
+    };
+    url: '/usage/cost-efficiency';
+};
+
+export type GetUsageCostEfficiencyResponses = {
+    /**
+     * Response for status 200
+     */
+    200: Array<{
+        date: string;
+        totalTokens: number;
+        runCount: number;
+        avgTokensPerRun: number;
+        totalCostUsd: number;
+        avgCostPerRun: number;
+    }>;
+};
+
+export type GetUsageCostEfficiencyResponse = GetUsageCostEfficiencyResponses[keyof GetUsageCostEfficiencyResponses];
 
 export type GetProfilesData = {
     body?: never;
@@ -10709,6 +10782,58 @@ export type PostIssuesResponses = {
 
 export type PostIssuesResponse = PostIssuesResponses[keyof PostIssuesResponses];
 
+export type PostIssuesReorderData = {
+    body: {
+        workspaceId: string;
+        orderedIds: Array<string>;
+        patch?: {
+            issueIds: Array<string>;
+            fields: {
+                priority?: 'none' | 'low' | 'medium' | 'high' | 'urgent';
+                milestoneId?: string | null;
+                statusId?: string | null;
+                assigneeKind?: string | null;
+                assigneeId?: string | null;
+            };
+        };
+    };
+    path?: never;
+    query?: never;
+    url: '/issues/reorder';
+};
+
+export type PostIssuesReorderResponses = {
+    /**
+     * Response for status 200
+     */
+    200: Array<{
+        id: string;
+        workspaceId: string;
+        number: number;
+        statusId: string | null;
+        milestoneId: string | null;
+        parentIssueId: string | null;
+        title: string;
+        description: string | null;
+        priority: 'none' | 'low' | 'medium' | 'high' | 'urgent';
+        labels: Array<string>;
+        assigneeKind: string | null;
+        assigneeId: string | null;
+        dueDate: number | null;
+        createdByKind: 'user' | 'agent' | 'provider-target' | 'system';
+        createdById: string;
+        sourceChatSessionId: string | null;
+        delegateAgentId: string | null;
+        delegateProviderTargetId: string | null;
+        contextRefs: string;
+        order: number;
+        createdAt: number;
+        updatedAt: number;
+    }>;
+};
+
+export type PostIssuesReorderResponse = PostIssuesReorderResponses[keyof PostIssuesReorderResponses];
+
 export type DeleteIssuesByIdData = {
     body?: never;
     path: {
@@ -11211,6 +11336,15 @@ export type GetIssuesByIdRelationsResponses = {
         targetIssueId: string;
         type: 'blocks' | 'duplicates' | 'relates_to';
         createdAt: number;
+        direction: 'outgoing' | 'incoming';
+        counterpart: {
+            id: string;
+            workspaceId: string;
+            number: number;
+            title: string;
+            statusId: string | null;
+            priority: 'none' | 'low' | 'medium' | 'high' | 'urgent';
+        } | null;
     }>;
 };
 
@@ -23365,6 +23499,16 @@ export type GetChatSessionsBySessionIdMessagesResponses = {
             parentToolCallId: string | null;
             taskId: string | null;
             depth: number;
+            message: {
+                id: string;
+                role: 'system' | 'user' | 'assistant';
+                parts: Array<{
+                    type: string;
+                    [key: string]: unknown;
+                }>;
+                metadata?: unknown;
+                [key: string]: unknown;
+            };
         }>;
         nextCursor: string | null;
     };

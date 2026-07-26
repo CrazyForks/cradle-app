@@ -58,6 +58,7 @@ export const UsageModel = {
       totalTokens: t.Number(),
     })),
     todayTokens: t.Number(),
+    peakConcurrentRuns: t.Number(),
   }),
 
   sessionUsage: t.Object({
@@ -172,4 +173,59 @@ export const UsageModel = {
     totalTokens: t.Number(),
     stepCount: t.Number(),
   })),
+
+  // ── Tool Usage Breakdown models ──
+
+  toolUsageEntry: t.Object({
+    toolName: t.String(),
+    count: t.Number(),
+    successCount: t.Number(),
+    failureCount: t.Number(),
+    deniedCount: t.Number(),
+    avgDurationMs: t.Nullable(t.Number()),
+  }),
+
+  toolUsageBreakdown: t.Object({
+    overall: t.Array(t.Object({
+      toolName: t.String(),
+      count: t.Number(),
+      successCount: t.Number(),
+      failureCount: t.Number(),
+      deniedCount: t.Number(),
+      avgDurationMs: t.Nullable(t.Number()),
+    })),
+    byRuntime: t.Array(t.Object({
+      runtimeKind: t.String(),
+      tools: t.Array(t.Object({
+        toolName: t.String(),
+        count: t.Number(),
+        successCount: t.Number(),
+        failureCount: t.Number(),
+        deniedCount: t.Number(),
+        avgDurationMs: t.Nullable(t.Number()),
+      })),
+    })),
+    byModel: t.Array(t.Object({
+      modelId: t.String(),
+      tools: t.Array(t.Object({
+        toolName: t.String(),
+        count: t.Number(),
+        successCount: t.Number(),
+        failureCount: t.Number(),
+        deniedCount: t.Number(),
+        avgDurationMs: t.Nullable(t.Number()),
+      })),
+    })),
+  }),
+
+  // ── Cost Efficiency Trend models ──
+
+  dailyCostEfficiency: t.Object({
+    date: t.String(),
+    totalTokens: t.Number(),
+    runCount: t.Number(),
+    avgTokensPerRun: t.Number(),
+    totalCostUsd: t.Number(),
+    avgCostPerRun: t.Number(),
+  }),
 }

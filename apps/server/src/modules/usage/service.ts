@@ -1,4 +1,4 @@
-import { agents, providerTargets, sessions, usageLogs } from '@cradle/db'
+import { agents, backendRunSnapshotEvents, backendRunSnapshots, backendRuns, providerTargets, sessions, usageLogs } from '@cradle/db'
 import { sql } from 'drizzle-orm'
 
 import { db } from '../../infra'
@@ -241,6 +241,7 @@ export function getUsageStats(): {
   avgDailyTokens: number
   peakDay: { date: string, totalTokens: number } | null
   todayTokens: number
+  peakConcurrentRuns: number
 } {
   const activeDateRows = db().all<{ date: string }>(sql`
     SELECT DISTINCT date(${usageLogs.createdAt}, 'unixepoch', 'localtime') AS date
@@ -317,6 +318,8 @@ export function getUsageStats(): {
     WHERE date(${usageLogs.createdAt}, 'unixepoch', 'localtime') = date('now', 'localtime')
   `)
 
+  const { peakConcurrent } = getPeakConcurrentRuns()
+
   return {
     currentStreak,
     longestStreak,
@@ -324,7 +327,40 @@ export function getUsageStats(): {
     avgDailyTokens,
     peakDay,
     todayTokens: todayRow?.total ?? 0,
+    peakConcurrentRuns: peakConcurrent,
   }
+}
+
+export function getPeakConcurrentRuns(): { peakConcurrent: number } {
+  const rows = db().all<{ started_at: number, finished_at: number | null }>(sql`
+    SELECT ${backendRuns.startedAt} AS started_at, ${backendRuns.finishedAt} AS finished_at
+    FROM ${backendRuns}
+    ORDER BY ${backendRuns.startedAt} ASC
+  `)
+
+  if (rows.length === 0) {
+    return { peakConcurrent: 0 }
+  }
+
+  const now = Math.floor(Date.now() / 1000)
+  const events: Array<[number, 1] | [number, -1]> = []
+  for (const row of rows) {
+    events.push([row.started_at, 1])
+    events.push([row.finished_at ?? now, -1])
+  }
+
+  events.sort((a, b) => a[0] - b[0] || a[1] - b[1])
+
+  let current = 0
+  let peak = 0
+  for (const [, delta] of events) {
+    current += delta
+    if (current > peak) {
+      peak = current
+    }
+  }
+
+  return { peakConcurrent: peak }
 }
 
 export function getSessionUsage(sessionId: string): {
@@ -788,4 +824,203 @@ export function getTodayCostUsd(): number {
     (sum, row) => sum + estimateCost(row.model_id, { promptTokens: row.prompt_tokens, completionTokens: row.completion_tokens }),
     0,
   )
+}
+
+// ── Tool Usage Breakdown ──
+
+export interface ToolUsageEntry {
+  toolName: string
+  count: number
+  successCount: number
+  failureCount: number
+  deniedCount: number
+  avgDurationMs: number | null
+}
+
+export interface ToolUsageByRuntime {
+  runtimeKind: string
+  tools: ToolUsageEntry[]
+}
+
+export interface ToolUsageByModel {
+  modelId: string
+  tools: ToolUsageEntry[]
+}
+
+export interface ToolUsageBreakdown {
+  overall: ToolUsageEntry[]
+  byRuntime: ToolUsageByRuntime[]
+  byModel: ToolUsageByModel[]
+}
+
+export function getToolUsageBreakdown(): ToolUsageBreakdown {
+  const toolEvents = db().all<{
+    tool_name: string
+    phase: string
+    duration_ms: number | null
+    runtime_kind: string
+    model_id: string | null
+  }>(sql`
+    SELECT
+      ${backendRunSnapshotEvents.toolName} AS tool_name,
+      ${backendRunSnapshotEvents.phase} AS phase,
+      ${backendRunSnapshotEvents.durationMs} AS duration_ms,
+      ${backendRunSnapshots.runtimeKind} AS runtime_kind,
+      ${backendRunSnapshots.modelId} AS model_id
+    FROM ${backendRunSnapshotEvents}
+    INNER JOIN ${backendRunSnapshots} ON ${backendRunSnapshots.id} = ${backendRunSnapshotEvents.snapshotId}
+    WHERE ${backendRunSnapshotEvents.toolName} IS NOT NULL
+      AND ${backendRunSnapshotEvents.toolName} != ''
+  `)
+
+  // Build overall breakdown
+  const overallMap = new Map<string, { count: number, successCount: number, failureCount: number, deniedCount: number, totalDurationMs: number, durationCount: number }>()
+  const runtimeMap = new Map<string, Map<string, { count: number, successCount: number, failureCount: number, deniedCount: number, totalDurationMs: number, durationCount: number }>>()
+  const modelMap = new Map<string, Map<string, { count: number, successCount: number, failureCount: number, deniedCount: number, totalDurationMs: number, durationCount: number }>>()
+
+  for (const event of toolEvents) {
+    const toolName = event.tool_name
+    const isFailure = event.phase === 'tool_call_output_failed' || event.phase === 'tool_call_input_failed'
+    const isDenied = event.phase === 'tool_call_denied'
+    const isSuccess = event.phase === 'tool_call_output_available'
+    const durationMs = event.duration_ms ?? 0
+    const hasDuration = durationMs > 0
+
+    // Overall
+    const overall = ensureToolEntry(overallMap, toolName)
+    overall.count++
+    if (isSuccess) { overall.successCount++ }
+    if (isFailure) { overall.failureCount++ }
+    if (isDenied) { overall.deniedCount++ }
+    if (hasDuration) {
+      overall.totalDurationMs += durationMs
+      overall.durationCount++
+    }
+
+    // By runtime
+    const runtimeTools = ensureNestedMap(runtimeMap, event.runtime_kind, toolName)
+    runtimeTools.count++
+    if (isSuccess) { runtimeTools.successCount++ }
+    if (isFailure) { runtimeTools.failureCount++ }
+    if (isDenied) { runtimeTools.deniedCount++ }
+    if (hasDuration) {
+      runtimeTools.totalDurationMs += durationMs
+      runtimeTools.durationCount++
+    }
+
+    // By model
+    const modelId = event.model_id ?? 'unknown'
+    const modelTools = ensureNestedMap(modelMap, modelId, toolName)
+    modelTools.count++
+    if (isSuccess) { modelTools.successCount++ }
+    if (isFailure) { modelTools.failureCount++ }
+    if (isDenied) { modelTools.deniedCount++ }
+    if (hasDuration) {
+      modelTools.totalDurationMs += durationMs
+      modelTools.durationCount++
+    }
+  }
+
+  return {
+    overall: mapToToolEntries(overallMap),
+    byRuntime: Array.from(runtimeMap.entries())
+      .map(([runtimeKind, tools]) => ({ runtimeKind, tools: mapToToolEntries(tools) }))
+      .sort((a, b) => b.tools.reduce((s, t) => s + t.count, 0) - a.tools.reduce((s, t) => s + t.count, 0)),
+    byModel: Array.from(modelMap.entries())
+      .map(([modelId, tools]) => ({ modelId, tools: mapToToolEntries(tools) }))
+      .sort((a, b) => b.tools.reduce((s, t) => s + t.count, 0) - a.tools.reduce((s, t) => s + t.count, 0)),
+  }
+}
+
+type ToolAccumulator = { count: number, successCount: number, failureCount: number, deniedCount: number, totalDurationMs: number, durationCount: number }
+
+function ensureToolEntry(map: Map<string, ToolAccumulator>, toolName: string): ToolAccumulator {
+  let entry = map.get(toolName)
+  if (!entry) {
+    entry = { count: 0, successCount: 0, failureCount: 0, deniedCount: 0, totalDurationMs: 0, durationCount: 0 }
+    map.set(toolName, entry)
+  }
+  return entry
+}
+
+function ensureNestedMap(
+  outer: Map<string, Map<string, ToolAccumulator>>,
+  outerKey: string,
+  toolName: string,
+): ToolAccumulator {
+  let inner = outer.get(outerKey)
+  if (!inner) {
+    inner = new Map()
+    outer.set(outerKey, inner)
+  }
+  return ensureToolEntry(inner, toolName)
+}
+
+function mapToToolEntries(map: Map<string, ToolAccumulator>): ToolUsageEntry[] {
+  return Array.from(map.entries())
+    .map(([toolName, data]) => ({
+      toolName,
+      count: data.count,
+      successCount: data.successCount,
+      failureCount: data.failureCount,
+      deniedCount: data.deniedCount,
+      avgDurationMs: data.durationCount > 0 ? Math.round(data.totalDurationMs / data.durationCount) : null,
+    }))
+    .sort((a, b) => b.count - a.count)
+}
+
+// ── Cost Efficiency Trend ──
+
+export interface DailyCostEfficiency {
+  date: string
+  totalTokens: number
+  runCount: number
+  avgTokensPerRun: number
+  totalCostUsd: number
+  avgCostPerRun: number
+}
+
+export function getCostEfficiencyTrend(days = 90): DailyCostEfficiency[] {
+  const rows = db().all<{
+    date: string
+    total_tokens: number
+    run_count: number
+    model_ids: string
+    prompt_tokens: number
+    completion_tokens: number
+  }>(sql`
+    SELECT
+      date(${usageLogs.createdAt}, 'unixepoch', 'localtime') AS date,
+      SUM(${usageLogs.totalTokens}) AS total_tokens,
+      COUNT(DISTINCT COALESCE(${usageLogs.runId}, ${usageLogs.providerTurnId}, ${usageLogs.id})) AS run_count,
+      GROUP_CONCAT(DISTINCT COALESCE(${usageLogs.modelId}, 'unknown')) AS model_ids,
+      SUM(${usageLogs.promptTokens}) AS prompt_tokens,
+      SUM(${usageLogs.completionTokens}) AS completion_tokens
+    FROM ${usageLogs}
+    WHERE ${usageLogs.createdAt} >= unixepoch('now', 'localtime', '-' || ${days} || ' days')
+    GROUP BY date(${usageLogs.createdAt}, 'unixepoch', 'localtime')
+    ORDER BY date ASC
+  `)
+
+  return rows.map((row) => {
+    // Estimate cost from the model mix
+    const modelIds = row.model_ids ? row.model_ids.split(',') : ['unknown']
+    const promptPerModel = Math.round(row.prompt_tokens / Math.max(modelIds.length, 1))
+    const completionPerModel = Math.round(row.completion_tokens / Math.max(modelIds.length, 1))
+    const totalCostUsd = modelIds.reduce(
+      (sum, modelId) => sum + estimateCost(modelId, { promptTokens: promptPerModel, completionTokens: completionPerModel }),
+      0,
+    )
+    const avgTokensPerRun = row.run_count > 0 ? Math.round(row.total_tokens / row.run_count) : 0
+    const avgCostPerRun = row.run_count > 0 ? totalCostUsd / row.run_count : 0
+
+    return {
+      date: row.date,
+      totalTokens: row.total_tokens,
+      runCount: row.run_count,
+      avgTokensPerRun,
+      totalCostUsd,
+      avgCostPerRun,
+    }
+  })
 }
