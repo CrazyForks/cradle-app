@@ -4,6 +4,7 @@ import { createContext, useContext } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { KanbanIssue, KanbanIssueRelation } from '~/features/kanban/types'
+import kanbanLocale from '~/locales/default/kanban'
 
 import { RelationManager } from './relation-manager'
 
@@ -13,6 +14,15 @@ const mocks = vi.hoisted(() => ({
   issues: [] as KanbanIssue[],
   relations: [] as KanbanIssueRelation[],
   searchIssues: [] as KanbanIssue[],
+}))
+
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string, params?: Record<string, string>) => {
+      const template = (kanbanLocale as Record<string, string>)[key] ?? key
+      return template.replaceAll(/\{\{(\w+)\}\}/g, (_, name: string) => params?.[name] ?? '')
+    },
+  }),
 }))
 
 vi.mock('~/features/workspace/use-workspace', () => ({
@@ -68,49 +78,6 @@ vi.mock('~/components/ui/popover', () => ({
   ),
 }))
 
-type ComboboxContextValue = {
-  inputValue?: string
-  onInputValueChange?: (value: string) => void
-  onValueChange?: (value: string | null) => void
-}
-
-const ComboboxContext = createContext<ComboboxContextValue>({})
-
-vi.mock('~/components/ui/combobox', () => ({
-  Combobox: ({ children, inputValue, onInputValueChange, onValueChange }: ComboboxContextValue & { children: ReactNode }) => (
-    <ComboboxContext.Provider value={{ inputValue, onInputValueChange, onValueChange }}>
-      <div>{children}</div>
-    </ComboboxContext.Provider>
-  ),
-  ComboboxContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  ComboboxInput: ({ 'aria-label': ariaLabel, placeholder }: ComponentProps<'input'> & {
-    showClear?: boolean
-    showTrigger?: boolean
-    startAddon?: ReactNode
-  }) => {
-    const context = useContext(ComboboxContext)
-
-    return (
-      <input
-        aria-label={ariaLabel}
-        placeholder={placeholder}
-        value={context.inputValue ?? ''}
-        onChange={event => context.onInputValueChange?.(event.currentTarget.value)}
-      />
-    )
-  },
-  ComboboxItem: ({ children, value, disabled }: { children: ReactNode, value: string, disabled?: boolean }) => {
-    const context = useContext(ComboboxContext)
-
-    return (
-      <button type="button" role="option" aria-selected={false} disabled={disabled} onClick={() => context.onValueChange?.(value)}>
-        {children}
-      </button>
-    )
-  },
-  ComboboxList: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-}))
-
 vi.mock('~/components/ui/skeleton', () => ({
   Skeleton: () => <div data-testid="relation-skeleton" />,
 }))
@@ -148,18 +115,42 @@ function issue(id: string, number: number, title: string): KanbanIssue {
   }
 }
 
-function relation(id: string, sourceIssueId: string, targetIssueId: string, type: KanbanIssueRelation['type']): KanbanIssueRelation {
+function relation(
+  id: string,
+  counterpartIssue: KanbanIssue,
+  type: KanbanIssueRelation['type'],
+  direction: KanbanIssueRelation['direction'],
+): KanbanIssueRelation {
   return {
     id,
-    sourceIssueId,
-    targetIssueId,
+    sourceIssueId: direction === 'outgoing' ? 'issue-current' : counterpartIssue.id,
+    targetIssueId: direction === 'outgoing' ? counterpartIssue.id : 'issue-current',
     type,
     createdAt: now,
+    direction,
+    counterpart: {
+      id: counterpartIssue.id,
+      workspaceId: counterpartIssue.workspaceId,
+      number: counterpartIssue.number,
+      title: counterpartIssue.title,
+      statusId: counterpartIssue.statusId,
+      priority: counterpartIssue.priority,
+    },
   }
 }
 
-function openSection(label: string) {
-  fireEvent.click(screen.getByRole('button', { name: `Add ${label} relation` }))
+function openComposer() {
+  fireEvent.click(screen.getByRole('button', { name: 'Add a relation' }))
+}
+
+function pickKind(kind: string) {
+  fireEvent.click(screen.getByTestId(`issue-relation-kind-${kind}`))
+}
+
+function renderManager(readOnly = false) {
+  return render(
+    <RelationManager issueId="issue-current" workspaceId="workspace-1" readOnly={readOnly} />,
+  )
 }
 
 describe('relation manager', () => {
@@ -177,67 +168,26 @@ describe('relation manager', () => {
     mocks.relations = []
   })
 
-  it('renders semantic relation sections from the current issue perspective', () => {
+  it('renders one chip per relation with kind label and issue key', () => {
     mocks.relations = [
-      relation('rel-1', 'issue-current', 'issue-a', 'blocks'),
-      relation('rel-2', 'issue-b', 'issue-current', 'blocks'),
-      relation('rel-3', 'issue-current', 'issue-c', 'duplicates'),
-      relation('rel-4', 'issue-a', 'issue-current', 'duplicates'),
-      relation('rel-5', 'issue-b', 'issue-current', 'relates_to'),
+      relation('rel-1', issue('issue-a', 2, 'Alpha target'), 'blocks', 'outgoing'),
+      relation('rel-2', issue('issue-b', 3, 'Beta target'), 'blocks', 'incoming'),
+      relation('rel-3', issue('issue-c', 4, 'Gamma target'), 'relates_to', 'outgoing'),
     ]
 
-    render(<RelationManager issueId="issue-current" workspaceId="workspace-1" />)
+    renderManager()
 
-    expect(screen.getByRole('heading', { name: 'Blocks' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Blocked by' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Duplicates' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Duplicated by' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Related to' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Remove Blocks relation CRA-2' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Remove Blocked by relation CRA-3' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Remove Duplicates relation CRA-4' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Remove Duplicated by relation CRA-2' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Remove Related to relation CRA-3' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Blocks CRA-2: Alpha target' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Blocked by CRA-3: Beta target' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Related to CRA-4: Gamma target' })).toBeTruthy()
   })
 
-  it('adds an inverse blocks relation from the blocked by section', () => {
-    render(<RelationManager issueId="issue-current" workspaceId="workspace-1" />)
+  it('creates an outgoing blocks relation from the composer', () => {
+    renderManager()
 
-    openSection('Blocked by')
+    openComposer()
+    pickKind('blocks')
     fireEvent.click(screen.getByRole('option', { name: /CRA-2.*Alpha target/ }))
-    fireEvent.click(screen.getByRole('button', { name: 'Add to Blocked by' }))
-
-    expect(mocks.addRelationMutate).toHaveBeenCalledWith({
-      sourceIssueId: 'issue-a',
-      targetIssueId: 'issue-current',
-      type: 'blocks',
-    }, expect.any(Object))
-  })
-
-  it('adds a relation to a pasted issue id without requiring an autocomplete match', () => {
-    render(<RelationManager issueId="issue-current" workspaceId="workspace-1" />)
-
-    openSection('Duplicates')
-    fireEvent.change(screen.getByRole('textbox', { name: 'Target issue for Duplicates' }), {
-      target: { value: 'external-issue-id' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Add to Duplicates' }))
-
-    expect(mocks.addRelationMutate).toHaveBeenCalledWith({
-      sourceIssueId: 'issue-current',
-      targetIssueId: 'external-issue-id',
-      type: 'duplicates',
-    }, expect.any(Object))
-  })
-
-  it('resolves a typed readable issue key before creating the relation', () => {
-    render(<RelationManager issueId="issue-current" workspaceId="workspace-1" />)
-
-    openSection('Blocks')
-    fireEvent.change(screen.getByRole('textbox', { name: 'Target issue for Blocks' }), {
-      target: { value: 'CRA-2' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Add to Blocks' }))
 
     expect(mocks.addRelationMutate).toHaveBeenCalledWith({
       sourceIssueId: 'issue-current',
@@ -246,17 +196,72 @@ describe('relation manager', () => {
     }, expect.any(Object))
   })
 
-  it('adds a relates_to relation from the related to section', () => {
-    render(<RelationManager issueId="issue-current" workspaceId="workspace-1" />)
+  it('creates an inverse edge when blocked by is selected', () => {
+    renderManager()
 
-    openSection('Related to')
-    fireEvent.click(screen.getByRole('option', { name: /CRA-3.*Beta target/ }))
-    fireEvent.click(screen.getByRole('button', { name: 'Add to Related to' }))
+    openComposer()
+    pickKind('blocked-by')
+    fireEvent.click(screen.getByRole('option', { name: /CRA-2.*Alpha target/ }))
+
+    expect(mocks.addRelationMutate).toHaveBeenCalledWith({
+      sourceIssueId: 'issue-a',
+      targetIssueId: 'issue-current',
+      type: 'blocks',
+    }, expect.any(Object))
+  })
+
+  it('creates the highlighted candidate on enter after filtering', () => {
+    renderManager()
+
+    openComposer()
+    pickKind('relates-to')
+    const input = screen.getByTestId('issue-relation-search')
+    fireEvent.change(input, { target: { value: 'Beta' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
 
     expect(mocks.addRelationMutate).toHaveBeenCalledWith({
       sourceIssueId: 'issue-current',
       targetIssueId: 'issue-b',
       type: 'relates_to',
     }, expect.any(Object))
+  })
+
+  it('excludes already-related issues from the composer suggestions', () => {
+    mocks.relations = [
+      relation('rel-1', issue('issue-a', 2, 'Alpha target'), 'blocks', 'outgoing'),
+    ]
+
+    renderManager()
+
+    openComposer()
+    expect(screen.queryByRole('option', { name: /CRA-2.*Alpha target/ })).toBeNull()
+    expect(screen.getByRole('option', { name: /CRA-3.*Beta target/ })).toBeTruthy()
+  })
+
+  it('deletes a relation from its chip', () => {
+    mocks.relations = [
+      relation('rel-1', issue('issue-a', 2, 'Alpha target'), 'blocks', 'outgoing'),
+    ]
+
+    renderManager()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Blocks relation to CRA-2' }))
+
+    expect(mocks.deleteRelationMutate).toHaveBeenCalledWith({
+      id: 'rel-1',
+      issueId: 'issue-current',
+    })
+  })
+
+  it('hides the add entry and delete affordances in read-only mode', () => {
+    mocks.relations = [
+      relation('rel-1', issue('issue-a', 2, 'Alpha target'), 'blocks', 'outgoing'),
+    ]
+
+    renderManager(true)
+
+    expect(screen.queryByRole('button', { name: 'Add a relation' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Remove Blocks relation/ })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Blocks CRA-2: Alpha target' })).toBeTruthy()
   })
 })

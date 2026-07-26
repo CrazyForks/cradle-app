@@ -13,7 +13,7 @@ import {
   sessions,
   workspaces,
 } from '@cradle/db'
-import { and, desc, eq, or, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, or, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { AppError } from '../../errors/app-error'
@@ -405,6 +405,64 @@ export function reorderStatuses(workspaceId: string, orderedIds: string[]): void
   })
 }
 
+const ISSUE_ORDER_GAP = 1024
+
+/**
+ * Persist an explicit board position for `orderedIds`, optionally applying the
+ * destination group's field patch in the same pass.
+ *
+ * Ordering is rewritten with gaps rather than dense indices so a later
+ * insert-between can pick a midpoint without touching its neighbours. The whole
+ * batch is one transaction: a drag that half-applied would leave the board in a
+ * state no client could reconcile.
+ */
+export function reorderIssues(
+  workspaceId: string,
+  orderedIds: string[],
+  patch?: IssueGroupPatch,
+  actor: MutationActor | IssueMutationActor = { kind: 'user', id: '__self__' },
+): IssueView[] {
+  requireWorkspace(workspaceId)
+
+  const moved = new Set(patch?.issueIds ?? [])
+  const updated: IssueView[] = []
+
+  db().transaction((tx) => {
+    orderedIds.forEach((id, index) => {
+      const row = tx.select().from(issues).where(eq(issues.id, id)).get()
+      // A concurrently deleted issue must not abort the rest of the drop.
+      if (!row || row.workspaceId !== workspaceId) {
+        return
+      }
+      tx.update(issues)
+        .set({ order: (index + 1) * ISSUE_ORDER_GAP, updatedAt: currentUnixSeconds() })
+        .where(eq(issues.id, id))
+        .run()
+    })
+  })
+
+  // Field changes go through updateIssue so activity, field history, and status
+  // side effects stay identical to an inline edit.
+  for (const id of moved) {
+    if (patch?.fields) {
+      updated.push(updateIssue(id, patch.fields, actor))
+    }
+  }
+
+  return updated
+}
+
+export interface IssueGroupPatch {
+  issueIds: string[]
+  fields: Partial<{
+    priority: 'none' | 'low' | 'medium' | 'high' | 'urgent'
+    milestoneId: string | null
+    statusId: string | null
+    assigneeKind: string | null
+    assigneeId: string | null
+  }>
+}
+
 export function listMilestones(workspaceId?: string): IssueMilestone[] {
   if (workspaceId) {
     requireWorkspace(workspaceId)
@@ -486,7 +544,9 @@ export function listIssues(params: IssueListParams): IssueView[] {
     .select()
     .from(issues)
     .where(predicates.length > 0 ? and(...predicates) : undefined)
-    .orderBy(desc(issues.createdAt))
+    // Board position is authoritative; creation time only breaks ties between
+    // issues that have never been dragged (all of which share order 0).
+    .orderBy(issues.order, desc(issues.createdAt))
     .all()
 
   return rows
@@ -1203,6 +1263,12 @@ export function updateIssueDelegation(
 export function deleteIssue(id: string): void {
   getIssueRow(id)
   db().update(issues).set({ parentIssueId: null, updatedAt: currentUnixSeconds() }).where(eq(issues.parentIssueId, id)).run()
+  // Relations are edges, not children: dropping the issue must drop both directions,
+  // otherwise the counterpart issue keeps rendering an unresolvable relation row.
+  db()
+    .delete(issueRelations)
+    .where(or(eq(issueRelations.sourceIssueId, id), eq(issueRelations.targetIssueId, id)))
+    .run()
   db().delete(issues).where(eq(issues.id, id)).run()
 }
 
@@ -1381,18 +1447,105 @@ export function deleteComment(id: string): void {
   db().delete(issueComments).where(eq(issueComments.id, id)).run()
 }
 
-export function listRelations(issueId: string): IssueRelation[] {
+export type IssueRelationCounterpart = {
+  id: string
+  workspaceId: string
+  number: number
+  title: string
+  statusId: string | null
+  priority: string
+}
+
+export type IssueRelationView = IssueRelation & {
+  /** Orientation of the edge relative to the issue the relations were listed for. */
+  direction: 'outgoing' | 'incoming'
+  /** The issue on the other end of the edge, resolved across workspaces. */
+  counterpart: IssueRelationCounterpart | null
+}
+
+export function listRelations(issueId: string): IssueRelationView[] {
   getIssueRow(issueId)
-  return db()
+  const rows = db()
     .select()
     .from(issueRelations)
     .where(or(eq(issueRelations.sourceIssueId, issueId), eq(issueRelations.targetIssueId, issueId)))
     .all()
+
+  const counterpartIds = [
+    ...new Set(
+      rows.map(row => (row.sourceIssueId === issueId ? row.targetIssueId : row.sourceIssueId)),
+    ),
+  ]
+
+  const counterpartRows = counterpartIds.length > 0
+    ? db()
+        .select({
+          id: issues.id,
+          workspaceId: issues.workspaceId,
+          number: issues.number,
+          title: issues.title,
+          statusId: issues.statusId,
+          priority: issues.priority,
+        })
+        .from(issues)
+        .where(inArray(issues.id, counterpartIds))
+        .all()
+    : []
+  const counterpartsById = new Map(counterpartRows.map(row => [row.id, row]))
+
+  return rows.map((row) => {
+    const outgoing = row.sourceIssueId === issueId
+    const counterpartId = outgoing ? row.targetIssueId : row.sourceIssueId
+    return {
+      ...row,
+      direction: outgoing ? 'outgoing' : 'incoming',
+      counterpart: counterpartsById.get(counterpartId) ?? null,
+    }
+  })
 }
 
 export function createRelation(input: { sourceIssueId: string, targetIssueId: string, type: 'blocks' | 'duplicates' | 'relates_to' }): IssueRelation {
+  if (input.sourceIssueId === input.targetIssueId) {
+    throw new AppError({
+      code: 'issue_relation_self_reference',
+      status: 400,
+      message: 'An issue cannot be related to itself',
+      details: { issueId: input.sourceIssueId },
+    })
+  }
+
   getIssueRow(input.sourceIssueId)
   getIssueRow(input.targetIssueId)
+
+  // `relates_to` is symmetric: A relates_to B and B relates_to A are the same edge.
+  // Directed types keep their orientation, but re-adding the same edge is a no-op.
+  const duplicate = db()
+    .select()
+    .from(issueRelations)
+    .where(and(
+      eq(issueRelations.type, input.type),
+      input.type === 'relates_to'
+        ? or(
+            and(
+              eq(issueRelations.sourceIssueId, input.sourceIssueId),
+              eq(issueRelations.targetIssueId, input.targetIssueId),
+            ),
+            and(
+              eq(issueRelations.sourceIssueId, input.targetIssueId),
+              eq(issueRelations.targetIssueId, input.sourceIssueId),
+            ),
+          )
+        : and(
+            eq(issueRelations.sourceIssueId, input.sourceIssueId),
+            eq(issueRelations.targetIssueId, input.targetIssueId),
+          ),
+    ))
+    .get()
+
+  if (duplicate) {
+    return duplicate
+  }
+
   return db().insert(issueRelations).values({
     id: randomUUID(),
     sourceIssueId: input.sourceIssueId,

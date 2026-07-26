@@ -1,23 +1,31 @@
 import { PointerActivationConstraints, PointerSensor } from '@dnd-kit/dom'
-import type { DragEndEvent } from '@dnd-kit/react'
+import { move } from '@dnd-kit/helpers'
+import type { DragEndEvent, DragOverEvent, DragStartEvent } from '@dnd-kit/react'
 import { DragDropProvider, DragOverlay } from '@dnd-kit/react'
-import { isSortable } from '@dnd-kit/react/sortable'
-import { m } from 'motion/react'
-import { useTranslation } from 'react-i18next'
+import { useCallback, useMemo, useRef, useState } from 'react'
 
 import type { KanbanBoardIssue, KanbanMilestone, KanbanStatus } from '~/features/kanban/types'
 
 import type { KanbanCardRuntimeData } from './kanban-card'
 import { KanbanCardPreview } from './kanban-card'
 import { KanbanColumn } from './kanban-column'
+import type { GroupedKanbanIssues } from './kanban-grouping'
 import type { IssueSelectionMode } from './kanban-selection'
 import type { ParentIssueRef } from './shared/parent-issue-ref'
-import { StatusCategorySchema } from './shared/status-icon'
-import type { ViewConfig } from './use-view-config'
+import type { ViewConfig } from './use-board-view'
+
+/** Where a card came to rest: its destination group and its index within it. */
+export interface KanbanDropResult {
+  issueId: string
+  fromGroupId: string
+  toGroupId: string
+  /** Issue ids of the destination group, in final display order. */
+  orderedIds: string[]
+}
 
 interface BoardProps {
   workspaceId: string
-  issues: KanbanBoardIssue[]
+  grouped: GroupedKanbanIssues
   statuses: KanbanStatus[]
   milestones: KanbanMilestone[]
   parentIssueRefs: Map<string, ParentIssueRef>
@@ -25,22 +33,18 @@ interface BoardProps {
   onIssueClick: (id: string) => void
   onIssueSelectionGesture?: (id: string, mode: IssueSelectionMode) => void
   onIssueHover?: (id: string | null) => void
-  onMoveIssue: (issueId: string, targetGroupId: string) => void
+  onIssueDrop: (result: KanbanDropResult) => void
   onCreateIssue: (groupId: string) => void
   highlightedIssueId?: string | null
   selectedIssueIds?: Set<string>
   runtimeData?: KanbanCardRuntimeData
 }
 
-interface GroupDef {
-  id: string
-  name: string
-  category?: 'triage' | 'backlog' | 'unstarted' | 'started' | 'completed' | 'canceled'
-}
+type IssuesByGroup = Record<string, KanbanBoardIssue[]>
 
-export function KanbanBoard({
+export function KanbanBoardSurface({
   workspaceId,
-  issues,
+  grouped,
   statuses,
   milestones,
   parentIssueRefs,
@@ -48,105 +52,87 @@ export function KanbanBoard({
   onIssueClick,
   onIssueSelectionGesture,
   onIssueHover,
-  onMoveIssue,
+  onIssueDrop,
   onCreateIssue,
   highlightedIssueId,
   selectedIssueIds,
   runtimeData,
 }: BoardProps) {
-  const { t } = useTranslation('kanban')
-  const groups = (() => {
-    if (config.groupBy === 'status') {
-      return statuses.map(s => ({
-        id: s.id,
-        name: s.name,
-        category: StatusCategorySchema.parse(s.category),
-      }))
-    }
-    if (config.groupBy === 'priority') {
-      return [
-        { id: 'urgent', name: t('priority.urgent') },
-        { id: 'high', name: t('priority.high') },
-        { id: 'medium', name: t('priority.medium') },
-        { id: 'low', name: t('priority.low') },
-        { id: 'none', name: t('priority.none') },
-      ]
-    }
-    if (config.groupBy === 'milestone') {
-      const ms: GroupDef[] = milestones.map(m => ({ id: m.id, name: m.title }))
-      ms.push({ id: '__none__', name: t('noMilestone') })
-      return ms
-    }
-    return statuses.map(s => ({
-      id: s.id,
-      name: s.name,
-      category: StatusCategorySchema.parse(s.category),
-    }))
-  })()
+  const { groups } = grouped
 
-  const groupedIssues = (() => {
-    const map: Record<string, KanbanBoardIssue[]> = {}
-    for (const g of groups) {
-      map[g.id] = []
+  const serverColumns = useMemo<IssuesByGroup>(() => {
+    const columns: IssuesByGroup = {}
+    for (const group of groups) {
+      columns[group.id] = grouped.issuesByGroup.get(group.id) ?? []
     }
+    return columns
+  }, [groups, grouped.issuesByGroup])
 
-    for (const issue of issues) {
-      let groupId: string
-      if (config.groupBy === 'status') {
-        groupId = issue.statusId ?? ''
-      }
- else if (config.groupBy === 'priority') {
-        groupId = issue.priority
-      }
- else if (config.groupBy === 'milestone') {
-        groupId = issue.milestoneId ?? '__none__'
-      }
- else {
-        groupId = issue.statusId ?? ''
-      }
-      if (!map[groupId]) {
-        map[groupId] = []
-      }
-      map[groupId].push(issue)
-    }
-    return map
-  })()
+  /**
+   * Card positions while a drag is in flight.
+   *
+   * dnd-kit reorders the DOM optimistically as you drag. If the board kept
+   * rendering straight from server data, that DOM would diverge from React's
+   * tree — the dragged card ends up parented in one column and reconciled from
+   * another, which is what produced duplicate cards that no longer responded to
+   * a second drag. Owning the order locally keeps both views on one list, and
+   * dropping back to `null` on settle hands authority back to the server.
+   */
+  const [dragColumns, setDragColumns] = useState<IssuesByGroup | null>(null)
+  const columns = dragColumns ?? serverColumns
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  // Read inside handlers without making them a drag-invalidating dependency.
+  const columnsRef = useRef(columns)
+  columnsRef.current = columns
+  const sourceGroupRef = useRef<string | null>(null)
+
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    const issueId = String(event.operation.source?.id ?? '')
+    const current = columnsRef.current
+    sourceGroupRef.current
+      = Object.keys(current).find(groupId => current[groupId].some(issue => issue.id === issueId))
+        ?? null
+    setDragColumns(current)
+  }, [])
+
+  const handleDragOver = useCallback((event: DragOverEvent) => {
+    // `move` resolves the pointer against the sortable registry and returns the
+    // list as it should look right now, so the gap opens under the cursor
+    // instead of only at drop time.
+    setDragColumns(current => move(current ?? columnsRef.current, event))
+  }, [])
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { operation, canceled } = event
-    if (canceled) {
-      return
-    }
-    const { source, target } = operation
-    if (!source || !target) {
-      return
-    }
-    const issueId = String(source.id)
-    const sortableGroup = isSortable(source)
-      ? source.sortable.group
-      : undefined
-    const sortableGroupId = sortableGroup === undefined ? undefined : String(sortableGroup)
-    const targetId = String(target.id)
-    const targetGroupId = sortableGroupId && groupIds.has(sortableGroupId)
-      ? sortableGroupId
-      : groupIds.has(targetId)
-        ? targetId
-        : issueGroupIds.get(targetId)
-    if (targetGroupId && issueGroupIds.get(issueId) !== targetGroupId) {
-      onMoveIssue(issueId, targetGroupId)
-    }
-  }
+    const issueId = String(operation.source?.id ?? '')
+    const fromGroupId = sourceGroupRef.current
+    sourceGroupRef.current = null
 
-  const visibleGroups = config.showEmptyGroups
-    ? groups
-    : groups.filter(g => (groupedIssues[g.id]?.length ?? 0) > 0)
-  const groupIds = new Set(groups.map(group => group.id))
-  const issueGroupIds = new Map<string, string>()
-  for (const [groupId, groupIssues] of Object.entries(groupedIssues)) {
-    for (const issue of groupIssues) {
-      issueGroupIds.set(issue.id, groupId)
+    if (canceled || !issueId || !fromGroupId) {
+      setDragColumns(null)
+      return
     }
-  }
+
+    const settled = move(columnsRef.current, event)
+    const toGroupId = Object.keys(settled)
+      .find(groupId => settled[groupId].some(issue => issue.id === issueId))
+
+    if (!toGroupId) {
+      setDragColumns(null)
+      return
+    }
+
+    // Hold the optimistic layout until the mutation writes it into the cache;
+    // clearing here would flash the card back to its old slot for a frame.
+    setDragColumns(settled)
+
+    onIssueDrop({
+      issueId,
+      fromGroupId,
+      toGroupId,
+      orderedIds: settled[toGroupId].map(issue => issue.id),
+    })
+  }, [onIssueDrop])
 
   return (
     <DragDropProvider
@@ -156,17 +142,17 @@ export function KanbanBoard({
           activationConstraints: () => [new PointerActivationConstraints.Distance({ value: 5 })],
         }),
       ]}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex-1 flex gap-3 overflow-x-auto px-4 py-2" data-testid="kanban-board">
-        {visibleGroups.map(group => (
+      <div className="flex flex-1 gap-2.5 overflow-x-auto px-3 py-2.5" data-testid="kanban-board">
+        {groups.map(group => (
           <KanbanColumn
             key={group.id}
             workspaceId={workspaceId}
-            groupId={group.id}
-            groupName={group.name}
-            category={group.category}
-            issues={groupedIssues[group.id] ?? []}
+            group={group}
+            issues={columns[group.id] ?? []}
             statuses={statuses}
             milestones={milestones}
             parentIssueRefs={parentIssueRefs}
@@ -185,17 +171,13 @@ export function KanbanBoard({
       <DragOverlay>
         {(source) => {
           const issue = source.data?.issue as KanbanBoardIssue | undefined
-          if (!issue) { return null }
+          if (!issue) {
+            return null
+          }
           return (
-            <m.div
-              initial={{ scale: 1 }}
-              animate={{ scale: 1.02 }}
-              transition={{ type: 'spring', stiffness: 500, damping: 35, mass: 0.8 }}
-              className="w-72"
-              style={{
-                boxShadow: 'var(--shadow-md)',
-              }}
-            >
+            // Width matches the column's content box exactly (w-80 minus px-2),
+            // so the card does not resize as it leaves the list.
+            <div className="w-[304px] rotate-[-1deg] scale-[1.02] transition-transform duration-150 ease-[cubic-bezier(0.22,1,0.36,1)]">
               <KanbanCardPreview
                 issue={issue}
                 index={0}
@@ -207,7 +189,7 @@ export function KanbanBoard({
                 selected={selectedIssueIds?.has(issue.id)}
                 runtimeData={runtimeData}
               />
-            </m.div>
+            </div>
           )
         }}
       </DragOverlay>

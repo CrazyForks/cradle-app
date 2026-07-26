@@ -16,7 +16,6 @@ export interface KanbanAttentionSnapshot {
   selectedIssueIds: string[]
   selectedIssues: KanbanContextIssue[]
   openIssue: KanbanContextIssue | null
-  peekIssue: KanbanContextIssue | null
   focusedIssue: KanbanContextIssue | null
   hoveredIssue: KanbanContextIssue | null
   searchQuery: string
@@ -43,9 +42,6 @@ function createKanbanAttentionItem(snapshot: KanbanAttentionSnapshot, now: numbe
   if (snapshot.openIssue) {
     activeParts.push(`open issue: ${snapshot.openIssue.label} ${snapshot.openIssue.title}`)
   }
-  if (snapshot.peekIssue) {
-    activeParts.push(`peek issue: ${snapshot.peekIssue.label} ${snapshot.peekIssue.title}`)
-  }
   if (snapshot.focusedIssue) {
     activeParts.push(`focused issue: ${snapshot.focusedIssue.label} ${snapshot.focusedIssue.title}`)
   }
@@ -71,7 +67,6 @@ function createKanbanAttentionItem(snapshot: KanbanAttentionSnapshot, now: numbe
 
   const references = [
     snapshot.openIssue,
-    snapshot.peekIssue,
     snapshot.focusedIssue,
     snapshot.hoveredIssue,
     ...snapshot.selectedIssues,

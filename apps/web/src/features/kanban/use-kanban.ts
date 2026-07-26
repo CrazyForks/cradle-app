@@ -39,6 +39,7 @@ import {
   postIssuesByIdDelegation,
   postIssuesMilestones,
   postIssuesRelations,
+  postIssuesReorder,
   postIssuesStatuses,
   postIssuesStatusesReorder,
   postKanbanBoards,
@@ -394,6 +395,17 @@ const KanbanIssueRelationSchema = z.object({
   targetIssueId: z.string(),
   type: z.enum(['blocks', 'duplicates', 'relates_to']),
   createdAt: z.number(),
+  direction: z.enum(['outgoing', 'incoming']),
+  counterpart: z
+    .object({
+      id: z.string(),
+      workspaceId: z.string(),
+      number: z.number(),
+      title: z.string(),
+      statusId: z.string().nullable(),
+      priority: z.enum(['none', 'low', 'medium', 'high', 'urgent']),
+    })
+    .nullable(),
 })
 const KanbanIssueRelationListSchema = z.array(KanbanIssueRelationSchema).default([])
 
@@ -812,6 +824,91 @@ export function useMoveIssue() {
       qc.invalidateQueries({ queryKey: kanbanKeys.issue(vars.id) })
       qc.invalidateQueries({ queryKey: kanbanKeys.activity(vars.id) })
       qc.invalidateQueries({ queryKey: kanbanKeys.fieldChanges(vars.id) })
+    },
+  })
+}
+
+export interface ReorderIssuesInput {
+  workspaceId: string
+  /** Full issue order for the destination group, in display order. */
+  orderedIds: string[]
+  /** Issues that changed group, plus the field patch that expresses the move. */
+  patch?: {
+    issueIds: string[]
+    fields: KanbanGroupFieldPatch
+  }
+}
+
+export type KanbanGroupFieldPatch = Partial<{
+  priority: KanbanIssue['priority']
+  milestoneId: string | null
+  statusId: string | null
+  assigneeKind: string | null
+  assigneeId: string | null
+}>
+
+/**
+ * Persist a drag result.
+ *
+ * The cache is rewritten before the request leaves so the card stays exactly
+ * where it was dropped. Without this the row snaps back to its origin and
+ * re-lands once the refetch resolves, which reads as a broken drop.
+ */
+export function useReorderIssues() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (vars: ReorderIssuesInput) => {
+      const { data } = await postIssuesReorder({
+        body: {
+          workspaceId: vars.workspaceId,
+          orderedIds: vars.orderedIds,
+          patch: vars.patch,
+        },
+      })
+      return z.array(KanbanIssueSchema).parse(data) satisfies KanbanIssue[]
+    },
+    onMutate: async (vars) => {
+      await qc.cancelQueries({ queryKey: ['kanban', 'issues'] })
+      const snapshot = qc.getQueriesData<KanbanIssue[]>({ queryKey: ['kanban', 'issues'] })
+
+      const orderById = new Map(vars.orderedIds.map((id, index) => [id, (index + 1) * 1024]))
+      const movedIds = new Set(vars.patch?.issueIds ?? [])
+
+      for (const [key] of snapshot) {
+        qc.setQueryData<KanbanIssue[]>(key, (current) => {
+          if (!current) {
+            return current
+          }
+          return current.map((issue) => {
+            const order = orderById.get(issue.id)
+            if (order === undefined && !movedIds.has(issue.id)) {
+              return issue
+            }
+            return {
+              ...issue,
+              ...(order === undefined ? {} : { order }),
+              ...(movedIds.has(issue.id) ? vars.patch?.fields : {}),
+            }
+          })
+        })
+      }
+
+      return { snapshot }
+    },
+    onError: (_error, _vars, context) => {
+      // Restore every list we touched; a partial rollback would leave the board
+      // showing a position the server never accepted.
+      for (const [key, data] of context?.snapshot ?? []) {
+        qc.setQueryData(key, data)
+      }
+    },
+    onSettled: (_data, _error, vars) => {
+      qc.invalidateQueries({ queryKey: ['kanban', 'issues'] })
+      for (const id of vars.patch?.issueIds ?? []) {
+        qc.invalidateQueries({ queryKey: kanbanKeys.issue(id) })
+        qc.invalidateQueries({ queryKey: kanbanKeys.activity(id) })
+        qc.invalidateQueries({ queryKey: kanbanKeys.fieldChanges(id) })
+      }
     },
   })
 }

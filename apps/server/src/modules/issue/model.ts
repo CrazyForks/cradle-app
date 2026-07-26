@@ -199,6 +199,23 @@ export const IssueModel = {
     createdAt: t.Number(),
   }),
 
+  relationView: t.Object({
+    id: t.String(),
+    sourceIssueId: t.String(),
+    targetIssueId: t.String(),
+    type: t.Union([t.Literal('blocks'), t.Literal('duplicates'), t.Literal('relates_to')]),
+    createdAt: t.Number(),
+    direction: t.Union([t.Literal('outgoing'), t.Literal('incoming')]),
+    counterpart: t.Nullable(t.Object({
+      id: t.String(),
+      workspaceId: t.String(),
+      number: t.Number(),
+      title: t.String(),
+      statusId: t.Nullable(t.String()),
+      priority: priorityEnum,
+    })),
+  }),
+
   fieldChange: t.Object({
     id: t.String(),
     issueId: t.String(),
@@ -246,6 +263,23 @@ export const IssueModel = {
   reorderStatusesBody: t.Object({
     workspaceId: t.String({ minLength: 1 }),
     orderedIds: t.Array(t.String()),
+  }),
+
+  reorderIssuesBody: t.Object({
+    workspaceId: t.String({ minLength: 1 }),
+    /** Full issue order for the affected group, in display order. */
+    orderedIds: t.Array(t.String()),
+    /** Field patch applied to issues that changed group in this drop. */
+    patch: t.Optional(t.Object({
+      issueIds: t.Array(t.String()),
+      fields: t.Object({
+        priority: t.Optional(priorityEnum),
+        milestoneId: t.Optional(t.Nullable(t.String())),
+        statusId: t.Optional(t.Nullable(t.String())),
+        assigneeKind: t.Optional(t.Nullable(t.String())),
+        assigneeId: t.Optional(t.Nullable(t.String())),
+      }),
+    })),
   }),
 
   createIssueBody: t.Object({

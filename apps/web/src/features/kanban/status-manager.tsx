@@ -12,7 +12,7 @@ import { cn } from '~/lib/cn'
 
 import { StatusIcon } from './shared/status-icon'
 import { useCreateStatus, useDeleteStatus, useReorderStatuses, useStatuses, useUpdateStatus } from './use-kanban'
-import type { StatusCategory } from './use-view-config'
+import type { StatusCategory } from './use-board-view'
 
 interface StatusManagerProps {
   workspaceId: string

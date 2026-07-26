@@ -26,6 +26,7 @@ import type { KanbanIssue, KanbanStatus } from '~/features/kanban/types'
 import { useWorkspaces } from '~/features/workspace/use-workspace'
 import { cn } from '~/lib/cn'
 
+import type { KanbanGroupAssignPatch } from './kanban-grouping'
 import { AssigneeAvatar } from './shared/assignee-avatar'
 import { priorityOptions } from './shared/issue-metadata'
 import { LabelChip } from './shared/label-chip'
@@ -72,18 +73,25 @@ function formatIssueDate(value: Date): string {
 interface CreateIssueDialogProps {
   workspaceId: string
   issues: KanbanIssue[]
-  defaultStatusId?: string
+  /**
+   * Seed values for the field the originating column represents. A priority
+   * column must seed `priority`, not `statusId` — the old prop only understood
+   * status, so creating from any other grouping silently ignored the column.
+   */
+  defaults?: KanbanGroupAssignPatch | null
   open: boolean
   onClose: () => void
 }
 
-export function CreateIssueDialog({ workspaceId, issues, defaultStatusId, open, onClose }: CreateIssueDialogProps) {
+export function CreateIssueDialog({ workspaceId, issues, defaults, open, onClose }: CreateIssueDialogProps) {
   const { t } = useTranslation('kanban')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState('none')
-  const [statusId, setStatusId] = useState(defaultStatusId ?? '')
+  const [statusId, setStatusId] = useState('')
   const [assigneeId, setAssigneeId] = useState('')
+  const [assigneeKind, setAssigneeKind] = useState<string | null>(null)
+  const [milestoneId, setMilestoneId] = useState<string | null>(null)
   const [labels, setLabels] = useState<string[]>([])
   const [dueDate, setDueDate] = useState<number | null>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
@@ -98,12 +106,24 @@ export function CreateIssueDialog({ workspaceId, issues, defaultStatusId, open, 
     if (!open) {
       return
     }
-    if (defaultStatusId) {
-      setStatusId(defaultStatusId)
+    if (defaults) {
+      if ('statusId' in defaults) {
+        setStatusId(defaults.statusId)
+      }
+      if ('priority' in defaults) {
+        setPriority(defaults.priority)
+      }
+      if ('milestoneId' in defaults) {
+        setMilestoneId(defaults.milestoneId)
+      }
+      if ('assigneeId' in defaults) {
+        setAssigneeKind(defaults.assigneeKind)
+        setAssigneeId(defaults.assigneeId ?? '')
+      }
     }
     const timer = setTimeout(() => titleInputRef.current?.focus(), 80)
     return () => clearTimeout(timer)
-  }, [open, defaultStatusId])
+  }, [open, defaults])
 
   const handleSubmit = () => {
     if (!title.trim()) {
@@ -115,7 +135,8 @@ export function CreateIssueDialog({ workspaceId, issues, defaultStatusId, open, 
       description: description.trim() || null,
       priority: priority as IssuePriority,
       statusId: statusId || undefined,
-      assigneeKind: assigneeId ? 'user' : null,
+      milestoneId,
+      assigneeKind: assigneeId ? (assigneeKind ?? 'user') : null,
       assigneeId: assigneeId || null,
       dueDate,
       labels,
@@ -126,6 +147,8 @@ export function CreateIssueDialog({ workspaceId, issues, defaultStatusId, open, 
         setPriority('none')
         setStatusId('')
         setAssigneeId('')
+        setAssigneeKind(null)
+        setMilestoneId(null)
         setLabels([])
         setDueDate(null)
         onClose()

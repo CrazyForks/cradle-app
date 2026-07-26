@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { kanbanCategoryColors, StatusIcon as UIStatusIcon } from '~/components/ui/status-tag'
 
-import type { StatusCategory } from '../use-view-config'
+import type { StatusCategory } from '../use-board-view'
 
 export const StatusCategorySchema = z.union([
   z.enum(['triage', 'backlog', 'unstarted', 'started', 'completed', 'canceled']),

@@ -7,7 +7,7 @@ import type { KanbanIssue } from '~/features/kanban/types'
 import { KanbanCard } from './kanban-card'
 import { KanbanListRow } from './kanban-list-row'
 import type { ParentIssueRef } from './shared/parent-issue-ref'
-import type { ViewConfig } from './use-view-config'
+import type { ViewConfig } from './use-board-view'
 
 vi.mock('@dnd-kit/react/sortable', () => ({
   useSortable: () => ({

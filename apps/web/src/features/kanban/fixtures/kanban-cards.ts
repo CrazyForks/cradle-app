@@ -1,6 +1,6 @@
 import type { KanbanCardRuntimeData } from '../kanban-card-view'
 import type { KanbanBoardIssue, KanbanStatus } from '../types'
-import type { ViewConfig } from '../use-view-config'
+import type { ViewConfig } from '../use-board-view'
 
 export const kanbanStatuses: KanbanStatus[] = [
   { id: 'triage', workspaceId: 'cradle', name: 'Triage', color: '#a1a1aa', category: 'triage', order: 0, createdAt: 1 },

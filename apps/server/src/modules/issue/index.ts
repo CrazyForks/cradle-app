@@ -121,6 +121,19 @@ export const issue = new Elysia({
     query: IssueModel.listIssuesQuery,
     response: { 200: t.Array(IssueModel.issue) },
   })
+  .post('/reorder', ({ body, request }) => Issue.reorderIssues(
+    body.workspaceId,
+    body.orderedIds,
+    body.patch,
+    resolveActorContext(request),
+  ), {
+    detail: {
+      'summary': 'Reorder issues and apply a group change',
+      'x-cradle-cli': { command: ['issue', 'reorder'] },
+    },
+    body: IssueModel.reorderIssuesBody,
+    response: { 200: t.Array(IssueModel.issue) },
+  })
   .get('/:id', ({ params }) => Issue.getIssue(params.id), {
     detail: {
       'summary': 'Get issue',
@@ -265,7 +278,7 @@ export const issue = new Elysia({
       'x-cradle-cli': { command: ['issue', 'relation', 'list'] },
     },
     params: IssueModel.idParams,
-    response: { 200: t.Array(IssueModel.relation) },
+    response: { 200: t.Array(IssueModel.relationView) },
   })
   .post('/relations', ({ body }) => Issue.createRelation(body), {
     detail: {

@@ -2,7 +2,9 @@ import {
   CheckLine as CheckIcon,
   CircleDashLine as CircleDashedIcon,
   CloseLine as XIcon,
+  DeleteLine as TrashIcon,
   Flag2Line as FlagIcon,
+  Flag1Line as MilestoneIcon,
 } from '@mingcute/react'
 import { AnimatePresence, m } from 'motion/react'
 import { useTranslation } from 'react-i18next'
@@ -15,18 +17,20 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu'
-import type { KanbanBoardIssue, KanbanStatus } from '~/features/kanban/types'
+import type { KanbanBoardIssue, KanbanMilestone, KanbanStatus } from '~/features/kanban/types'
 import { isExternalKanbanIssue } from '~/features/kanban/types'
 
+import { UNGROUPED_ID } from './kanban-grouping'
 import { PriorityIcon } from './shared/priority-icon'
 import { StatusIcon } from './shared/status-icon'
 import type { IssuePriority } from './use-kanban'
-import { useBulkUpdateIssues, useMoveExternalIssue } from './use-kanban'
-import type { StatusCategory } from './use-view-config'
+import { useBulkUpdateIssues, useDeleteIssue, useMoveExternalIssue } from './use-kanban'
+import type { StatusCategory } from './use-board-view'
 
 interface KanbanSelectionBarProps {
   issues: KanbanBoardIssue[]
   statuses: KanbanStatus[]
+  milestones: KanbanMilestone[]
   onClear: () => void
 }
 
@@ -53,10 +57,11 @@ function statusCategory(status: KanbanStatus): StatusCategory {
   return status.category as StatusCategory
 }
 
-export function KanbanSelectionBar({ issues, statuses, onClear }: KanbanSelectionBarProps) {
+export function KanbanSelectionBar({ issues, statuses, milestones, onClear }: KanbanSelectionBarProps) {
   const { t } = useTranslation('kanban')
   const bulkUpdateIssues = useBulkUpdateIssues()
   const moveExternalIssue = useMoveExternalIssue()
+  const deleteIssue = useDeleteIssue()
   const nativeIssueIds: string[] = []
   const externalIssueIds: string[] = []
   for (const issue of issues) {
@@ -68,7 +73,8 @@ export function KanbanSelectionBar({ issues, statuses, onClear }: KanbanSelectio
     }
   }
   const isVisible = issues.length > 0
-  const isMutating = bulkUpdateIssues.isPending || moveExternalIssue.isPending
+  const isMutating = bulkUpdateIssues.isPending || moveExternalIssue.isPending || deleteIssue.isPending
+  // External items live in another tracker; only their status can be mirrored back.
   const canUpdateNativeFields = nativeIssueIds.length > 0
 
   const handleStatusChange = async (statusId: string) => {
@@ -92,6 +98,27 @@ export function KanbanSelectionBar({ issues, statuses, onClear }: KanbanSelectio
       { ids: nativeIssueIds, patch: { priority: priority as IssuePriority } },
       { onSuccess: onClear },
     )
+  }
+
+  const handleMilestoneChange = (milestoneId: string) => {
+    if (nativeIssueIds.length === 0) {
+      return
+    }
+    bulkUpdateIssues.mutate(
+      {
+        ids: nativeIssueIds,
+        patch: { milestoneId: milestoneId === UNGROUPED_ID ? null : milestoneId },
+      },
+      { onSuccess: onClear },
+    )
+  }
+
+  const handleDelete = async () => {
+    if (nativeIssueIds.length === 0) {
+      return
+    }
+    await Promise.all(nativeIssueIds.map(id => deleteIssue.mutateAsync(id)))
+    onClear()
   }
 
   return (
@@ -167,7 +194,48 @@ export function KanbanSelectionBar({ issues, statuses, onClear }: KanbanSelectio
               </DropdownMenuContent>
             </DropdownMenu>
 
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={isMutating || !canUpdateNativeFields || milestones.length === 0}
+                >
+                  <MilestoneIcon className="size-4" aria-hidden="true" />
+                  {t('property.milestone')}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="center" className="w-56">
+                <DropdownMenuRadioGroup onValueChange={handleMilestoneChange}>
+                  {milestones.map(milestone => (
+                    <DropdownMenuRadioItem
+                      key={milestone.id}
+                      value={milestone.id}
+                      disabled={isMutating}
+                    >
+                      <span className="truncate">{milestone.title}</span>
+                    </DropdownMenuRadioItem>
+                  ))}
+                  <DropdownMenuRadioItem value={UNGROUPED_ID} disabled={isMutating}>
+                    {t('milestone.none')}
+                  </DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             <span className="mx-1 h-5 w-px bg-border" aria-hidden="true" />
+
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t('selection.deleteAria')}
+              disabled={isMutating || !canUpdateNativeFields}
+              onClick={() => void handleDelete()}
+            >
+              <TrashIcon className="size-4 text-destructive" aria-hidden="true" />
+            </Button>
 
             <Button
               type="button"

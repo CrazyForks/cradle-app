@@ -4,7 +4,7 @@ import { m } from 'motion/react'
 import { cn } from '~/lib/cn'
 
 import { StatusIcon } from './shared/status-icon'
-import type { StatusCategory } from './use-view-config'
+import type { StatusCategory } from './use-board-view'
 
 interface GroupHeaderProps {
   name: string

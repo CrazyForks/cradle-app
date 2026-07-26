@@ -226,6 +226,7 @@ export function IssueDetail({
             statuses={statuses}
             milestones={milestones}
             onUpdate={handleUpdate}
+            onOpenIssue={onOpenIssue}
             readOnly={readOnly}
           />
         </div>

@@ -74,8 +74,7 @@ export function KanbanBoardRouteContent({
 
   return (
     <KanbanView
-      boardId={boardId}
-      workspaceId={board.workspaceId}
+      board={board}
       selectedIssueId={issue}
       initialMilestoneId={milestoneId}
       onSelectIssue={handleSelectIssue}

@@ -50,7 +50,7 @@ import { PriorityIcon } from '../shared/priority-icon'
 import { StatusIcon } from '../shared/status-icon'
 import type { IssuePriority } from '../use-kanban'
 import { useDelegateIssue, useIssueAgentSessions, useIssueLinkedSessions, useIssueSessionGroups, usePatchIssueLabels, useRerunIssueAgentSession, useUndelegateIssue } from '../use-kanban'
-import type { StatusCategory } from '../use-view-config'
+import type { StatusCategory } from '../use-board-view'
 import { RelationManager } from './relation-manager'
 
 const priorityLabelKeys: Record<
@@ -86,6 +86,7 @@ interface PropertiesSidebarProps {
   statuses: KanbanStatus[]
   milestones: KanbanMilestone[]
   onUpdate: (patch: IssuePatch) => void
+  onOpenIssue?: (issueId: string) => void
   readOnly?: boolean
 }
 
@@ -95,6 +96,7 @@ export const PropertiesSidebar = ({
   statuses,
   milestones,
   onUpdate,
+  onOpenIssue,
   readOnly = false,
 }: PropertiesSidebarProps) => {
   const { t } = useTranslation('kanban')
@@ -281,7 +283,12 @@ export const PropertiesSidebar = ({
       <div className="my-3" />
 
       <div className="bg-card rounded-lg px-3 py-2 shadow-xs text-sm font-medium text-muted-foreground border border-border">
-        <RelationManager issueId={issue.id} workspaceId={issue.workspaceId} readOnly={readOnly} />
+        <RelationManager
+          issueId={issue.id}
+          workspaceId={issue.workspaceId}
+          readOnly={readOnly}
+          onOpenIssue={onOpenIssue}
+        />
       </div>
     </div>
   )

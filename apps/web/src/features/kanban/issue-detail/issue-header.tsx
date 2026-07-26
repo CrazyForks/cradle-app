@@ -11,7 +11,7 @@ import { Menu, MenuItem, MenuPopup, MenuTrigger } from '~/components/ui/menu'
 import type { KanbanIssue, KanbanStatus } from '~/features/kanban/types'
 
 import { StatusIcon } from '../shared/status-icon'
-import type { StatusCategory } from '../use-view-config'
+import type { StatusCategory } from '../use-board-view'
 
 interface IssueHeaderProps {
   issue: KanbanIssue
