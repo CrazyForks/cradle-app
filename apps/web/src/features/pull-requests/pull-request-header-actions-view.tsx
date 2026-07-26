@@ -129,14 +129,14 @@ export function PullRequestHeaderActionsView({
   const mergeButton = (
     <Button
       type="button"
-      size="sm"
-      className="h-8 gap-1.5 rounded-r-none! px-3 text-xs"
+      size="xs"
+      className="gap-1.5 rounded-r-none! px-2.5"
       disabled={mergeDisabled}
       onClick={openMergeDialog}
     >
       {pending.merge
-        ? <RefreshIcon className="size-3.5 animate-spin" aria-hidden="true" />
-        : <GitMergeIcon className="size-3.5" aria-hidden="true" />}
+        ? <RefreshIcon className="size-3 animate-spin" aria-hidden="true" />
+        : <GitMergeIcon className="size-3" aria-hidden="true" />}
       {t(MERGE_METHOD_LABEL[mergeMethod])}
     </Button>
   )
@@ -147,8 +147,8 @@ export function PullRequestHeaderActionsView({
         <div className="flex flex-wrap items-center justify-end gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild disabled={pending.review}>
-              <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 px-3 text-xs">
-                <ApproveIcon className="size-3.5 text-muted-foreground" aria-hidden="true" />
+              <Button type="button" variant="outline" size="xs" className="gap-1.5">
+                <ApproveIcon className="size-3 text-muted-foreground" aria-hidden="true" />
                 {t('console.review.label')}
                 <ChevronDownIcon className="size-3 opacity-60" aria-hidden="true" />
               </Button>
@@ -189,8 +189,7 @@ export function PullRequestHeaderActionsView({
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
-                  className="h-8 px-3 text-xs"
+                  size="xs"
                   disabled={pending.readyDraft}
                   onClick={onToggleReadyDraft}
                 >
@@ -215,11 +214,11 @@ export function PullRequestHeaderActionsView({
               <DropdownMenuTrigger asChild disabled={mergeDisabled}>
                 <Button
                   type="button"
-                  size="sm"
-                  className="h-8 px-1.5"
+                  size="xs"
+                  className="px-1.5"
                   aria-label={t('console.merge.label')}
                 >
-                  <ChevronDownIcon className="size-3.5 opacity-70" aria-hidden="true" />
+                  <ChevronDownIcon className="size-3 opacity-70" aria-hidden="true" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="min-w-44">

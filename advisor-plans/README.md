@@ -11,7 +11,7 @@ conditions, and update the status row when done.
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |---|---|---|---|---|---|
-| 001 | Build a deterministic Anthropic Messages and OpenAI Responses API simulator | P1 | L | — | TODO |
+| 001 | Build a deterministic Anthropic Messages and OpenAI Responses API simulator | P1 | L | — | IN PROGRESS |
 
 Status values: `TODO` | `IN PROGRESS` | `DONE` | `BLOCKED` (with a one-line
 reason) | `REJECTED` (with a one-line rationale).
@@ -45,3 +45,9 @@ reason) | `REJECTED` (with a one-line rationale).
 - **Treat every inferred stream ordering rule as provider compatibility**:
   rejected. Only official source-backed invariants are compatibility
   requirements; simulator-owned ordering constraints are tagged separately.
+- **Implement every event family reachable from the provider schemas**:
+  rejected as unnecessary for the simulator's first useful profile. Plan 001
+  explicitly includes ordinary text, reasoning, refusal, function/tool-call,
+  lifecycle, error, and disconnect flows; MCP, hosted search, citations,
+  image/audio, computer, shell, code execution/interpreter, custom tools, and
+  provider-hosted server-tool event families remain outside the allowlist.

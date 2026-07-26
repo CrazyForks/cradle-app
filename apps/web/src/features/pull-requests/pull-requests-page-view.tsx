@@ -19,11 +19,15 @@ import { Input } from '~/components/ui/input'
 
 import type { PullRequestViewer } from './api/pull-requests'
 import { PullRequestFilterTabsView } from './pull-request-filter-tabs-view'
-import type { PullRequestFilter } from './pull-request-list-presenter'
+import { PullRequestListFilterMenuView } from './pull-request-list-filter-menu-view'
+import type { PullRequestFilter, PullRequestStateFilter } from './pull-request-list-presenter'
 import {
   groupPullRequestsByRecency,
+  listPullRequestRepositories,
   matchesPullRequestFilter,
+  matchesPullRequestRepository,
   matchesPullRequestSearch,
+  matchesPullRequestState,
 } from './pull-request-list-presenter'
 import { PullRequestListSkeletonView } from './pull-request-list-skeleton-view'
 import { PullRequestRecencyGroupView } from './pull-request-recency-group-view'
@@ -56,6 +60,8 @@ export function PullRequestsPageView({
 }: PullRequestsPageViewProps) {
   const { t, i18n } = useTranslation('pull-requests')
   const [filter, setFilter] = useState<PullRequestFilter>('all')
+  const [stateFilter, setStateFilter] = useState<PullRequestStateFilter>('all')
+  const [repository, setRepository] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const deferredSearch = useDeferredValue(search.trim().toLocaleLowerCase())
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -100,10 +106,13 @@ export function PullRequestsPageView({
   const visiblePullRequests = useMemo(
     () => entries.filter(
       item => matchesPullRequestFilter(item, filter)
+        && matchesPullRequestState(item, stateFilter)
+        && matchesPullRequestRepository(item, repository)
         && matchesPullRequestSearch(item, deferredSearch),
     ),
-    [deferredSearch, entries, filter],
+    [deferredSearch, entries, filter, repository, stateFilter],
   )
+  const repositories = useMemo(() => listPullRequestRepositories(entries), [entries])
   const groups = useMemo(
     () => groupPullRequestsByRecency(visiblePullRequests, now),
     [now, visiblePullRequests],
@@ -196,11 +205,19 @@ export function PullRequestsPageView({
         </div>
       </header>
 
-      <div className="flex shrink-0 items-center border-b border-border/60 px-2">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 px-2">
         <PullRequestFilterTabsView
           filter={filter}
           pullRequests={entries}
           onChange={setFilter}
+        />
+        <PullRequestListFilterMenuView
+          stateFilter={stateFilter}
+          repository={repository}
+          repositories={repositories}
+          pullRequests={entries}
+          onStateChange={setStateFilter}
+          onRepositoryChange={setRepository}
         />
       </div>
 

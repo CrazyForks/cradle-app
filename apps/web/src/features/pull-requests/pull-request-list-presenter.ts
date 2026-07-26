@@ -1,6 +1,8 @@
 import type { CradlePullRequest, PullRequestRole } from './use-pull-requests'
 
 export type PullRequestFilter = 'all' | PullRequestRole
+export type PullRequestStateFilter = 'all' | PullRequestState
+export type PullRequestState = 'open' | 'draft' | 'merged' | 'closed'
 export type PullRequestRecencyGroupId = 'today' | 'yesterday' | 'thisWeek' | 'earlier'
 
 export interface PullRequestRecencyGroup {
@@ -8,7 +10,20 @@ export interface PullRequestRecencyGroup {
   items: CradlePullRequest[]
 }
 
+export interface PullRequestRepositoryOption {
+  id: string
+  count: number
+  avatarUrl: string
+}
+
 export const PULL_REQUEST_FILTERS: PullRequestFilter[] = ['all', 'reviewing', 'authored']
+export const PULL_REQUEST_STATE_FILTERS: PullRequestStateFilter[] = [
+  'all',
+  'open',
+  'draft',
+  'merged',
+  'closed',
+]
 
 const RECENCY_GROUP_ORDER: PullRequestRecencyGroupId[] = [
   'today',
@@ -22,6 +37,55 @@ export function matchesPullRequestFilter(
   filter: PullRequestFilter,
 ): boolean {
   return filter === 'all' || item.role === filter
+}
+
+export function getPullRequestState(item: CradlePullRequest): PullRequestState {
+  const pullRequest = item.pullRequest
+  if (pullRequest.merged) {
+    return 'merged'
+  }
+  if (pullRequest.state === 'closed') {
+    return 'closed'
+  }
+  return pullRequest.isDraft ? 'draft' : 'open'
+}
+
+export function matchesPullRequestState(
+  item: CradlePullRequest,
+  filter: PullRequestStateFilter,
+): boolean {
+  return filter === 'all' || getPullRequestState(item) === filter
+}
+
+export function getPullRequestRepositoryId(item: CradlePullRequest): string {
+  return `${item.pullRequest.owner}/${item.pullRequest.repo}`
+}
+
+export function matchesPullRequestRepository(
+  item: CradlePullRequest,
+  repository: string | null,
+): boolean {
+  return repository === null || getPullRequestRepositoryId(item) === repository
+}
+
+export function listPullRequestRepositories(
+  items: CradlePullRequest[],
+): PullRequestRepositoryOption[] {
+  type RepositoryCount = { id: string, count: number, avatarUrl: string }
+  const counts = new Map<string, RepositoryCount>()
+  for (const item of items) {
+    const id = getPullRequestRepositoryId(item)
+    const avatarUrl = `https://github.com/${item.pullRequest.owner}.png?size=32`
+    const existing = counts.get(id)
+    if (existing) {
+      existing.count += 1
+    }
+    else {
+      counts.set(id, { id, count: 1, avatarUrl })
+    }
+  }
+  return Array.from(counts.values())
+    .sort((left, right) => right.count - left.count || left.id.localeCompare(right.id))
 }
 
 export function matchesPullRequestSearch(
