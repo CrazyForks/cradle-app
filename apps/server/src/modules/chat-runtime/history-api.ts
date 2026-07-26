@@ -14,11 +14,12 @@ import {
 } from './ui-message'
 
 const messageInsertOrder = sql<number>`messages.rowid`
-// Response-projection bound only: shell/history reads never fetch the durable
-// UIMessage payload. Full content remains available from the detail endpoint.
-const CHAT_HISTORY_SHELL_PREVIEW_MAX_CHARS = 2_000
+// Preview stays as a cheap text projection for CLI/list consumers; `message`
+// carries the full durable UIMessage snapshot so clients never need per-row
+// detail fetches to render a transcript.
+const CHAT_HISTORY_PREVIEW_MAX_CHARS = 2_000
 
-export interface ChatMessageShellRow {
+export interface ChatMessageRow {
   messageId: string
   role: 'user' | 'assistant'
   status: ChatMessageStatus
@@ -29,11 +30,12 @@ export interface ChatMessageShellRow {
   parentToolCallId: string | null
   taskId: string | null
   depth: number
+  message: ChatMessageDetail['message']
 }
 
-export interface ChatMessageShellSnapshot {
+export interface ChatMessageSnapshot {
   revision: number
-  rows: ChatMessageShellRow[]
+  rows: ChatMessageRow[]
   nextCursor: string | null
 }
 
@@ -111,7 +113,7 @@ export function listCompletedRuns(input: {
 export async function getMessageGroups(
   sessionId: string,
   input: ChatMessagePageInput = {},
-): Promise<ChatMessageShellRow[]> {
+): Promise<ChatMessageRow[]> {
   return (await getMessagePage(sessionId, input)).rows
 }
 
@@ -119,7 +121,7 @@ async function getMessagePage(
   sessionId: string,
   input: ChatMessagePageInput,
 ): Promise<{
-  rows: ChatMessageShellRow[]
+  rows: ChatMessageRow[]
   nextCursor: string | null
   revision: number
 }> {
@@ -135,7 +137,8 @@ async function getMessagePage(
       role: messages.role,
       status: messages.status,
       errorText: chatMessagePayloads.errorText,
-      preview: sql<string>`substr(${chatMessagePayloads.content}, 1, ${CHAT_HISTORY_SHELL_PREVIEW_MAX_CHARS + 1})`,
+      preview: sql<string>`substr(${chatMessagePayloads.content}, 1, ${CHAT_HISTORY_PREVIEW_MAX_CHARS + 1})`,
+      messageJson: chatMessagePayloads.messageJson,
       parentMessageId: messages.parentMessageId,
       parentToolCallId: messages.parentToolCallId,
       taskId: messages.taskId,
@@ -166,25 +169,54 @@ async function getMessagePage(
       role: row.role as 'user' | 'assistant',
       status: headerState.messageStatusById.get(row.messageId) ?? row.status as ChatMessageStatus,
       errorText: row.errorText ?? undefined,
-      preview: row.preview.slice(0, CHAT_HISTORY_SHELL_PREVIEW_MAX_CHARS),
-      previewTruncated: row.preview.length > CHAT_HISTORY_SHELL_PREVIEW_MAX_CHARS,
+      preview: row.preview.slice(0, CHAT_HISTORY_PREVIEW_MAX_CHARS),
+      previewTruncated: row.preview.length > CHAT_HISTORY_PREVIEW_MAX_CHARS,
       parentMessageId: row.parentMessageId,
       parentToolCallId: row.parentToolCallId,
       taskId: row.taskId,
       depth: row.depth,
+      message: parseStoredMessageSnapshot(
+        { id: row.messageId, messageJson: row.messageJson },
+        row.role as 'user' | 'assistant',
+      ),
     })),
   }
 }
 
-export async function getMessageShellSnapshot(
+export async function getMessageSnapshot(
   sessionId: string,
   input: ChatMessagePageInput = {},
-): Promise<ChatMessageShellSnapshot> {
+): Promise<ChatMessageSnapshot> {
   const page = await getMessagePage(sessionId, input)
   return {
     revision: page.revision,
     rows: page.rows,
     nextCursor: page.nextCursor,
+  }
+}
+
+export function toChatMessageRow(input: {
+  message: ChatMessageDetail['message']
+  status: ChatMessageStatus
+  errorText?: string | null
+  parentMessageId: string | null
+  parentToolCallId: string | null
+  taskId: string | null
+  depth: number
+  content: string
+}): ChatMessageRow {
+  return {
+    messageId: input.message.id,
+    role: input.message.role,
+    status: input.status,
+    errorText: input.errorText ?? undefined,
+    preview: input.content.slice(0, CHAT_HISTORY_PREVIEW_MAX_CHARS),
+    previewTruncated: input.content.length > CHAT_HISTORY_PREVIEW_MAX_CHARS,
+    parentMessageId: input.parentMessageId,
+    parentToolCallId: input.parentToolCallId,
+    taskId: input.taskId,
+    depth: input.depth,
+    message: input.message,
   }
 }
 

@@ -10,8 +10,9 @@ import { chatMessageHistoryInfiniteOptions } from '../api/messages'
 import { runtimeSessionStatusQueryKey } from '../commands/runtime-session-status-command'
 import { useRuntimeSessionStatus } from '../runtime/use-runtime-session-status'
 import { createChatSessionEventSource } from '../transport/chat-event-tail-transport'
-import { hydrateChatMessageShells } from './hydrate-chat-message-shells'
 import { openPassiveSessionStream } from './session-passive-stream'
+import type { SnapshotInfiniteData } from './session-snapshot-cache'
+import { applyMessageRowsPatchToSnapshot } from './session-snapshot-cache'
 import {
   deriveSessionPassiveStreamProjection,
   deriveSessionSnapshotProjection,
@@ -54,7 +55,6 @@ function applyProjectedMessages(
 export function useChatSessionDriver(chatSessionId: string | null, active = true): void {
   const controls = useChatSessionRuntimeControls(chatSessionId)
   const {
-    queryClient,
     scheduleSnapshotRefresh,
     refreshQueue,
   } = controls
@@ -116,15 +116,22 @@ export function useChatSessionDriver(chatSessionId: string | null, active = true
     }
   }, [snapshotRows])
 
+  const snapshotRevisionRef = useRef(snapshotRevision)
+  snapshotRevisionRef.current = snapshotRevision
+  const hasSnapshotRevision = snapshotRevision !== undefined
+
   useEffect(() => {
-    if (!driverEnabled || !chatSessionId || snapshotRevision === undefined) {
+    if (!driverEnabled || !chatSessionId || !hasSnapshotRevision) {
       return
     }
 
+    // Keyed on revision *availability*, not its value: the engine advances its
+    // own cursor per event, and event-carried row patches bump the cached
+    // revision — reconnecting the tail on every bump would defeat the point.
     const engine = new SessionSyncEngine({
       sessionId: chatSessionId,
       serverBaseUrl: getServerUrl(),
-      afterVersion: snapshotRevision,
+      afterVersion: snapshotRevisionRef.current ?? 0,
       eventSourceFactory: createChatSessionEventSource,
       passiveStreamFactory: request => openPassiveSessionStream({
         request,
@@ -141,6 +148,19 @@ export function useChatSessionDriver(chatSessionId: string | null, active = true
       callbacks: {
         onMessagesChanged: () => {
           controlsRef.current.scheduleSnapshotRefresh(0)
+        },
+        onMessageRows: (patch) => {
+          const queryKey = controlsRef.current.snapshotRowsQueryKey
+          if (!queryKey) {
+            return false
+          }
+          let applied = false
+          controlsRef.current.queryClient.setQueryData<SnapshotInfiniteData>(queryKey, (data) => {
+            const next = applyMessageRowsPatchToSnapshot(data, patch)
+            applied = next !== null
+            return next ?? data
+          })
+          return applied
         },
         onRuntimeStatusChanged: () => {
           void controlsRef.current.queryClient.invalidateQueries({
@@ -179,7 +199,7 @@ export function useChatSessionDriver(chatSessionId: string | null, active = true
   }, [
     chatSessionId,
     driverEnabled,
-    snapshotRevision,
+    hasSnapshotRevision,
   ])
 
   useEffect(() => {
@@ -194,7 +214,7 @@ export function useChatSessionDriver(chatSessionId: string | null, active = true
         console.warn('[useChatSession] failed to read stable message cache', error)
         return null
       })
-      if (cancelled || !cachedRows || authoritativeSnapshotObservedRef.current) {
+      if (cancelled || !cachedRows || generation !== hydrateGenerationRef.current || authoritativeSnapshotObservedRef.current) {
         return
       }
       const stableRows = readStableSnapshotRows(cachedRows.rows)
@@ -203,31 +223,13 @@ export function useChatSessionDriver(chatSessionId: string | null, active = true
       }
 
       const store = useChatStore.getState()
-      if (
-        authoritativeSnapshotObservedRef.current
-        || (store.messagesMap.get(chatSessionId)?.length ?? 0) > 0
-      ) {
-        return
-      }
-
-      const projection = deriveStableSessionSnapshotProjection(stableRows)
-      const messages = await hydrateChatMessageShells(
-        controlsRef.current.queryClient,
-        chatSessionId,
-        projection.messages,
-      )
-      if (
-        cancelled
-        || generation !== hydrateGenerationRef.current
-        || authoritativeSnapshotObservedRef.current
-        || (useChatStore.getState().messagesMap.get(chatSessionId)?.length ?? 0) > 0
-      ) {
+      if ((store.messagesMap.get(chatSessionId)?.length ?? 0) > 0) {
         return
       }
 
       applyProjectedMessages(
         chatSessionId,
-        { ...projection, messages },
+        deriveStableSessionSnapshotProjection(stableRows),
         delay => controlsRef.current.scheduleSnapshotRefresh(delay),
       )
     })()
@@ -254,8 +256,7 @@ export function useChatSessionDriver(chatSessionId: string | null, active = true
       return
     }
 
-    let cancelled = false
-    const generation = ++hydrateGenerationRef.current
+    hydrateGenerationRef.current += 1
     const runState = chatSelectors.sessionRunState(chatSessionId)(useChatStore.getState())
     const store = useChatStore.getState()
     const projection = deriveSessionSnapshotProjection({
@@ -270,37 +271,23 @@ export function useChatSessionDriver(chatSessionId: string | null, active = true
       return
     }
 
-    void (async () => {
-      const messages = await hydrateChatMessageShells(queryClient, chatSessionId, projection.messages)
-      if (cancelled || generation !== hydrateGenerationRef.current) {
-        return
+    // Snapshot rows already carry full message payloads — commit synchronously.
+    applyProjectedMessages(chatSessionId, projection, scheduleSnapshotRefresh)
+
+    const pendingPassiveStreamLeaseRelease = pendingPassiveStreamLeaseReleaseRef.current
+    if (
+      pendingPassiveStreamLeaseRelease
+      && !snapshotRowsQuery.isFetching
+      && snapshotRowsQuery.dataUpdatedAt > pendingPassiveStreamLeaseRelease.requestedDataUpdatedAt
+    ) {
+      pendingPassiveStreamLeaseReleaseRef.current = null
+      const state = useChatStore.getState()
+      if (state.streamLeaseMap.get(pendingPassiveStreamLeaseRelease.messageId)?.sessionId === chatSessionId) {
+        state.releaseStreamLease(pendingPassiveStreamLeaseRelease.messageId)
+        refreshQueue(QUEUE_DRAIN_SYNC_DELAY_MS)
       }
-
-      applyProjectedMessages(
-        chatSessionId,
-        { ...projection, messages },
-        scheduleSnapshotRefresh,
-      )
-
-      const pendingPassiveStreamLeaseRelease = pendingPassiveStreamLeaseReleaseRef.current
-      if (
-        pendingPassiveStreamLeaseRelease
-        && !snapshotRowsQuery.isFetching
-        && snapshotRowsQuery.dataUpdatedAt > pendingPassiveStreamLeaseRelease.requestedDataUpdatedAt
-      ) {
-        pendingPassiveStreamLeaseReleaseRef.current = null
-        const state = useChatStore.getState()
-        if (state.streamLeaseMap.get(pendingPassiveStreamLeaseRelease.messageId)?.sessionId === chatSessionId) {
-          state.releaseStreamLease(pendingPassiveStreamLeaseRelease.messageId)
-          refreshQueue(QUEUE_DRAIN_SYNC_DELAY_MS)
-        }
-      }
-    })()
-
-    return () => {
-      cancelled = true
     }
-  }, [chatSessionId, driverEnabled, queryClient, refreshQueue, runtimeActiveRunMessageId, runtimeIdle, runtimeStatusKnown, scheduleSnapshotRefresh, snapshotRows, snapshotRowsQuery.dataUpdatedAt, snapshotRowsQuery.isFetching])
+  }, [chatSessionId, driverEnabled, refreshQueue, runtimeActiveRunMessageId, runtimeIdle, runtimeStatusKnown, scheduleSnapshotRefresh, snapshotRows, snapshotRowsQuery.dataUpdatedAt, snapshotRowsQuery.isFetching])
 
   useEffect(() => {
     if (

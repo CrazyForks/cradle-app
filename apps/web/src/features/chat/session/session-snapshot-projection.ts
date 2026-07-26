@@ -5,7 +5,6 @@ import type { ChatRunState, PassiveRunStateInput } from '~/store/chat'
 import type { ChatSessionMessageRow } from './use-chat-session-types'
 import {
   derivePassiveStatus,
-  isChatMessageShell,
   isChatRunStateCancelling,
   isChatRunStateLocallyDriven,
   projectMainMessagesFromSnapshotRows,
@@ -75,9 +74,15 @@ export function deriveSessionSnapshotProjection(
     ? 'streaming'
     : derivePassiveStatus(input.rows)
 
+  // Snapshot rows carry full message payloads, so they are authoritative for
+  // settled messages. Only the actively-streaming message keeps its store copy:
+  // live stream deltas are always fresher than the snapshot the row came from.
   const messages = projectMainMessagesFromSnapshotRows(input.rows).map((message) => {
+    if (message.id !== input.runtimeActiveRunMessageId) {
+      return message
+    }
     const existing = input.existingMessages.find(candidate => candidate.id === message.id)
-    return existing && !isChatMessageShell(existing) ? existing : message
+    return existing ?? message
   })
   const liveMessage = input.runtimeActiveRunMessageId
     ? input.existingMessages.find(message => message.id === input.runtimeActiveRunMessageId)

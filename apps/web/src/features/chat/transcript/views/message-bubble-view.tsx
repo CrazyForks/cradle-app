@@ -8,7 +8,6 @@ import { cn } from '~/lib/cn'
 import { readChatContinuationMetadata } from '../../capabilities/chat-continuation-metadata'
 import { readBangCommandMetadata, readBangResultMetadata } from '../../commands/bang-command-metadata'
 import { BangCommandBlock, BangCommandPromptBlock } from '../../rendering/blocks/bang-command-block'
-import { ReasoningBlock } from '../../rendering/blocks/reasoning-block'
 import { RuntimeWarningBlock } from '../../rendering/blocks/runtime-warning-block'
 import type { ChatRenderItem } from '../../rendering/chat-render-plan'
 import { groupMessageParts, splitExecutionPhase } from '../../rendering/chat-render-plan'
@@ -30,7 +29,7 @@ import {
 import { MESSAGE_STREAMING_ANIMATION_MAX_CHARS } from '../../rendering/message-rendering-constants'
 import { describeToolCall } from '../../rendering/tool-ui-classifier'
 import { UserMessageText } from '../../rendering/user-message-text'
-import { GroupedToolCallBlockView } from '../../tool-blocks/views/grouped-tool-call-block-view'
+import { ActivityFeedView } from '../../tool-blocks/views/activity-feed-view'
 import { ToolCallBlockView } from '../../tool-blocks/views/tool-call-block-view'
 import { FileAttachmentView } from './file-attachment-view'
 import { MarkdownFileLinkView } from './markdown-file-link-view'
@@ -124,10 +123,8 @@ export function MessageBubbleView({
                 components={{ a: props => <MarkdownFileLinkView {...readMarkdownAnchorProps(props)} /> }}
               />
             )
-      case 'reasoning':
-        return <ReasoningBlock key={item.key} text={item.text} state={item.key === activeStreamingItemKey && item.state === 'streaming' ? 'streaming' : 'done'} />
-      case 'tool-group':
-        return <GroupedToolCallBlockView key={item.key} items={item.items} uiKind={item.uiKind} />
+      case 'activity-feed':
+        return <ActivityFeedView key={item.key} entries={item.entries} />
       case 'tool-call': {
         const approval = readToolApproval(item.part)
         return (
@@ -159,16 +156,9 @@ export function MessageBubbleView({
     ? <BangCommandPromptBlock command={bangCommand.command} />
     : bangResult
       ? <BangCommandBlock result={bangResult} />
-      : !executionPhaseSplit
-          ? groupedItems.map(renderItem)
-          : isExportPresentation
-              ? executionPhaseSplit.finalItems.map(renderItem)
-              : (
-<>
-<ExecutionPhaseFold defaultOpen={executionDetailsDefaultOpen}>{executionPhaseSplit.executionItems.map(renderItem)}</ExecutionPhaseFold>
-{executionPhaseSplit.finalItems.map(renderItem)}
-</>
-)
+      : isExportPresentation && executionPhaseSplit
+        ? executionPhaseSplit.finalItems.map(renderItem)
+        : groupedItems.map(renderItem)
 
   return (
     <div

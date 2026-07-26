@@ -19,9 +19,7 @@ import { STREAMDOWN_RENDER_OPTIONS } from '~/store/streamdown'
 
 import { readChatContinuationMetadata } from '../capabilities/chat-continuation-metadata'
 import { readBangCommandMetadata, readBangResultMetadata } from '../commands/bang-command-metadata'
-import { isChatMessageShell } from '../session/use-chat-session-types'
 import { BangCommandBlock, BangCommandPromptBlock } from './blocks/bang-command-block'
-import { ReasoningBlock } from './blocks/reasoning-block'
 import { RuntimeWarningBlock } from './blocks/runtime-warning-block'
 import type {
   ChatRenderItem,
@@ -59,7 +57,6 @@ import {
   readMarkdownAnchorProps,
   readMessageDisplayText,
   readMessageFrameFromState,
-  readMessageFromState,
   readPlainTextFromState,
   readPlainTextLengthFromState,
   readPlainTextPresenceFromState,
@@ -69,7 +66,6 @@ import {
   MessageFileLineCommentContextPartById,
   MessageFilePartById,
   MessagePluginContextPartById,
-  MessageReasoningPartById,
   MessageRuntimeWarningPartById,
   MessageSkillContextPartById,
   MessageTextPartById,
@@ -77,8 +73,8 @@ import {
 import { MESSAGE_STREAMING_ANIMATION_MAX_CHARS } from './message-rendering-constants'
 import type { MessageToolApprovalHandler } from './message-tool-blocks'
 import {
-  GroupedToolCallBlockByPartIndexes,
-  GroupedToolCallBlockFromParts,
+  ActivityFeedByPartIndexes,
+  ActivityFeedFromParts,
   ToolCallBlockByPartIndex,
   ToolCallBlockFromPart,
 } from './message-tool-blocks'
@@ -383,20 +379,10 @@ const MessageSegmentView = ({
           textTransform={textTransform}
         />
       )
-    case 'reasoning':
+    case 'activity-feed':
       return (
-        <MessageReasoningPartById
-          sessionId={sessionId}
-          messageId={segment.messageId}
-          partIndex={segment.partIndex}
-          isActiveStreamingSegment={isActiveStreamingSegment}
-        />
-      )
-    case 'tool-group':
-      return (
-        <GroupedToolCallBlockByPartIndexes
-          items={segment.items}
-          uiKind={segment.uiKind}
+        <ActivityFeedByPartIndexes
+          entries={segment.entries}
           sessionId={sessionId}
         />
       )
@@ -739,12 +725,7 @@ export const MessageBubbleById = ({
     chatSelectors.isVisibleStreamingMessage(storeSessionId, messageId),
     (a, b) => a === b,
   )
-  const isShell = useChatRenderStore((state) => {
-    const message = readMessageFromState(state, storeSessionId, messageId)
-    return message ? isChatMessageShell(message) : false
-  })
-
-  if (!frame || isShell) {
+  if (!frame) {
     return null
   }
 
@@ -850,25 +831,11 @@ function MessageBubbleView({
           />
         )
 
-      case 'reasoning':
+      case 'activity-feed':
         return (
-          <ReasoningBlock
+          <ActivityFeedFromParts
             key={item.key}
-            text={item.text}
-            state={
-              item.key === activeStreamingItemKey && item.state === 'streaming'
-                ? 'streaming'
-                : 'done'
-            }
-          />
-        )
-
-      case 'tool-group':
-        return (
-          <GroupedToolCallBlockFromParts
-            key={item.key}
-            items={item.items}
-            uiKind={item.uiKind}
+            entries={item.entries}
             sessionId={sessionId}
           />
         )

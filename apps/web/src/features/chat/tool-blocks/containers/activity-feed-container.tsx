@@ -1,0 +1,49 @@
+import { useCallback } from 'react'
+
+import { useBrowserPanelStore } from '~/store/browser-panel'
+
+import type { ActivityFeedViewProps } from '../views/activity-feed-view'
+import { ActivityFeedView } from '../views/activity-feed-view'
+import type { PlanDocumentOpenInput } from '../views/plan-document-preview-view'
+
+export interface ActivityFeedProps extends Omit<
+  ActivityFeedViewProps,
+  'onOpenWorkspaceDiff' | 'onOpenPlanDocument'
+> {
+  sessionId?: string | null
+  workspaceDiffTarget?: { workspaceId: string, ownerId?: string | null }
+}
+
+/** Runtime adapter that connects the props-only activity feed to browser-panel state. */
+export function ActivityFeed({
+  workspaceDiffTarget,
+  ...viewProps
+}: ActivityFeedProps) {
+  const openWorkspaceDiffTab = useBrowserPanelStore(s => s.openWorkspaceDiffTab)
+  const requestScrollToFilePath = useBrowserPanelStore(s => s.requestScrollToFilePath)
+  const openPlanDocumentTab = useBrowserPanelStore(s => s.openPlanDocumentTab)
+
+  const handleOpenWorkspaceDiff = useCallback((path: string) => {
+    if (!workspaceDiffTarget) {
+      return
+    }
+    const tabId = openWorkspaceDiffTab({
+      workspaceId: workspaceDiffTarget.workspaceId,
+      title: 'All Changes',
+      ownerId: workspaceDiffTarget.ownerId,
+    })
+    requestScrollToFilePath({ path, tabId })
+  }, [openWorkspaceDiffTab, requestScrollToFilePath, workspaceDiffTarget])
+
+  const handleOpenPlanDocument = useCallback((input: PlanDocumentOpenInput) => {
+    openPlanDocumentTab(input)
+  }, [openPlanDocumentTab])
+
+  return (
+    <ActivityFeedView
+      {...viewProps}
+      onOpenWorkspaceDiff={workspaceDiffTarget ? handleOpenWorkspaceDiff : undefined}
+      onOpenPlanDocument={handleOpenPlanDocument}
+    />
+  )
+}

@@ -20,7 +20,7 @@ import type { ComposerPastedText } from '../pasted-text/pasted-text'
 import { projectPastedTextPrompt } from '../pasted-text/pasted-text'
 import type { RuntimeWarningMessagePart } from '../runtime-warning'
 import { isRuntimeWarningMessagePart } from '../runtime-warning'
-import type { ChatRenderItem, ChatRenderSegment, FileMessagePart } from './chat-render-plan'
+import type { ActivityFeedEntryRef, ChatRenderItem, ChatRenderSegment, FileMessagePart } from './chat-render-plan'
 import {
   groupMessagePartRefs,
   isRuntimeUserInputToolPart,
@@ -279,15 +279,13 @@ function areRenderSegmentEqual(left: ChatRenderSegment, right: ChatRenderSegment
         && left.partIndex === right.partIndex
         && left.hasText === right.hasText
       )
-    case 'reasoning':
     case 'file-attachment':
     case 'skill-context':
     case 'plugin-context':
     case 'file-line-comment-context':
     case 'runtime-warning':
       return (
-        (right.kind === 'reasoning'
-          || right.kind === 'file-attachment'
+        (right.kind === 'file-attachment'
           || right.kind === 'skill-context'
           || right.kind === 'plugin-context'
           || right.kind === 'file-line-comment-context'
@@ -303,30 +301,32 @@ function areRenderSegmentEqual(left: ChatRenderSegment, right: ChatRenderSegment
         && left.partIndex === right.partIndex
         && left.toolCallId === right.toolCallId
       )
-    case 'tool-group':
+    case 'activity-feed':
       return (
-        right.kind === 'tool-group'
-        && left.uiKind === right.uiKind
-        && areToolItemRefsEqual(left.items, right.items)
+        right.kind === 'activity-feed'
+        && areActivityFeedEntryRefsEqual(left.entries, right.entries)
       )
     default:
       return false
   }
 }
 
-function areToolItemRefsEqual(
-  left: Array<{ key: string, messageId: string, partIndex: number, toolCallId: string }>,
-  right: Array<{ key: string, messageId: string, partIndex: number, toolCallId: string }>,
+function areActivityFeedEntryRefsEqual(
+  left: ActivityFeedEntryRef[],
+  right: ActivityFeedEntryRef[],
 ): boolean {
   if (left.length !== right.length) {
     return false
   }
   for (let i = 0; i < left.length; i++) {
+    const l = left[i]
+    const r = right[i]
     if (
-      left[i].key !== right[i].key
-      || left[i].messageId !== right[i].messageId
-      || left[i].partIndex !== right[i].partIndex
-      || left[i].toolCallId !== right[i].toolCallId
+      l.entryKind !== r.entryKind
+      || l.key !== r.key
+      || l.messageId !== r.messageId
+      || l.partIndex !== r.partIndex
+      || (l.entryKind === 'tool-call' && r.entryKind === 'tool-call' && l.toolCallId !== r.toolCallId)
     ) {
       return false
     }
@@ -491,24 +491,6 @@ export function areRenderableToolPartsEqual(
   return left === right
 }
 
-export function areGroupedRenderableToolItemsEqual(
-  left: Array<{ key: string, part: RenderableToolPart }>,
-  right: Array<{ key: string, part: RenderableToolPart }>,
-): boolean {
-  if (left === right) {
-    return true
-  }
-  if (left.length !== right.length) {
-    return false
-  }
-  for (let i = 0; i < left.length; i++) {
-    if (left[i].key !== right[i].key || left[i].part !== right[i].part) {
-      return false
-    }
-  }
-  return true
-}
-
 export function readPlainTextFromState(
   state: ChatStoreSnapshot,
   sessionId: string,
@@ -547,7 +529,7 @@ export function readPlainTextLengthFromState(
 
 export function readActiveStreamingSegmentKey(segments: ChatRenderSegment[]): string | null {
   const tail = segments.at(-1)
-  if (!tail || (tail.kind !== 'text' && tail.kind !== 'reasoning')) {
+  if (!tail || (tail.kind !== 'text' && tail.kind !== 'activity-feed')) {
     return null
   }
   return tail.key
@@ -555,7 +537,7 @@ export function readActiveStreamingSegmentKey(segments: ChatRenderSegment[]): st
 
 export function readActiveStreamingItemKey(items: ChatRenderItem[]): string | null {
   const tail = items.at(-1)
-  if (!tail || (tail.kind !== 'text' && tail.kind !== 'reasoning')) {
+  if (!tail || (tail.kind !== 'text' && tail.kind !== 'activity-feed')) {
     return null
   }
   return tail.key
@@ -563,14 +545,14 @@ export function readActiveStreamingItemKey(items: ChatRenderItem[]): string | nu
 
 export function hasActiveNonTextProgress(items: ChatRenderItem[]): boolean {
   return items.some((item) => {
-    if (item.kind === 'reasoning') {
-      return item.state === 'streaming'
-    }
     if (item.kind === 'tool-call') {
       return isToolPartActive(item.part)
     }
-    if (item.kind === 'tool-group') {
-      return item.items.some(toolItem => isToolPartActive(toolItem.part))
+    if (item.kind === 'activity-feed') {
+      return item.entries.some(entry =>
+        entry.entryKind === 'reasoning'
+          ? entry.state === 'streaming'
+          : isToolPartActive(entry.part))
     }
     return false
   })
@@ -587,19 +569,20 @@ export function hasActiveNonTextSegmentProgress(
   segments: ChatRenderSegment[],
 ): boolean {
   return segments.some((segment) => {
-    if (segment.kind === 'reasoning') {
-      const part = readMessageFromState(state, sessionId, messageId)?.parts[segment.partIndex]
-      return (
-        part?.type === 'reasoning'
-        && (part as { state?: 'streaming' | 'done' }).state === 'streaming'
-      )
-    }
     if (segment.kind === 'tool-call') {
       return isToolPartActiveInState(state, sessionId, segment.messageId, segment.partIndex)
     }
-    if (segment.kind === 'tool-group') {
-      return segment.items.some(toolItem =>
-        isToolPartActiveInState(state, sessionId, toolItem.messageId, toolItem.partIndex))
+    if (segment.kind === 'activity-feed') {
+      return segment.entries.some((entry) => {
+        if (entry.entryKind === 'reasoning') {
+          const part = readMessageFromState(state, sessionId, messageId)?.parts[entry.partIndex]
+          return (
+            part?.type === 'reasoning'
+            && (part as { state?: 'streaming' | 'done' }).state === 'streaming'
+          )
+        }
+        return isToolPartActiveInState(state, sessionId, entry.messageId, entry.partIndex)
+      })
     }
     return false
   })

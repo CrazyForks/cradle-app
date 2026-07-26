@@ -45,6 +45,11 @@ function row(input: {
     parentToolCallId: input.parentToolCallId ?? null,
     taskId: null,
     depth: 0,
+    message: {
+      id: input.id,
+      role: input.role,
+      parts: input.parts ?? (input.text !== undefined ? [{ type: 'text', text: input.text }] : []),
+    },
   }
 }
 

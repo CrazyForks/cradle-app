@@ -70,15 +70,26 @@ export const STATUS_LABELS: Record<ToolState, string> = {
 }
 
 // ---------------------------------------------------------------------------
-// Plural titles for grouped tool calls
+// Count labels for activity-feed header summaries
 // ---------------------------------------------------------------------------
 
-export const PLURAL_TITLES: Partial<Record<ToolUiKind, string>> = {
-  'terminal': 'Run commands',
-  'file-read': 'Read files',
-  'file-diff': 'Edit files',
-  'search': 'Search files',
-  'notebook-diff': 'Edit notebooks',
+/** [singular, plural] noun phrases used to compose "2 files, 3 searches" summaries. */
+export const FEED_ENTRY_COUNT_LABELS: Record<ToolUiKind, [string, string]> = {
+  'file-read': ['file', 'files'],
+  'file-diff': ['file edit', 'file edits'],
+  'notebook-diff': ['notebook edit', 'notebook edits'],
+  'terminal': ['command', 'commands'],
+  'search': ['search', 'searches'],
+  'web': ['web lookup', 'web lookups'],
+  'subagent': ['subagent', 'subagents'],
+  'task-control': ['task', 'tasks'],
+  'todo': ['todo update', 'todo updates'],
+  'plan': ['plan', 'plans'],
+  'plan-implementation': ['plan', 'plans'],
+  'question': ['question', 'questions'],
+  'mcp': ['tool', 'tools'],
+  'worktree': ['worktree', 'worktrees'],
+  'generic': ['tool', 'tools'],
 }
 
 // ---------------------------------------------------------------------------

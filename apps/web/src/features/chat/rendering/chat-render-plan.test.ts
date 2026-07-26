@@ -56,9 +56,9 @@ describe('splitExecutionPhase', () => {
     })
     expect(split!.executionItems.map(item => item.kind)).toEqual([
       'text',
-      'tool-call',
+      'activity-feed',
       'text',
-      'tool-call',
+      'activity-feed',
     ])
   })
 
@@ -102,7 +102,7 @@ describe('splitExecutionPhase', () => {
       },
     })
     expect(split).not.toBeNull()
-    expect(split!.executionItems.map(item => item.kind)).toEqual(['tool-call'])
+    expect(split!.executionItems.map(item => item.kind)).toEqual(['activity-feed'])
     expect(split!.finalItems.map(item => item.kind)).toEqual(['tool-call', 'text'])
   })
 })
@@ -124,6 +124,6 @@ describe('splitSegmentExecutionPhase', () => {
     expect(split).not.toBeNull()
     expect(split!.finalItems).toHaveLength(1)
     expect(split!.finalItems[0]).toMatchObject({ kind: 'text', hasText: true })
-    expect(split!.executionItems.map(item => item.kind)).toEqual(['text', 'tool-call'])
+    expect(split!.executionItems.map(item => item.kind)).toEqual(['text', 'activity-feed'])
   })
 })

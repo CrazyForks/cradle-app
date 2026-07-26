@@ -1,6 +1,7 @@
 import type { CradleToolKind } from '@cradle/chat-runtime-contracts'
 
 import type { RenderableToolPart, ToolState } from '../../rendering/tool-ui-classifier'
+import type { ActivityFeedViewEntry } from '../views/activity-feed-view'
 import type { ToolCallBlockViewProps } from '../views/tool-call-block-view'
 
 type ToolFixtureProps = Omit<
@@ -279,15 +280,64 @@ function toRenderablePart(fixture: ChatToolFixture, toolCallId: string): Rendera
   }
 }
 
-const terminalGroupFixtures = [chatToolKindFixtures[0], chatToolKindFixtures[0], chatToolStateFixtures[5]]
-const fileGroupFixtures = [chatToolKindFixtures[1], chatToolKindFixtures[2], chatToolKindFixtures[3]]
+function toToolEntry(
+  fixture: ChatToolFixture,
+  toolCallId: string,
+): Extract<ActivityFeedViewEntry, { entryKind: 'tool-call' }> {
+  return {
+    entryKind: 'tool-call',
+    key: toolCallId,
+    part: toRenderablePart(fixture, toolCallId),
+  }
+}
 
-export const groupedTerminalToolFixtures = terminalGroupFixtures.map((fixture, index) => ({
-  key: `terminal-${index}`,
-  part: toRenderablePart(fixture, `grouped-terminal-${index}`),
-}))
+function reasoningEntry(
+  key: string,
+  text: string,
+  state?: 'streaming' | 'done',
+  durationMs?: number,
+): Extract<ActivityFeedViewEntry, { entryKind: 'reasoning' }> {
+  return { entryKind: 'reasoning', key, text, state, durationMs }
+}
 
-export const groupedFileToolFixtures = fileGroupFixtures.map((fixture, index) => ({
-  key: `file-${index}`,
-  part: toRenderablePart(fixture, `grouped-file-${index}`),
-}))
+export const activityFeedCompletedFixtures: ActivityFeedViewEntry[] = [
+  reasoningEntry('reasoning-done', 'The config lives in the web app, so I will read it first.', 'done', 4200),
+  toToolEntry(chatToolKindFixtures[1], 'feed-read-1'),
+  toToolEntry(chatToolKindFixtures[4], 'feed-search-1'),
+  toToolEntry(chatToolKindFixtures[2], 'feed-edit-1'),
+]
+
+export const activityFeedRunningFixtures: ActivityFeedViewEntry[] = [
+  toToolEntry(chatToolKindFixtures[4], 'feed-search-2'),
+  {
+    entryKind: 'tool-call',
+    key: 'feed-terminal-running',
+    part: {
+      ...toRenderablePart(chatToolStateFixtures[1], 'feed-terminal-running'),
+      toolCallId: 'feed-terminal-running',
+    },
+  },
+  reasoningEntry('reasoning-streaming', 'Still waiting on the typecheck output…', 'streaming'),
+]
+
+export const activityFeedErrorFixtures: ActivityFeedViewEntry[] = [
+  toToolEntry(chatToolKindFixtures[1], 'feed-read-2'),
+  toToolEntry(chatToolStateFixtures[5], 'feed-terminal-error'),
+  toToolEntry(chatToolKindFixtures[2], 'feed-edit-2'),
+]
+
+export const activityFeedReasoningFixtures: ActivityFeedViewEntry[] = [
+  reasoningEntry('reasoning-brief', 'Quick check.', 'done'),
+  toToolEntry(chatToolKindFixtures[4], 'feed-search-3'),
+  reasoningEntry('reasoning-long', 'Compared the two call sites and picked the container-owned wiring.', 'done', 12000),
+]
+
+export const activityFeedMixedFixtures: ActivityFeedViewEntry[] = [
+  toToolEntry(chatToolKindFixtures[0], 'feed-terminal-1'),
+  toToolEntry(chatToolKindFixtures[1], 'feed-read-3'),
+  toToolEntry(chatToolKindFixtures[2], 'feed-edit-3'),
+  toToolEntry(chatToolKindFixtures[4], 'feed-search-4'),
+  toToolEntry(chatToolKindFixtures[5], 'feed-web-1'),
+  toToolEntry(chatToolKindFixtures[8], 'feed-todo-1'),
+  toToolEntry(chatToolKindFixtures[12], 'feed-mcp-1'),
+]

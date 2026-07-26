@@ -22,7 +22,7 @@ import {
   LEGACY_ASSISTANT_MESSAGE_SNAPSHOTTED_EVENT_TYPE,
 } from '../es/events'
 import { finalizeInterruptedRun } from '../es/recovery'
-import { getMessageGroups, getMessageShellSnapshot } from '../history-api'
+import { getMessageGroups, getMessageSnapshot } from '../history-api'
 import { putMessagePayload, readMessagePayload } from '../message-payload-store'
 import {
   deleteRunStreamCheckpoint,
@@ -265,7 +265,7 @@ describe('run stream checkpoints', () => {
       expect(
         readMessagePayload(db(), messageId)?.content,
       ).toBe('')
-      await expect(getMessageShellSnapshot(sessionId)).resolves.toMatchObject({
+      await expect(getMessageSnapshot(sessionId)).resolves.toMatchObject({
         revision: 1,
         rows: expect.arrayContaining([
           expect.objectContaining({ messageId, preview: '' }),

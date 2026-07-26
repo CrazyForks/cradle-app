@@ -1,10 +1,11 @@
 import type { ChatSessionMessageRow } from './use-chat-session'
 
 const DB_NAME = 'cradle-chat-stable-message-cache'
-const DB_VERSION = 4
+const DB_VERSION = 5
 const STORE_NAME = 'stable-message-rows'
 const CACHED_SESSION_LIMIT = 80
-const CACHE_SCHEMA_VERSION = 4
+// v5: rows carry the full UIMessage payload (no more preview-only shells).
+const CACHE_SCHEMA_VERSION = 5
 
 export interface StableMessageCacheSnapshot {
   sessionId: string
@@ -160,10 +161,18 @@ function isMessageRow(value: unknown): value is ChatSessionMessageRow {
     || (row.role !== 'user' && row.role !== 'assistant')
     || typeof row.status !== 'string'
     || typeof row.depth !== 'number'
+    || typeof row.preview !== 'string'
+    || typeof row.previewTruncated !== 'boolean'
   ) {
     return false
   }
-  return typeof row.preview === 'string' && typeof row.previewTruncated === 'boolean'
+  const message = row.message as { id?: unknown, role?: unknown, parts?: unknown } | undefined
+  return Boolean(
+    message
+    && message.id === row.messageId
+    && message.role === row.role
+    && Array.isArray(message.parts),
+  )
 }
 
 function writeCacheRecord(db: IDBDatabase, record: StableMessageCacheSnapshot): Promise<void> {

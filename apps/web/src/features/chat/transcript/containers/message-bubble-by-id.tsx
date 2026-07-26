@@ -10,7 +10,6 @@ import {
   readMessageImageAttachmentsFromMessage,
   readRenderSegments,
 } from '../../rendering/message-bubble-selectors'
-import { isChatMessageShell } from '../../session/use-chat-session-types'
 import type { MessageBubbleByIdProps } from '../lib/message-bubble-types'
 import { MessageDisplayPartsContext } from '../lib/message-display-parts-context'
 import { MessageBubbleSegmentsContainer } from './message-bubble-segments-container'
@@ -42,7 +41,6 @@ export function MessageBubbleById({
     const message = readMessageFromState(state, storeSessionId, messageId, textTransform)
     return message ? applyPartsProjection(message, partsProjection) : undefined
   }, areProjectedMessagesEqual)
-  const isShell = projectedMessage ? isChatMessageShell(projectedMessage) : false
   const frame = projectedMessage ? readMessageFrame(projectedMessage) : null
   const segments = projectedMessage ? readRenderSegments(projectedMessage) : []
   const storeStreaming = useChatRenderStore(
@@ -52,9 +50,7 @@ export function MessageBubbleById({
   const isStreaming = allowStreaming && storeStreaming
   const imageAttachments = readMessageImageAttachmentsFromMessage(projectedMessage, segments)
 
-  // History shells are text previews only. Never paint them — the session driver
-  // batch-hydrates the loaded page, then commits full messages in one store write.
-  if (!frame || !projectedMessage || isShell) {
+  if (!frame || !projectedMessage) {
     return null
   }
   return (

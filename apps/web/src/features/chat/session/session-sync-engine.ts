@@ -1,6 +1,7 @@
 import type {
   ChatSessionTailEvent,
   ChatSessionTailEventType,
+  ChatSessionTailMessageSnapshot,
 } from '@cradle/chat-runtime-contracts'
 
 import type {
@@ -14,8 +15,20 @@ import {
   readTerminalRunReleaseCandidate,
 } from './session-runtime-reconciliation'
 
+export interface SessionMessageRowsPatch {
+  upserts: ChatSessionTailMessageSnapshot[]
+  removals: string[]
+  version: number
+}
+
 export interface SessionSyncEngineCallbacks {
   onMessagesChanged: () => void
+  /**
+   * Apply row-shaped message snapshots carried on the event itself.
+   * Return false when the patch cannot be applied (no local snapshot yet);
+   * the engine then falls back to onMessagesChanged (snapshot refetch).
+   */
+  onMessageRows?: (patch: SessionMessageRowsPatch) => boolean
   onRuntimeStatusChanged: () => void
   onRuntimeUiSlotStatesChanged: () => void
   onQueueChanged: () => void
@@ -284,8 +297,13 @@ export class SessionSyncEngine {
       this.stopPassiveStream()
     }
     if (MESSAGE_EVENT_TYPES.has(event.type)) {
-      this.callbacks.onMessagesChanged()
+      if (!this.applyMessageRowsFromEvent(event)) {
+        this.callbacks.onMessagesChanged()
+      }
       this.callbacks.onRuntimeUiSlotStatesChanged()
+    }
+    if (event.type === 'RunStarted') {
+      this.applyMessageRowsFromEvent(event)
     }
     if (RUN_EVENT_TYPES.has(event.type)) {
       this.callbacks.onRuntimeStatusChanged()
@@ -304,6 +322,18 @@ export class SessionSyncEngine {
     }
   }
 
+  /** Returns true when the event carried snapshots and the host applied them. */
+  private applyMessageRowsFromEvent(event: ChatSessionTailEvent): boolean {
+    if (!this.callbacks.onMessageRows) {
+      return false
+    }
+    const patch = readMessageRowsPatch(event)
+    if (!patch) {
+      return false
+    }
+    return this.callbacks.onMessageRows(patch)
+  }
+
   private requestSnapshotCatchup(): void {
     this.callbacks.onMessagesChanged()
     this.callbacks.onRuntimeStatusChanged()
@@ -311,6 +341,23 @@ export class SessionSyncEngine {
     this.callbacks.onQueueChanged()
     this.callbacks.onSessionSummaryChanged()
   }
+}
+
+function readMessageRowsPatch(event: ChatSessionTailEvent): SessionMessageRowsPatch | null {
+  const payload = event.payload as {
+    snapshot?: ChatSessionTailMessageSnapshot
+    assistantSnapshot?: ChatSessionTailMessageSnapshot
+    messageIds?: string[]
+  }
+  if (event.type === 'LastTurnRolledBack') {
+    return Array.isArray(payload.messageIds) && payload.messageIds.length > 0
+      ? { upserts: [], removals: payload.messageIds, version: event.version }
+      : null
+  }
+  const snapshot = payload.snapshot ?? payload.assistantSnapshot
+  return snapshot && typeof snapshot.messageId === 'string' && snapshot.message
+    ? { upserts: [snapshot], removals: [], version: event.version }
+    : null
 }
 
 export function buildSessionEventTailUrl(input: {

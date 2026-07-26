@@ -1,7 +1,7 @@
 import { Elysia } from 'elysia'
 
 import { AppError } from '../../../errors/app-error'
-import { getMessageDetail, getMessageShellSnapshot, listCompletedRuns } from '../history-api'
+import { getMessageDetail, getMessageSnapshot, listCompletedRuns } from '../history-api'
 import { ChatRuntimeModel } from '../model'
 import { getRunSnapshot, getRunSnapshots } from '../run-snapshot'
 import { listChatSessionTraceDtos, readChatRunTraceDto } from '../stream-trace'
@@ -9,18 +9,18 @@ import { listChatSessionTraceDtos, readChatRunTraceDto } from '../stream-trace'
 export const chatRuntimeHistoryRoutes = new Elysia({
   detail: { tags: ['chat-runtime'] },
 })
-  // GET /chat/sessions/:sessionId/messages -> historical message shell rows
+  // GET /chat/sessions/:sessionId/messages -> historical message rows with full payloads
   .get(
     '/sessions/:sessionId/messages',
     async ({ params, query }): Promise<Response> => {
-      return Response.json(await getMessageShellSnapshot(params.sessionId, {
+      return Response.json(await getMessageSnapshot(params.sessionId, {
         cursor: query.cursor ?? null,
         limit: query.limit ?? null,
       }))
     },
     {
       detail: {
-        'summary': 'Get chat message shell rows',
+        'summary': 'Get chat message rows',
         'x-cradle-cli': {
           command: ['chat', 'messages'],
         },

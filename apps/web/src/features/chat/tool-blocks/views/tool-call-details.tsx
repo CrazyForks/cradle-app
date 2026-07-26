@@ -84,7 +84,7 @@ interface EditDiffPreview {
 }
 
 // ---------------------------------------------------------------------------
-// Exported helpers (consumed by grouped-tool-call-block and tool-call-block)
+// Exported helpers (consumed by activity-feed-view and tool-call-block-view)
 // ---------------------------------------------------------------------------
 
 export function readEditDiffPreview(

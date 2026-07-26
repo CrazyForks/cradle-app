@@ -6,10 +6,7 @@ import {
   chatToolKindFixtures,
   chatToolStateFixtures,
   chatWorkflowToolFixture,
-  groupedFileToolFixtures,
-  groupedTerminalToolFixtures,
 } from '../fixtures/tool-block-fixtures'
-import { GroupedToolCallBlockView } from '../views/grouped-tool-call-block-view'
 import { ToolCallBlockView } from '../views/tool-call-block-view'
 
 function ToolFixtureRow({
@@ -63,35 +60,6 @@ function ToolGalleryScene({ fixtures }: { fixtures: ChatToolFixture[] }) {
   )
 }
 
-function GroupedActivityScene() {
-  const [activity, setActivity] = useState('No file selected')
-
-  return (
-    <main className="min-h-screen bg-background px-6 py-8 text-foreground">
-      <div className="mx-auto grid max-w-4xl gap-10 lg:grid-cols-2">
-        <section>
-          <div className="px-1 text-xs font-medium text-muted-foreground">TERMINAL ACTIVITY</div>
-          <GroupedToolCallBlockView
-            items={groupedTerminalToolFixtures}
-            uiKind="terminal"
-            animated={false}
-          />
-        </section>
-        <section>
-          <div className="px-1 text-xs font-medium text-muted-foreground">FILE ACTIVITY</div>
-          <GroupedToolCallBlockView
-            items={groupedFileToolFixtures}
-            uiKind="file-diff"
-            animated={false}
-            onOpenWorkspaceDiff={path => setActivity(path)}
-          />
-        </section>
-        <div className="text-xs text-muted-foreground" role="status">{activity}</div>
-      </div>
-    </main>
-  )
-}
-
 const meta = {
   title: 'Chat/Tools/ToolCallBlockView',
   component: ToolGalleryScene,
@@ -125,8 +93,4 @@ export const WorkflowSurface: Story = {
   args: {
     fixtures: [chatWorkflowToolFixture],
   },
-}
-
-export const GroupedActivity: Story = {
-  render: () => <GroupedActivityScene />,
 }

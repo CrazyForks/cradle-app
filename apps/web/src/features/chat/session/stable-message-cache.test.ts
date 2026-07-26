@@ -12,13 +12,18 @@ const rows = [{
   parentToolCallId: null,
   taskId: null,
   depth: 0,
+  message: {
+    id: 'message-1',
+    role: 'user' as const,
+    parts: [{ type: 'text', text: 'hello' }],
+  },
 }]
 
 describe('stable message cache records', () => {
   it('accepts revisioned present and authoritative-empty snapshots', () => {
     expect(parseStableMessageCacheRecord({
       sessionId: 'session-1',
-      schemaVersion: 4,
+      schemaVersion: 5,
       revision: 4,
       snapshotState: 'present',
       cachedAt: 100,
@@ -28,7 +33,7 @@ describe('stable message cache records', () => {
 
     expect(parseStableMessageCacheRecord({
       sessionId: 'session-1',
-      schemaVersion: 4,
+      schemaVersion: 5,
       revision: 5,
       snapshotState: 'empty',
       cachedAt: 101,
@@ -45,16 +50,26 @@ describe('stable message cache records', () => {
     })).toBeNull()
     expect(parseStableMessageCacheRecord({
       sessionId: 'session-1',
-      schemaVersion: 4,
+      schemaVersion: 5,
       revision: -1,
       snapshotState: 'present',
       cachedAt: 100,
       rows,
       nextCursor: null,
     })).toBeNull()
+    // Legacy v4 shell rows (no full message payload) must be rejected.
     expect(parseStableMessageCacheRecord({
       sessionId: 'session-1',
-      schemaVersion: 3,
+      schemaVersion: 4,
+      revision: 4,
+      snapshotState: 'present',
+      cachedAt: 100,
+      rows: [{ ...rows[0], message: undefined }],
+      nextCursor: null,
+    })).toBeNull()
+    expect(parseStableMessageCacheRecord({
+      sessionId: 'session-1',
+      schemaVersion: 5,
       revision: 4,
       snapshotState: 'present',
       cachedAt: 100,

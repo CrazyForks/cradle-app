@@ -1,20 +1,23 @@
 import type { ReactNode } from 'react'
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 
 import { useSessionBinding } from '../session/use-session-binding'
-import { GroupedToolCallBlock } from '../tool-blocks/containers/grouped-tool-call-block-container'
+import { ActivityFeed } from '../tool-blocks/containers/activity-feed-container'
 import { ToolCallBlock } from '../tool-blocks/containers/tool-call-block-container'
+import type { ActivityFeedViewEntry } from '../tool-blocks/views/activity-feed-view'
 import { useMessageDisplayParts, useMessagePartAt } from '../transcript/lib/message-display-parts-context'
+import type { ActivityFeedEntryRef } from './chat-render-plan'
 import { readRenderableToolPart } from './chat-render-plan'
 import { useChatRenderStore } from './chat-render-store'
 import { toolNameFromPart } from './chat-tool-entities'
 import {
-  areGroupedRenderableToolItemsEqual,
   areRenderableToolPartsEqual,
+  readReasoningPartFromState,
   readRenderableToolPartFromState,
   readToolApproval,
 } from './message-bubble-selectors'
-import type { describeToolCall, RenderableToolPart } from './tool-ui-classifier'
+import { readReasoningDurationMs } from './reasoning-duration'
+import type { RenderableToolPart } from './tool-ui-classifier'
 
 export type MessageToolApprovalHandler = (response: {
   messageId: string
@@ -113,44 +116,95 @@ export function ToolCallBlockByPartIndex({
   )
 }
 
-export function GroupedToolCallBlockFromParts({
-  items,
-  uiKind,
+function areResolvedFeedEntriesEqual(
+  left: Array<ActivityFeedViewEntry | null>,
+  right: Array<ActivityFeedViewEntry | null>,
+): boolean {
+  if (left === right) {
+    return true
+  }
+  if (left.length !== right.length) {
+    return false
+  }
+  for (let i = 0; i < left.length; i++) {
+    const l = left[i]
+    const r = right[i]
+    if (l === null || r === null) {
+      if (l !== r) {
+        return false
+      }
+      continue
+    }
+    if (l.entryKind !== r.entryKind || l.key !== r.key) {
+      return false
+    }
+    if (l.entryKind === 'tool-call' && r.entryKind === 'tool-call' && l.part !== r.part) {
+      return false
+    }
+    if (
+      l.entryKind === 'reasoning'
+      && r.entryKind === 'reasoning'
+      && (l.text !== r.text || l.state !== r.state)
+    ) {
+      return false
+    }
+  }
+  return true
+}
+
+export function ActivityFeedFromParts({
+  entries,
   animated,
   workspaceDiffTarget,
   sessionId,
 }: {
-  items: Array<{ key: string, part: RenderableToolPart }>
-  uiKind: ReturnType<typeof describeToolCall>['kind']
+  entries: ActivityFeedViewEntry[]
   animated?: boolean
   workspaceDiffTarget?: { workspaceId: string, ownerId?: string | null }
-  sessionId?: string
+  sessionId?: string | null
 }) {
   const sessionWorkspaceId = useSessionBinding(sessionId ?? '', Boolean(sessionId))?.workspaceId ?? null
   const resolvedWorkspaceDiffTarget = workspaceDiffTarget
     ?? (sessionWorkspaceId ? { workspaceId: sessionWorkspaceId } : undefined)
+  // Stable object identity per reasoning entry so duration tracking survives re-renders.
+  const reasoningPartCacheRef = useRef(new Map<string, { text: string, state?: 'streaming' | 'done' }>())
 
-  if (items.length === 0) {
+  if (entries.length === 0) {
     return null
   }
 
+  const resolvedEntries = entries.map((entry) => {
+    if (entry.entryKind !== 'reasoning') {
+      return entry
+    }
+    const cache = reasoningPartCacheRef.current
+    let cached = cache.get(entry.key)
+    if (!cached) {
+      cached = { text: entry.text, state: entry.state }
+      cache.set(entry.key, cached)
+    }
+ else {
+      cached.text = entry.text
+      cached.state = entry.state
+    }
+    return { ...entry, durationMs: entry.durationMs ?? readReasoningDurationMs(cached) }
+  })
+
   return (
-    <GroupedToolCallBlock
-      items={items}
-      uiKind={uiKind}
+    <ActivityFeed
+      entries={resolvedEntries}
       animated={animated}
+      sessionId={sessionId}
       workspaceDiffTarget={resolvedWorkspaceDiffTarget}
     />
   )
 }
 
-export function GroupedToolCallBlockByPartIndexes({
-  items,
-  uiKind,
+export function ActivityFeedByPartIndexes({
+  entries,
   sessionId,
 }: {
-  items: Array<{ key: string, messageId: string, partIndex: number }>
-  uiKind: ReturnType<typeof describeToolCall>['kind']
+  entries: ActivityFeedEntryRef[]
   sessionId: string
 }) {
   const workspaceId = useSessionBinding(sessionId, true)?.workspaceId ?? null
@@ -159,34 +213,44 @@ export function GroupedToolCallBlockByPartIndexes({
     [workspaceId],
   )
   const displayParts = useMessageDisplayParts()
-  const storeParts = useChatRenderStore(
+  const storeEntries = useChatRenderStore(
     (state) => {
       if (displayParts) {
         return []
       }
-      return items.flatMap((item) => {
-        const part = readRenderableToolPartFromState(
-          state,
-          sessionId,
-          item.messageId,
-          item.partIndex,
-        )
-        return part ? [{ key: item.key, part }] : []
+      return entries.map((entry): ActivityFeedViewEntry | null => {
+        if (entry.entryKind === 'reasoning') {
+          const part = readReasoningPartFromState(state, sessionId, entry.messageId, entry.partIndex)
+          return { entryKind: 'reasoning', key: entry.key, text: part.text, state: part.state }
+        }
+        const part = readRenderableToolPartFromState(state, sessionId, entry.messageId, entry.partIndex)
+        return part ? { entryKind: 'tool-call', key: entry.key, part } : null
       })
     },
-    areGroupedRenderableToolItemsEqual,
+    areResolvedFeedEntriesEqual,
   )
-  const parts = displayParts
-    ? items.flatMap((item) => {
-        const part = displayParts[item.partIndex]
+  const resolvedEntries: ActivityFeedViewEntry[] = displayParts
+    ? entries.flatMap((entry): ActivityFeedViewEntry[] => {
+        const part = displayParts[entry.partIndex]
+        if (entry.entryKind === 'reasoning') {
+          return part?.type === 'reasoning'
+            ? [{
+                entryKind: 'reasoning',
+                key: entry.key,
+                text: part.text,
+                state: (part as { state?: 'streaming' | 'done' }).state,
+              }]
+            : []
+        }
         const toolPart = part ? readRenderableToolPart(part) : null
-        return toolPart ? [{ key: item.key, part: toolPart }] : []
+        return toolPart ? [{ entryKind: 'tool-call', key: entry.key, part: toolPart }] : []
       })
-    : storeParts
+    : storeEntries.filter((entry): entry is ActivityFeedViewEntry => entry !== null)
+
   return (
-    <GroupedToolCallBlockFromParts
-      items={parts}
-      uiKind={uiKind}
+    <ActivityFeedFromParts
+      entries={resolvedEntries}
+      sessionId={sessionId}
       workspaceDiffTarget={workspaceDiffTarget}
     />
   )

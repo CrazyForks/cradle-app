@@ -828,15 +828,40 @@ export type ChatSessionTailEventType
     | 'TitleChanged'
     | 'SnapshotRequired'
 
+/**
+ * Row-shaped message snapshot carried on session-scope message tail events so
+ * clients can apply transcript changes directly without a snapshot refetch.
+ * Mirrors the row shape of `GET /chat/sessions/:sessionId/messages`.
+ * Global-scope (`sessions`) tails stay slim and never carry it.
+ */
+export interface ChatSessionTailMessageSnapshot {
+  messageId: string
+  role: 'user' | 'assistant'
+  status: 'streaming' | 'complete' | 'aborted' | 'failed'
+  errorText?: string
+  preview: string
+  previewTruncated: boolean
+  parentMessageId: string | null
+  parentToolCallId: string | null
+  taskId: string | null
+  depth: number
+  message: UIMessage
+}
+
 export type ChatSessionTailEventPayload
-  = | { messageId: string }
+  = | { messageId: string, snapshot?: ChatSessionTailMessageSnapshot }
     | {
       runId: string
       assistantMessageId: string | null
       queueItemId: string | null
       runtimeSettings?: RuntimeSettings
+      assistantSnapshot?: ChatSessionTailMessageSnapshot
     }
-    | { messageId: string, status: 'streaming' | 'complete' | 'aborted' | 'failed' }
+    | {
+      messageId: string
+      status: 'streaming' | 'complete' | 'aborted' | 'failed'
+      snapshot?: ChatSessionTailMessageSnapshot
+    }
     | {
       runId: string
       queueItemId: string | null

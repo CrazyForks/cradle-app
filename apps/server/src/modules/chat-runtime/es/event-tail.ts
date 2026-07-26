@@ -1,10 +1,15 @@
-import type { ChatGlobalSessionTailEvent, ChatSessionTailEvent } from '@cradle/chat-runtime-contracts'
-import { sessionEvents, sessions } from '@cradle/db'
+import type {
+  ChatGlobalSessionTailEvent,
+  ChatSessionTailEvent,
+  ChatSessionTailMessageSnapshot,
+} from '@cradle/chat-runtime-contracts'
+import { messages, sessionEvents, sessions } from '@cradle/db'
 import { and, asc, desc, eq, gt, inArray } from 'drizzle-orm'
 
 import { db } from '../../../infra'
 import { readMessagePayload } from '../message-payload-store'
-import type { StoredChatSessionEvent } from './events'
+import { parseStoredMessageSnapshot } from '../ui-message'
+import type { MessageRecordedFact, StoredChatSessionEvent } from './events'
 import {
   isLegacyAssistantMessageSnapshottedRow,
   parseStoredChatSessionEvent,
@@ -162,13 +167,10 @@ function readGlobalSessionTailReplay(
 
   const events: ChatGlobalSessionTailEvent[] = rows
     .filter(row => !isLegacyAssistantMessageSnapshottedRow(row))
-    .map((row) => {
-      const event = toChatSessionTailEvent(parseStoredChatSessionEvent(
-        row,
-        payloadId => readMessagePayload(db(), payloadId),
-      ))
-      return { ...event, scope: 'sessions' as const }
-    })
+    .map(row => toGlobalTailEvent(toChatSessionTailEvent(parseStoredChatSessionEvent(
+      row,
+      payloadId => readMessagePayload(db(), payloadId),
+    ))))
   return {
     events,
     cursor: events.at(-1)?.sequenceId ?? input.afterSequenceId,
@@ -255,7 +257,7 @@ function subscribeGlobalSessionTail(
     if (workspaceId && eventWorkspaceId !== workspaceId) {
       return
     }
-    subscriber({ ...event, scope: 'sessions' })
+    subscriber(toGlobalTailEvent(event))
   }
   globalSubscribers.add(wrapped)
   return () => {
@@ -426,6 +428,100 @@ function toChatTailSnapshotRequiredEvent(input: {
   } as ChatSessionTailEvent | ChatGlobalSessionTailEvent
 }
 
+const TAIL_PREVIEW_MAX_CHARS = 2_000
+
+function toTailMessageSnapshot(fact: MessageRecordedFact): ChatSessionTailMessageSnapshot | null {
+  try {
+    const message = parseStoredMessageSnapshot(fact.messageJson)
+    if (message.role !== 'user' && message.role !== 'assistant') {
+      return null
+    }
+    return {
+      messageId: fact.id,
+      role: message.role,
+      status: fact.status,
+      ...(fact.errorText ? { errorText: fact.errorText } : {}),
+      preview: fact.content.slice(0, TAIL_PREVIEW_MAX_CHARS),
+      previewTruncated: fact.content.length > TAIL_PREVIEW_MAX_CHARS,
+      parentMessageId: fact.parentMessageId,
+      parentToolCallId: fact.parentToolCallId,
+      taskId: fact.taskId,
+      depth: fact.depth,
+      message,
+    }
+  }
+  catch {
+    // Snapshot enrichment is best-effort: clients fall back to a snapshot
+    // refetch when a message event arrives without an inline snapshot.
+    return null
+  }
+}
+
+function toCompletedTailMessageSnapshot(payload: {
+  id: string
+  content: string
+  messageJson: string
+  status: ChatSessionTailMessageSnapshot['status']
+  errorText: string | null
+}): ChatSessionTailMessageSnapshot | null {
+  try {
+    const structural = db()
+      .select({
+        parentMessageId: messages.parentMessageId,
+        parentToolCallId: messages.parentToolCallId,
+        taskId: messages.taskId,
+        depth: messages.depth,
+      })
+      .from(messages)
+      .where(eq(messages.id, payload.id))
+      .get()
+    if (!structural) {
+      return null
+    }
+    const message = parseStoredMessageSnapshot(payload.messageJson)
+    if (message.role !== 'user' && message.role !== 'assistant') {
+      return null
+    }
+    return {
+      messageId: payload.id,
+      role: message.role,
+      status: payload.status,
+      ...(payload.errorText ? { errorText: payload.errorText } : {}),
+      preview: payload.content.slice(0, TAIL_PREVIEW_MAX_CHARS),
+      previewTruncated: payload.content.length > TAIL_PREVIEW_MAX_CHARS,
+      parentMessageId: structural.parentMessageId,
+      parentToolCallId: structural.parentToolCallId,
+      taskId: structural.taskId,
+      depth: structural.depth,
+      message,
+    }
+  }
+  catch {
+    return null
+  }
+}
+
+/** Global-scope tails stay slim: strip inline message snapshots before fan-out. */
+function stripTailMessageSnapshots(payload: ChatSessionTailEvent['payload']): ChatSessionTailEvent['payload'] {
+  if ('snapshot' in payload || 'assistantSnapshot' in payload) {
+    const { snapshot: _snapshot, assistantSnapshot: _assistantSnapshot, ...slim } = payload as
+      ChatSessionTailEvent['payload'] & {
+        snapshot?: ChatSessionTailMessageSnapshot
+        assistantSnapshot?: ChatSessionTailMessageSnapshot
+      }
+    return slim
+  }
+  return payload
+}
+
+function toGlobalTailEvent(event: ChatSessionTailEvent): ChatGlobalSessionTailEvent {
+  return {
+    ...event,
+    scope: 'sessions',
+    payload: stripTailMessageSnapshots(event.payload),
+  }
+}
+
 function encodeTailEvent(event: ChatSessionTailEvent | ChatGlobalSessionTailEvent): Uint8Array {
   return encoder.encode(
     `id: ${event.sequenceId}\nevent: ${event.scope}\ndata: ${JSON.stringify(event)}\n\n`,
@@ -436,20 +532,33 @@ function readTailPayload(event: StoredChatSessionEvent): ChatSessionTailEvent['p
   switch (event.type) {
     case 'UserMessageAppended':
     case 'MessageImported':
-    case 'SteerApplied':
-      return { messageId: event.payload.message.id }
-    case 'RunStarted':
+    case 'SteerApplied': {
+      const snapshot = toTailMessageSnapshot(event.payload.message)
+      return {
+        messageId: event.payload.message.id,
+        ...(snapshot ? { snapshot } : {}),
+      }
+    }
+    case 'RunStarted': {
+      const assistantSnapshot = event.payload.assistantMessage
+        ? toTailMessageSnapshot(event.payload.assistantMessage)
+        : null
       return {
         runId: event.payload.run.id,
         assistantMessageId: event.payload.assistantMessage?.id ?? event.payload.run.messageId ?? null,
         queueItemId: event.payload.queueItemId ?? null,
         ...(event.payload.runtimeSettings ? { runtimeSettings: event.payload.runtimeSettings } : {}),
+        ...(assistantSnapshot ? { assistantSnapshot } : {}),
       }
-    case 'AssistantMessageCompleted':
+    }
+    case 'AssistantMessageCompleted': {
+      const snapshot = toCompletedTailMessageSnapshot(event.payload.message)
       return {
         messageId: event.payload.message.id,
         status: event.payload.message.status,
+        ...(snapshot ? { snapshot } : {}),
       }
+    }
     case 'RunCompleted':
     case 'RunFailed':
     case 'RunAborted':

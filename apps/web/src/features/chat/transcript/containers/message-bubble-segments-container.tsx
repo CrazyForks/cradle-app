@@ -3,16 +3,13 @@ import { useState } from 'react'
 
 import { BangCommandBlock, BangCommandPromptBlock } from '../../rendering/blocks/bang-command-block'
 import type { ChatRenderSegment } from '../../rendering/chat-render-plan'
-import { splitSegmentExecutionPhase } from '../../rendering/chat-render-plan'
 import { ImageLightbox } from '../../rendering/image-lightbox'
-import { ExecutionPhaseFold } from '../../rendering/message-bubble-chrome'
 import type {
   MessageFrame,
   MessageImageAttachment,
   MessageTextTransform,
 } from '../../rendering/message-bubble-selectors'
 import { readActiveStreamingSegmentKey } from '../../rendering/message-bubble-selectors'
-import { describeToolCall } from '../../rendering/tool-ui-classifier'
 import type { MessageBubbleByIdProps, MessageToolApprovalHandler } from '../lib/message-bubble-types'
 import { MessageBubbleFrameView } from '../views/message-bubble-frame-view'
 import { MessageBubbleActionsById } from './message-bubble-actions-by-id'
@@ -48,9 +45,6 @@ export function MessageBubbleSegmentsContainer({
   const activeStreamingSegmentKey = isStreaming && !frame.hasHiddenRuntimeUserInputTail
     ? readActiveStreamingSegmentKey(segments)
     : null
-  const executionPhaseSplit = isStreaming
-    ? null
-    : splitSegmentExecutionPhase(segments, { describeToolKind: part => describeToolCall(part).kind })
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState(0)
   const imageAttachmentBySegmentKey = new Map(imageAttachments.map(attachment => [attachment.segmentKey, attachment.part]))
@@ -105,14 +99,7 @@ export function MessageBubbleSegmentsContainer({
     ? <BangCommandPromptBlock command={frame.bangCommand.command} />
     : frame.bangResult
       ? <BangCommandBlock result={frame.bangResult} />
-      : !executionPhaseSplit
-          ? renderSegmentsWithImageGrid(segments)
-          : (
-<>
-<ExecutionPhaseFold>{executionPhaseSplit.executionItems.map(renderSegment)}</ExecutionPhaseFold>
-{renderSegmentsWithImageGrid(executionPhaseSplit.finalItems)}
-</>
-)
+      : renderSegmentsWithImageGrid(segments)
 
   return (
     <>

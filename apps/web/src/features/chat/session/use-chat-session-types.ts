@@ -46,29 +46,8 @@ export function projectMainMessagesFromSnapshotRows(rows: ChatSessionMessageRow[
     if (row.parentToolCallId) {
       return []
     }
-    return [createChatMessageShell(row)]
+    return [row.message as UIMessage]
   })
-}
-
-const CHAT_MESSAGE_SHELL_METADATA_KEY = 'historyShell'
-
-export function isChatMessageShell(message: UIMessage): boolean {
-  const metadata = message.metadata as { cradle?: { historyShell?: unknown } } | undefined
-  return metadata?.cradle?.[CHAT_MESSAGE_SHELL_METADATA_KEY] === true
-}
-
-function createChatMessageShell(row: ChatSessionMessageRow): UIMessage {
-  return {
-    id: row.messageId,
-    role: row.role,
-    parts: row.preview ? [{ type: 'text', text: row.preview }] : [],
-    metadata: {
-      cradle: {
-        [CHAT_MESSAGE_SHELL_METADATA_KEY]: true,
-        previewTruncated: row.previewTruncated,
-      },
-    },
-  }
 }
 
 export function projectStreamingMainAssistantMessageIds(rows: ChatSessionMessageRow[]): string[] {

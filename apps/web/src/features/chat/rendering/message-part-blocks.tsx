@@ -2,7 +2,6 @@ import { Streamdown } from '@cradle/streamdown'
 
 import { STREAMDOWN_RENDER_OPTIONS } from '~/store/streamdown'
 
-import { ReasoningBlock } from './blocks/reasoning-block'
 import { RuntimeWarningBlock } from './blocks/runtime-warning-block'
 import { useChatRenderStore } from './chat-render-store'
 import { MarkdownFileLink } from './markdown-file-link'
@@ -14,12 +13,10 @@ import {
 } from './message-attachment-blocks'
 import type { MessageTextTransform } from './message-bubble-selectors'
 import {
-  areReasoningPartsEqual,
   readFileLineCommentContextPartFromState,
   readFilePartFromState,
   readMarkdownAnchorProps,
   readPluginContextPartFromState,
-  readReasoningPartFromState,
   readRuntimeWarningPartFromState,
   readSkillContextPartFromState,
   readTextPartFromState,
@@ -65,27 +62,6 @@ export const MessageTextPartById = ({
   )
 }
 MessageTextPartById.displayName = 'MessageTextPartById'
-
-export const MessageReasoningPartById = ({
-  sessionId,
-  messageId,
-  partIndex,
-  isActiveStreamingSegment,
-}: {
-  sessionId: string
-  messageId: string
-  partIndex: number
-  isActiveStreamingSegment: boolean
-}) => {
-  const part = useChatRenderStore(
-    state => readReasoningPartFromState(state, sessionId, messageId, partIndex),
-    areReasoningPartsEqual,
-  )
-  const state = isActiveStreamingSegment && part.state === 'streaming' ? 'streaming' : 'done'
-
-  return <ReasoningBlock text={part.text} state={state} />
-}
-MessageReasoningPartById.displayName = 'MessageReasoningPartById'
 
 export const MessageFilePartById = ({
   sessionId,

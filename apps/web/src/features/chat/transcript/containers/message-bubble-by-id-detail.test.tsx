@@ -5,6 +5,7 @@ import type { UIMessage } from 'ai'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
+import { TooltipProvider } from '~/components/ui/tooltip'
 import { useChatStore } from '~/store/chat'
 
 import { MessageBubbleById } from './message-bubble-by-id'
@@ -22,7 +23,7 @@ const fullMessage = {
       output: { ok: true },
     },
   ],
-}
+} as unknown as UIMessage
 
 function shellMessage(id: string): UIMessage {
   return {
@@ -39,7 +40,9 @@ function renderMessage(messageId: string) {
   })
   return render(<MessageBubbleById sessionId="session-a" messageId={messageId} />, {
     wrapper: ({ children }: { children: ReactNode }) => (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>{children}</TooltipProvider>
+      </QueryClientProvider>
     ),
   })
 }
@@ -65,6 +68,6 @@ describe('messageBubbleById history shells', () => {
     useChatStore.getState().setMessages('session-a', [fullMessage])
     renderMessage('visible')
     expect(screen.getByText('Full durable text')).toBeTruthy()
-    expect(screen.getByTestId('chat-tool-call-tool-visible')).toBeTruthy()
+    expect(screen.getByTestId('chat-activity-feed')).toBeTruthy()
   })
 })

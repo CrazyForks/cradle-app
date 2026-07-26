@@ -22,7 +22,7 @@ export const uiMessageSchema = t.Object(
   { additionalProperties: true },
 )
 
-export const chatMessageShellSchema = t.Object({
+export const chatMessageRowSchema = t.Object({
   messageId: t.String(),
   role: t.Union([t.Literal('user'), t.Literal('assistant')]),
   status: t.Union([
@@ -38,6 +38,7 @@ export const chatMessageShellSchema = t.Object({
   parentToolCallId: t.Union([t.String(), t.Null()]),
   taskId: t.Union([t.String(), t.Null()]),
   depth: t.Number(),
+  message: uiMessageSchema,
 })
 
 export const chatMessageDetailSchema = t.Object({
