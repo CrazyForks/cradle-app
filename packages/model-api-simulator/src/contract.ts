@@ -87,6 +87,14 @@ export interface SimulatorController {
 
 export interface StartSimulatorOptions {
   readonly port?: number
+  /** When true, request bodies are validated against the provider schema (default: false). */
+  readonly strictRequestValidation?: boolean
+  /**
+   * When true, requests that no enqueued exchange claims get a synthesised
+   * protocol-valid response instead of an `UnexpectedRequestError`. This is what
+   * turns the scenario replayer into a standalone mock server (default: false).
+   */
+  readonly autoRespond?: boolean
 }
 
 export interface ModelApiSimulator {

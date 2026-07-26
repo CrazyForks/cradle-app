@@ -5,6 +5,7 @@ import { observeRequest } from '../core/request-ledger'
 import type { ScenarioController } from '../core/scenario-runtime'
 import { createScheduledStream } from '../core/stream-scheduler'
 import { authenticateAnthropic } from './auth'
+import { autoAnthropicResponse } from './auto-respond'
 import { anthropicError } from './errors'
 import { encodeAnthropicEvent } from './sse'
 import { validateAnthropicStream } from './state-machine'
@@ -12,23 +13,30 @@ import { validateAnthropicStream } from './state-machine'
 export function anthropicRoutes(
   controller: ScenarioController,
   protocol: SimulatorProtocolValidator,
+  autoRespond = false,
 ) {
   return new Elysia({ name: 'cradle.model-api-simulator.anthropic' })
-    .post('/v1/messages', ({ request }) => handleAnthropicRequest(controller, protocol, request))
+    .post('/v1/messages', ({ request }) =>
+      handleAnthropicRequest(controller, protocol, request, autoRespond))
     .post('/v1/messages/count_tokens', ({ request }) =>
-      handleAnthropicRequest(controller, protocol, request))
+      handleAnthropicRequest(controller, protocol, request, autoRespond))
 }
 
 export async function handleAnthropicRequest(
   controller: ScenarioController,
   protocol: SimulatorProtocolValidator,
   request: Request,
+  autoRespond = false,
 ): Promise<Response> {
   const authenticationError = authenticateAnthropic(request)
   if (authenticationError) { return authenticationError }
   try {
     const observed = await observeRequest(request)
     const operation = protocol.validateRequest('anthropic', request, observed)
+    if (autoRespond && controller.pendingExchangeCount === 0) {
+      controller.record(observed)
+      return autoAnthropicResponse(controller, observed)
+    }
     const exchange = controller.take('anthropic', observed)
     const headers = new Headers(exchange.response.headers)
     headers.set('request-id', headers.get('request-id') ?? `req_simulator_${controller.requests().length}`)

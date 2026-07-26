@@ -19,22 +19,26 @@ export function createSimulatorRuntime(): SimulatorRuntime {
   }
 }
 
-export function createSimulatorApp(runtime: SimulatorRuntime) {
+export function createSimulatorApp(
+  runtime: SimulatorRuntime,
+  options: { strictRequestValidation?: boolean, autoRespond?: boolean } = {},
+) {
   const { controller, openAiResources } = runtime
-  const protocol = new SimulatorProtocolValidator()
+  const protocol = new SimulatorProtocolValidator(options.strictRequestValidation ?? false)
+  const autoRespond = options.autoRespond ?? false
   return new Elysia({
     name: 'cradle.model-api-simulator',
     normalize: 'typebox',
   })
-    .use(anthropicRoutes(controller, protocol))
+    .use(anthropicRoutes(controller, protocol, autoRespond))
     .use(openAiRoutes(controller, protocol, openAiResources))
     .get('/v1/models', ({ request }) =>
       isAnthropicRequest(request)
-        ? handleAnthropicRequest(controller, protocol, request)
+        ? handleAnthropicRequest(controller, protocol, request, autoRespond)
         : handleOpenAiRequest(controller, protocol, openAiResources, request))
     .get('/v1/models/:model', ({ request }) =>
       isAnthropicRequest(request)
-        ? handleAnthropicRequest(controller, protocol, request)
+        ? handleAnthropicRequest(controller, protocol, request, autoRespond)
         : handleOpenAiRequest(controller, protocol, openAiResources, request))
 }
 

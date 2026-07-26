@@ -145,10 +145,8 @@ export class ScenarioController implements SimulatorController {
     this.#settleGateWaiters(reason)
   }
 
-  take(
-    provider: SimulatorScenario['provider'],
-    request: Omit<ObservedRequest, 'index'>,
-  ): SimulatorExchange {
+  /** Records an observed request without consuming a queued exchange. */
+  record(request: Omit<ObservedRequest, 'index'>): ObservedRequest {
     this.#assertOpen()
     const observed: ObservedRequest = {
       ...request,
@@ -160,6 +158,14 @@ export class ScenarioController implements SimulatorController {
       if (matches(observed, waiter.match) === undefined) { waiter.resolve(observed) }
       else { this.#waiters.push(waiter) }
     }
+    return observed
+  }
+
+  take(
+    provider: SimulatorScenario['provider'],
+    request: Omit<ObservedRequest, 'index'>,
+  ): SimulatorExchange {
+    const observed = this.record(request)
 
     const queued = this.#exchanges[0]
     if (!queued) {

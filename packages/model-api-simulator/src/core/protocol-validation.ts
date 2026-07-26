@@ -7,6 +7,11 @@ import { OperationRegistry } from './operation-registry'
 export class SimulatorProtocolValidator {
   readonly #schemas = new JsonSchemaRegistry()
   readonly #operations = new OperationRegistry()
+  readonly #strictRequestValidation: boolean
+
+  constructor(strictRequestValidation = false) {
+    this.#strictRequestValidation = strictRequestValidation
+  }
 
   validateRequest(
     provider: Provider,
@@ -14,7 +19,9 @@ export class SimulatorProtocolValidator {
     observed: Omit<ObservedRequest, 'index'>,
   ): MatchedOperation {
     const operation = this.#operations.match(provider, request)
-    this.#operations.validateRequest(operation, request, observed)
+    if (this.#strictRequestValidation) {
+      this.#operations.validateRequest(operation, request, observed)
+    }
     return operation
   }
 
