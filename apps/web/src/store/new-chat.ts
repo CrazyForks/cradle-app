@@ -1,16 +1,12 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-import type { ClaudeAgentModelAliases } from '~/features/agent-runtime/claude-agent-config'
 import type { RuntimeKind } from '~/features/agent-runtime/types'
 import type { RuntimeSettings, RuntimeSettingsPatch } from '~/features/chat/commands/chat-response-command'
 
 import { persistStorage } from './persist-storage'
 
 type PersistedThinkingEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra' | null
-export interface NewChatClaudeAgentConfig {
-  modelAliases: ClaudeAgentModelAliases
-}
 
 interface NewChatState {
   lastRuntimeKind: RuntimeKind | null
@@ -21,8 +17,6 @@ interface NewChatState {
   lastModelByProfile: Record<string, string>
   /** map of runtimeKind → last selected runtime-owned modelId */
   lastModelByRuntime: Record<string, string>
-  /** map of profileId → draft Claude Agent model alias overrides */
-  lastClaudeAgentByProfile: Record<string, NewChatClaudeAgentConfig>
   /** Global fallback when no provider-specific thinking is stored */
   lastThinkingEffort: PersistedThinkingEffort
   /** map of profileId → last selected thinking effort for that provider */
@@ -36,27 +30,11 @@ interface NewChatState {
   setLastAgentProfileId: (id: string | null) => void
   setLastModelForProfile: (profileId: string, modelId: string | null) => void
   setLastModelForRuntime: (runtimeKind: RuntimeKind, modelId: string | null) => void
-  setLastClaudeAgentForProfile: (profileId: string, config: NewChatClaudeAgentConfig | null) => void
   setLastThinkingEffort: (effort: PersistedThinkingEffort) => void
   setLastThinkingForProfile: (profileId: string, effort: PersistedThinkingEffort) => void
   setLastThinkingForProviderModel: (profileId: string, modelId: string, effort: PersistedThinkingEffort) => void
   patchLastRuntimeSettings: (runtimeKind: RuntimeKind, patch: RuntimeSettingsPatch) => void
   getLastModelForProfile: (profileId: string) => string | undefined
-}
-
-function areClaudeAgentConfigsEqual(
-  left: NewChatClaudeAgentConfig | null,
-  right: NewChatClaudeAgentConfig | null,
-): boolean {
-  if (left === right) {
-    return true
-  }
-  if (!left || !right) {
-    return false
-  }
-  return left.modelAliases.haiku === right.modelAliases.haiku
-    && left.modelAliases.sonnet === right.modelAliases.sonnet
-    && left.modelAliases.opus === right.modelAliases.opus
 }
 
 function areRuntimeSettingsEqual(left: RuntimeSettings, right: RuntimeSettings): boolean {
@@ -77,7 +55,6 @@ export const useNewChatStore = create<NewChatState>()(
       lastAgentProfileId: null,
       lastModelByProfile: {},
       lastModelByRuntime: {},
-      lastClaudeAgentByProfile: {},
       lastThinkingEffort: 'high',
       lastThinkingByProfile: {},
       lastThinkingByProviderModel: {},
@@ -148,21 +125,6 @@ export const useNewChatStore = create<NewChatState>()(
           return {
             lastModelByRuntime: { ...state.lastModelByRuntime, [runtimeKind]: modelId },
           }
-        })
-      },
-      setLastClaudeAgentForProfile: (profileId, config) => {
-        set((state) => {
-          if (areClaudeAgentConfigsEqual(state.lastClaudeAgentByProfile[profileId] ?? null, config)) {
-            return state
-          }
-          const next = { ...state.lastClaudeAgentByProfile }
-          if (config) {
-            next[profileId] = config
-          }
-          else {
-            delete next[profileId]
-          }
-          return { lastClaudeAgentByProfile: next }
         })
       },
       setLastThinkingEffort: (effort) => {
@@ -250,7 +212,7 @@ export const useNewChatStore = create<NewChatState>()(
     {
       name: 'cradle:new-chat:v1',
       storage: persistStorage,
-      version: 5,
+      version: 6,
       migrate: (persisted, version) => {
         const state = persisted as Record<string, unknown>
         if (version < 2) {
@@ -291,6 +253,11 @@ export const useNewChatStore = create<NewChatState>()(
             ...state,
             lastAcpAgentId: null,
           }
+        }
+        if (version < 6) {
+          // Draft Claude alias overrides moved to the provider target config.
+          const { lastClaudeAgentByProfile: _dropped, ...rest } = state
+          return rest
         }
         return persisted as NewChatState
       },

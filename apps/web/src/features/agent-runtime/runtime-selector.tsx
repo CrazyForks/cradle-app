@@ -4,6 +4,7 @@ import type { RuntimeIconDescriptor } from '~/components/common/provider-icons'
 import { RuntimeIcon } from '~/components/common/provider-icons'
 import { Button } from '~/components/ui/button'
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from '~/components/ui/menu'
+import { Popover, PopoverContent, PopoverTrigger } from '~/components/ui/popover'
 import { BROWSER_NATIVE_SURFACE_OCCLUSION_PROPS } from '~/features/browser/native-surface-occlusion'
 import { cn } from '~/lib/cn'
 
@@ -27,6 +28,12 @@ export interface RuntimeSelectorProps {
   appearance?: 'toolbar' | 'settings'
   experimentalLabel?: string
   occludeNativeBrowserSurface?: boolean
+  /**
+   * Optional settings surface attached to the read-only chip. When present in
+   * `readOnly` mode, the chip becomes a button that opens this content in a
+   * Popover instead of rendering a static label.
+   */
+  readOnlyPopoverContent?: React.ReactNode
 }
 
 function getRuntimeLabel(option: RuntimeSelectorOption | undefined, value: RuntimeKind): string {
@@ -59,12 +66,40 @@ export function RuntimeSelector({
   appearance = 'toolbar',
   experimentalLabel,
   occludeNativeBrowserSurface = false,
+  readOnlyPopoverContent,
 }: RuntimeSelectorProps) {
   const current = options.find(option => option.value === value)
   const currentLabel = getRuntimeLabel(current, value)
   const isSettingsAppearance = appearance === 'settings'
 
   if (readOnly) {
+    if (readOnlyPopoverContent) {
+      return (
+        <Popover>
+          <PopoverTrigger
+            render={(
+              <button
+                type="button"
+                data-testid="runtime-selector"
+                aria-label={currentLabel}
+                className="flex h-6 cursor-pointer items-center gap-1 rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
+              >
+                <RuntimeOptionIcon option={current} className="size-3.5 shrink-0" />
+                <span className="hidden min-[480px]:inline">{currentLabel}</span>
+              </button>
+            )}
+          />
+          <PopoverContent
+            side="top"
+            align="start"
+            className="w-[20rem] p-0"
+            {...(occludeNativeBrowserSurface ? BROWSER_NATIVE_SURFACE_OCCLUSION_PROPS : {})}
+          >
+            {readOnlyPopoverContent}
+          </PopoverContent>
+        </Popover>
+      )
+    }
     return (
       <div
         data-testid="runtime-selector"

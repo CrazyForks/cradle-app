@@ -1,7 +1,6 @@
 import type { FileUIPart } from 'ai'
 import type { ReactNode } from 'react'
 
-import type { ClaudeAgentModelAliases } from '~/features/agent-runtime/claude-agent-config'
 import type { RuntimeKind } from '~/features/agent-runtime/types'
 import type { RuntimeCatalogComposer } from '~/features/agent-runtime/use-runtime-catalog'
 import type { RuntimeProviderBinding } from '~/features/composer-toolbar/types'
@@ -9,13 +8,7 @@ import type { RuntimeProviderBinding } from '~/features/composer-toolbar/types'
 import type { ChatThinkingEffort, RuntimeSettingsPatchValue } from '../../commands/chat-response-command'
 import type { ChatContextPart } from '../../context/chat-context-parts'
 
-export interface DraftClaudeAgentConfig {
-  modelAliases: ClaudeAgentModelAliases
-}
-
-export type DraftChatRuntimeSettings = Record<string, RuntimeSettingsPatchValue | DraftClaudeAgentConfig | undefined> & {
-  claudeAgent?: DraftClaudeAgentConfig | null
-}
+export type DraftChatRuntimeSettings = Record<string, RuntimeSettingsPatchValue | undefined>
 
 export interface DraftChatComposerSubmitOptions {
   runtimeKind: RuntimeKind

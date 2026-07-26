@@ -5,8 +5,6 @@ import { useTranslation } from 'react-i18next'
 
 import { getSkills, getWorkspacesByWorkspaceIdGitMergeBase } from '~/api-gen/sdk.gen'
 import { toastManager } from '~/components/ui/toast'
-import type { ClaudeAgentModelAliases } from '~/features/agent-runtime/claude-agent-config'
-import { hasClaudeAgentModelAliases } from '~/features/agent-runtime/claude-agent-config'
 import type { ApiProviderKind } from '~/features/agent-runtime/types'
 import {
   runtimeComposerAllowsEmptySubmit,
@@ -31,10 +29,7 @@ import type { ChatContextPart } from '../../context/chat-context-parts'
 import type { MentionItem } from '../../mentions/mention-panel'
 import { searchPluginMentions } from '../../mentions/plugin-mentions'
 import type { SkillMentionItem } from '../../mentions/skill-mention-panel'
-import {
-  useDraftClaudeAgentModelAliases,
-  useProviderTargetClaudeAgentModelAliases,
-} from '../../runtime/claude-session-model-matrix-control'
+import { useProviderClaudeAgentModelAliases } from '../../runtime/claude-session-model-matrix-control'
 import { RuntimeSettingsControl } from '../../runtime/runtime-settings-control'
 import {
   mergeRuntimeSettings,
@@ -143,8 +138,6 @@ function DraftChatComposerContent({
   )
   const patchRuntimeSettings = useNewChatStore(s => s.patchLastRuntimeSettings)
   const runtimeSettings = mergeRuntimeSettings(defaultRuntimeSettings, storedRuntimeSettings ?? {})
-  const claudeAgentByProfile = useNewChatStore(s => s.lastClaudeAgentByProfile)
-  const setClaudeAgentForProfile = useNewChatStore(s => s.setLastClaudeAgentForProfile)
   const [sending, setSending] = useState(false)
   const [reviewModeOpen, setReviewModeOpen] = useState(false)
   const setSettingsSection = useSettingsOverlayStore(s => s.setSettingsSection)
@@ -245,22 +238,9 @@ function DraftChatComposerContent({
     patchRuntimeSettings(selection.runtimeKind, patch)
   }
 
-  const updateClaudeAgentAliases = (next: ClaudeAgentModelAliases) => {
-    if (!selection.profileId) {
-      return
-    }
-    setClaudeAgentForProfile(
-      selection.profileId,
-      hasClaudeAgentModelAliases(next) ? { modelAliases: next } : null,
-    )
-  }
-
   const selectedProviderKind = effectiveProfile?.providerKind
   const selectedApiProviderKind: ApiProviderKind | null
     = selectedProviderKind && selectedProviderKind !== 'cli-tool' ? selectedProviderKind : null
-  const claudeAgent = selection.profileId
-    ? (claudeAgentByProfile[selection.profileId] ?? null)
-    : null
   const inputCollapsed
     = selection.targetMode === 'agent'
       && runtimeComposerUsesCollapsedInput(composerState.runtimeComposer)
@@ -269,22 +249,14 @@ function DraftChatComposerContent({
     composerState.runtimeComposer,
   )
 
-  const providerTargetAliases = useProviderTargetClaudeAgentModelAliases({
-    providerTargetId: selection.profileId,
-    providerKind: selectedApiProviderKind,
-    enabled: selection.targetMode === 'provider' && usesAliasMatrixModelSelection,
-  })
-  const claudeModelAliasesSlot = useDraftClaudeAgentModelAliases({
+  const claudeModelAliasesSlot = useProviderClaudeAgentModelAliases({
     active,
     enabled: usesAliasMatrixModelSelection,
     providerTargetId: selection.profileId,
     providerKind: selectedApiProviderKind,
-    aliases: claudeAgent?.modelAliases ?? providerTargetAliases.aliases,
-    loading: providerTargetAliases.isLoading,
-    onChange: updateClaudeAgentAliases,
   })
   const claudeModelAliases = claudeModelAliasesSlot
-    ? { slot: claudeModelAliasesSlot, providerSettingsLoading: providerTargetAliases.isLoading }
+    ? { slot: claudeModelAliasesSlot }
     : null
   const usesLightOcr = !modelSupportsImageInput(effectiveModel)
   const supportsAttachments = modelSupportsAttachments(effectiveModel) || usesLightOcr
@@ -370,12 +342,7 @@ function DraftChatComposerContent({
     }
 
     setSending(true)
-    const submitRuntimeSettings: DraftChatRuntimeSettings = {
-      ...runtimeSettings,
-      ...(selection.targetMode === 'provider' && usesAliasMatrixModelSelection && claudeAgent
-        ? { claudeAgent }
-        : {}),
-    }
+    const submitRuntimeSettings: DraftChatRuntimeSettings = { ...runtimeSettings }
     const submitOptions: DraftChatComposerSubmitOptions = {
       runtimeKind: selection.runtimeKind,
       providerBinding: composerState.providerBinding,

@@ -1,5 +1,5 @@
 import { Settings2Line as SettingsIcon } from '@mingcute/react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo } from 'react'
 
 import { MenuSub, MenuSubPopup, MenuSubTrigger } from '~/components/ui/menu'
@@ -8,6 +8,7 @@ import { ClaudeModelMatrixEditor } from '~/features/agent-management/claude-mode
 import {
   claudeAgentAliasesFromConfig,
   loadProviderTargetModelSettings,
+  updateProviderTargetClaudeAgentAliases,
 } from '~/features/agent-management/provider-target-model-settings'
 import type { ClaudeAgentModelAliases } from '~/features/agent-runtime/claude-agent-config'
 import {
@@ -18,8 +19,6 @@ import { supportsClaudeAgentModelAliases } from '~/features/agent-runtime/claude
 import type { ApiProviderKind, ModelDescriptor } from '~/features/agent-runtime/types'
 import { BROWSER_NATIVE_SURFACE_OCCLUSION_PROPS } from '~/features/browser/native-surface-occlusion'
 import { cn } from '~/lib/cn'
-
-import { useRuntimeSettings } from './use-runtime-settings'
 
 function providerTargetModelSettingsQueryKey(providerTargetId: string | null) {
   return ['provider-target-model-settings', providerTargetId ?? 'no-provider-target'] as const
@@ -36,115 +35,66 @@ export interface ClaudeAgentModelAliasesSlot {
 }
 
 /**
- * Alias slot for an existing chat session — reads/writes the session's runtime
- * settings via useRuntimeSettings.
+ * Model aliases are a provider property: only the provider target's
+ * `claudeAgent.modelAliases` reaches the Claude Agent SDK environment. This
+ * slot reads and writes that single source of truth, so edits made from the
+ * composer apply to every chat using the provider.
  */
-export function useSessionClaudeAgentModelAliases(args: {
-  active: boolean
-  sessionId: string
-  enabled: boolean
-  providerTargetId: string | null
-  providerKind: ApiProviderKind | null
-  fallbackAliases?: ClaudeAgentModelAliases
-}): ClaudeAgentModelAliasesSlot | null {
-  const { active, sessionId, enabled: enabledInput, providerTargetId, providerKind, fallbackAliases } = args
-  const enabled = active
-    && enabledInput
-    && !!providerTargetId
-    && !!sessionId
-    && supportsClaudeAgentModelAliases(providerKind)
-  const runtimeSettings = useRuntimeSettings(sessionId, enabled)
-
-  return useMemo<ClaudeAgentModelAliasesSlot | null>(() => {
-    if (!enabled) {
-      return null
-    }
-    return {
-      aliases: runtimeSettings.claudeAgent?.modelAliases ?? fallbackAliases ?? DEFAULT_CLAUDE_AGENT_ALIASES,
-      loading: !runtimeSettings.loaded || runtimeSettings.loading,
-      onChange: (next) => {
-        void runtimeSettings
-          .update({
-            claudeAgent: hasClaudeAgentModelAliases(next)
-              ? { modelAliases: next }
-              : null,
-          })
-          .catch((error: unknown) => {
-            toastManager.add({
-              type: 'error',
-              title: 'Save Claude aliases failed',
-              description: error instanceof Error ? error.message : 'Unknown error',
-            })
-          })
-      },
-    }
-  }, [enabled, fallbackAliases, runtimeSettings])
-}
-
-/**
- * Alias slot for the new-chat composer — reads/writes the per-profile
- * alias override stored in the new-chat store.
- */
-export function useDraftClaudeAgentModelAliases(args: {
+export function useProviderClaudeAgentModelAliases(args: {
   active: boolean
   enabled: boolean
   providerTargetId: string | null
   providerKind: ApiProviderKind | null
-  aliases: ClaudeAgentModelAliases | null
-  loading?: boolean
-  onChange: (next: ClaudeAgentModelAliases) => void
 }): ClaudeAgentModelAliasesSlot | null {
-  const { active, enabled: enabledInput, providerTargetId, providerKind, aliases, loading, onChange } = args
+  const { active, enabled: enabledInput, providerTargetId, providerKind } = args
   const enabled = active
     && enabledInput
     && !!providerTargetId
     && supportsClaudeAgentModelAliases(providerKind)
+  const queryClient = useQueryClient()
 
-  return useMemo<ClaudeAgentModelAliasesSlot | null>(() => {
-    if (!enabled) {
-      return null
-    }
-    return {
-      aliases: aliases ?? DEFAULT_CLAUDE_AGENT_ALIASES,
-      loading,
-      onChange,
-    }
-  }, [enabled, aliases, loading, onChange])
-}
-
-/**
- * Internal — also used by the settings panel when editing a provider target's
- * default aliases. Returns aliases + loading for a given provider target.
- */
-export function useProviderTargetClaudeAgentModelAliases(args: {
-  providerTargetId: string | null
-  providerKind: ApiProviderKind | null
-  enabled: boolean
-}): {
-  aliases: ClaudeAgentModelAliases
-  isLoading: boolean
-} {
-  const { providerTargetId, providerKind, enabled } = args
-  const isClaudeAliasProvider = supportsClaudeAgentModelAliases(providerKind)
-  const providerSettingsQuery = useQuery({
+  const settingsQuery = useQuery({
     queryKey: providerTargetModelSettingsQueryKey(providerTargetId),
     queryFn: () => loadProviderTargetModelSettings({ id: providerTargetId! }),
-    enabled: enabled && isClaudeAliasProvider && !!providerTargetId,
+    enabled,
     staleTime: 10_000,
     retry: false,
   })
 
-  const aliases = useMemo(
-    () => providerSettingsQuery.data
-      ? claudeAgentAliasesFromConfig(providerSettingsQuery.data.connectionConfigJson)
-      : DEFAULT_CLAUDE_AGENT_ALIASES,
-    [providerSettingsQuery.data],
-  )
+  const mutation = useMutation({
+    mutationFn: (next: ClaudeAgentModelAliases) =>
+      updateProviderTargetClaudeAgentAliases({ id: providerTargetId! }, next),
+    onSuccess: (data) => {
+      queryClient.setQueryData(providerTargetModelSettingsQueryKey(providerTargetId), data)
+    },
+    onError: (error: unknown) => {
+      toastManager.add({
+        type: 'error',
+        title: 'Save Claude aliases failed',
+        description: error instanceof Error ? error.message : 'Unknown error',
+      })
+      void queryClient.invalidateQueries({
+        queryKey: providerTargetModelSettingsQueryKey(providerTargetId),
+      })
+    },
+  })
+  const { mutate, isPending, variables } = mutation
 
-  return {
-    aliases,
-    isLoading: providerSettingsQuery.isLoading,
-  }
+  return useMemo<ClaudeAgentModelAliasesSlot | null>(() => {
+    if (!enabled) {
+      return null
+    }
+    const savedAliases = settingsQuery.data
+      ? claudeAgentAliasesFromConfig(settingsQuery.data.connectionConfigJson)
+      : DEFAULT_CLAUDE_AGENT_ALIASES
+    return {
+      // While a write is in flight, show the requested matrix so the menu
+      // feels instant instead of snapping back to the stale server copy.
+      aliases: isPending && variables ? variables : savedAliases,
+      loading: settingsQuery.isLoading,
+      onChange: next => mutate(next),
+    }
+  }, [enabled, settingsQuery.data, settingsQuery.isLoading, isPending, variables, mutate])
 }
 
 export function ClaudeAgentModelAliasesSubmenu({
@@ -190,24 +140,9 @@ export function ClaudeAgentModelAliasesSubmenu({
       </MenuSubTrigger>
       <MenuSubPopup
         {...(occludeNativeBrowserSurface ? BROWSER_NATIVE_SURFACE_OCCLUSION_PROPS : {})}
-        className="w-[34rem] p-0"
+        className="w-[24rem] p-0"
       >
         <div className="min-w-0 p-2">
-          <div className="flex min-w-0 items-center justify-between gap-3 px-2 pb-2">
-            <div className="min-w-0">
-              <div className="text-[11px] font-medium text-muted-foreground/70">
-                Model aliases
-              </div>
-              <div className="truncate text-xs text-muted-foreground">
-                Main model:
-                {' '}
-                {mainModelLabel}
-              </div>
-            </div>
-            {loading || loadingModels
-              ? <span className="shrink-0 text-[11px] text-muted-foreground/60">Loading...</span>
-              : null}
-          </div>
           <ClaudeModelMatrixEditor
             aliases={aliases}
             models={models}

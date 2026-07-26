@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { ClaudeModelMatrixEditor } from '~/features/agent-management/claude-model-matrix-editor'
 import { RuntimeSelector } from '~/features/agent-runtime/runtime-selector'
 import type { RuntimeKind } from '~/features/agent-runtime/types'
 import type { RuntimeCatalogComposer } from '~/features/agent-runtime/use-runtime-catalog'
@@ -119,6 +120,17 @@ export function ComposerToolbar({ context, state, claudeModelAliases }: Composer
   const showClaudeModelAliases = selection.targetMode === 'provider'
     && usesAliasMatrixModelSelection
     && !!claudeModelAliases
+  const claudeMatrixPopoverContent = context === 'chat' && showClaudeModelAliases && claudeModelAliases
+    ? (
+        <ClaudeModelMatrixEditor
+          aliases={claudeModelAliases.slot.aliases}
+          models={models}
+          mainModelId={selection.modelId}
+          loading={claudeModelAliases.slot.loading || claudeModelAliases.providerSettingsLoading}
+          onChange={claudeModelAliases.slot.onChange}
+        />
+      )
+    : null
 
   const runtimeControl = (
     <RuntimeSelector
@@ -127,6 +139,7 @@ export function ComposerToolbar({ context, state, claudeModelAliases }: Composer
       readOnly={context === 'chat'}
       options={runtimeSelectorOptions}
       occludeNativeBrowserSurface
+      readOnlyPopoverContent={claudeMatrixPopoverContent}
     />
   )
   const agentIdentity = boundChatAgent ? <ChatAgentIdentity agent={boundChatAgent} /> : null
