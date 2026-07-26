@@ -75,16 +75,16 @@
 }
 
 /*
- * Custom first-split / top-tab indicator — mirrors dockview's
- * `.dv-drop-target-selection` geometry animation so flat + tab hovers
- * feel like the same system as multi-pane dockview drops.
+ * Indicator for pointer-driven (tab) split drags — mirrors dockview's
+ * `.dv-drop-target-selection` geometry animation so a tab drag and an HTML5
+ * drag read as the same system.
  */
-@keyframes chat-split-drop-in {
+@keyframes split-drop-in {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 
-.chat-split-drop-indicator {
+.split-drop-indicator {
   position: absolute;
   box-sizing: border-box;
   pointer-events: none;
@@ -97,7 +97,7 @@
   opacity: 1;
   will-change: top, left, width, height, opacity;
   /* Appear once; subsequent quadrant moves only use the geometry transition. */
-  animation: chat-split-drop-in var(--dv-transition-duration, 120ms) ease-out;
+  animation: split-drop-in var(--dv-transition-duration, 120ms) ease-out;
   transition:
     top var(--dv-transition-duration, 120ms) ease-out,
     left var(--dv-transition-duration, 120ms) ease-out,
@@ -106,16 +106,8 @@
     opacity var(--dv-transition-duration, 120ms) ease-out;
 }
 
-.chat-split-drop-indicator-host {
+.split-drop-indicator-host {
   position: fixed;
-  z-index: 50;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.chat-split-drop-indicator-host-local {
-  position: absolute;
-  inset: 0;
   z-index: 50;
   pointer-events: none;
   overflow: hidden;

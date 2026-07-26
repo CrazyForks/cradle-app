@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 
 import { getSessionsByIdWorkOptions } from '~/api-gen/@tanstack/react-query.gen'
 import { RouteErrorFallback } from '~/components/common/route-error-fallback'
-import { ChatSplitWorkspace } from '~/features/chat/split-workspace/chat-split-workspace'
+import { ChatSessionRouteContent } from '~/features/chat/session/chat-session-route-content'
 import { openWork } from '~/navigation/navigation-commands'
 
 export function resolvePrimaryWorkRedirect(
@@ -36,5 +36,5 @@ function ChatSessionRoute() {
   if (!workQuery.data || redirectWorkId) {
     return null
   }
-  return <ChatSplitWorkspace sessionId={sessionId} />
+  return <ChatSessionRouteContent sessionId={sessionId} />
 }

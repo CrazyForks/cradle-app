@@ -33,8 +33,8 @@ import {
 } from '~/components/layout/use-layout-query-records'
 import { useLayoutSlotsCtx } from '~/components/layout/use-layout-slots'
 import { Skeleton } from '~/components/ui/skeleton'
-import { useChatSplitFocusedSessionId } from '~/features/chat/split-workspace/chat-split-workspace-store'
 import { useSessionIsolationState } from '~/features/session/use-session-isolation'
+import { useFocusedSplitPane } from '~/features/split-view/store/split-workspace-store'
 import { useJarvisUiStore } from '~/features/system-agent/jarvis-ui-store'
 import { useGlobalEventListeners } from '~/hooks/use-global-event-listeners'
 import { useShortcut } from '~/hooks/use-shortcut'
@@ -615,10 +615,13 @@ function AppLayoutContent({
   // Route surface layout slots registered by route content components.
   const { slots } = useLayoutSlotsCtx()
   const activeSurface = useActiveSurface()
-  // When the active chat surface is split into multiple dockview panes, the
-  // aside/panel chrome should follow whichever pane is focused rather than
-  // always the primary (URL) session.
-  const focusedSplitSessionId = useChatSplitFocusedSessionId(activeSurface?.id ?? null)
+  // When the active surface is split into multiple panes, the aside/panel
+  // chrome should follow whichever pane is focused rather than always the
+  // primary (URL) route.
+  const focusedSplitPane = useFocusedSplitPane(activeSurface?.id ?? null)
+  const focusedSplitSessionId = focusedSplitPane?.route.to === '/chat/$sessionId'
+    ? focusedSplitPane.route.params.sessionId
+    : null
   const activeTab = activeSurface
     ? {
         type: activeSurface.kind === 'workspace' ? 'workspace-detail' : activeSurface.kind,

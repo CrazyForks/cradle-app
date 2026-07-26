@@ -1,20 +1,9 @@
 /**
- * Drag payload format used when a session item is dragged out of the
- * sidebar. The value transferred is the plain session id.
+ * Native half of the session drag contract: the plain session id.
  *
- * Consumers: Electron tear-off (native drop target) and the chat split
- * workspace (dropping a session into the main content area to open a new
- * split pane).
+ * The Electron tear-off drop target is a native window outside the app's React
+ * drag system and reads this exact mime. The in-app split view reads the richer
+ * surface-route payload when present (see split-view/dnd/split-drag-payload),
+ * falling back to this id — so a sidebar session drag lands in both worlds.
  */
 export const SESSION_DRAG_MIME_TYPE = 'application/x-cradle-session'
-
-export function readDraggedSessionId(dataTransfer: DataTransfer | null): string | null {
-  return dataTransfer?.getData(SESSION_DRAG_MIME_TYPE) || null
-}
-
-export function isSessionDragEvent(dataTransfer: DataTransfer | null): boolean {
-  if (!dataTransfer) {
-    return false
-  }
-  return Array.from(dataTransfer.types).includes(SESSION_DRAG_MIME_TYPE)
-}

@@ -1,5 +1,6 @@
 import { useRouterState } from '@tanstack/react-router'
 
+import { useFocusedSplitPane } from '~/features/split-view/store/split-workspace-store'
 import { router } from '~/router'
 
 import type { SurfaceDraft } from './surface-identity'
@@ -49,8 +50,17 @@ export function useActiveSurfaceId(): string | null {
 }
 
 export function useIsActiveSurfaceId(surfaceId: string): boolean {
-  return useRouterState({
+  const activeSurfaceId = useRouterState({
     router,
-    select: state => surfaceDraftFromRouterState(state)?.id === surfaceId,
+    select: state => surfaceDraftFromRouterState(state)?.id ?? null,
   })
+  // When the active surface is split, "what the user is looking at" is the
+  // focused pane, not necessarily the primary (URL) route. Pane ids are
+  // surface ids (surfaceIdForRoute), so they compare directly — this keeps
+  // sidebar active states following focus across panes.
+  const focusedPane = useFocusedSplitPane(activeSurfaceId)
+  if (focusedPane) {
+    return focusedPane.id === surfaceId
+  }
+  return activeSurfaceId === surfaceId
 }

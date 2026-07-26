@@ -112,8 +112,157 @@ export function pluginSurfaceId(routeSegment: string, localId: string): string {
   return `plugin:${routeSegment}:${localId}`
 }
 
+/**
+ * Canonical identity of a route instance. Two routes that address the same
+ * thing (same chat, same workspace, same settings page) share one id, which is
+ * what makes a route usable both as a surface (tab) and as a split pane — the
+ * same interface can never be opened twice inside one workspace.
+ */
+export function surfaceIdForRoute(route: SurfaceRoute): string {
+  switch (route.to) {
+    case '/':
+      return HOME_SURFACE_ID
+    case '/work/new':
+      return 'new-work'
+    case '/work/$workId':
+      return workSurfaceId(route.params.workId)
+    case '/pull-requests':
+      return pullRequestsSurfaceId()
+    case '/chat/new':
+      return 'new-chat'
+    case '/chat/$sessionId':
+      return chatSurfaceId(route.params.sessionId)
+    case '/diff':
+      return diffSurfaceId()
+    case '/workspaces/$workspaceId':
+      return workspaceSurfaceId(route.params.workspaceId)
+    case '/workspaces/$workspaceId/diffs':
+      return workspaceDiffsSurfaceId(route.params.workspaceId)
+    case '/kanban/$boardId':
+      return kanbanSurfaceId(route.params.boardId)
+    case '/plugins/$routeSegment/$localId':
+      return pluginSurfaceId(route.params.routeSegment, route.params.localId)
+    case '/plugins':
+      return 'plugin-center'
+    case '/awaits':
+      return 'awaits'
+    case '/automation':
+      return 'automation'
+    case '/usage':
+      return 'usage'
+    case '/resources':
+      return 'resources'
+    case '/settings/$section':
+      return 'settings'
+    case '/onboarding':
+      return 'onboarding'
+    case '/devtool':
+      return 'devtool'
+  }
+}
+
 function readString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+/**
+ * Validate an untrusted `SurfaceRoute` — persisted split layouts and drag
+ * payloads both cross a serialization boundary, and a malformed route would
+ * otherwise reach the router as a navigation target.
+ */
+export function parseSurfaceRoute(value: unknown): SurfaceRoute | null {
+  if (!value || typeof value !== 'object') {
+    return null
+  }
+  const candidate = value as { to?: unknown, params?: Record<string, unknown>, search?: Record<string, unknown> }
+  return surfaceRouteFromParts(
+    candidate.to,
+    candidate.params ?? {},
+    typeof candidate.search === 'object' && candidate.search !== null ? candidate.search : undefined,
+  )
+}
+
+function surfaceRouteFromParts(
+  to: unknown,
+  params: Record<string, unknown>,
+  search: Record<string, unknown> | undefined,
+): SurfaceRoute | null {
+  switch (to) {
+    case '/':
+    case '/plugins':
+    case '/awaits':
+    case '/automation':
+    case '/usage':
+    case '/resources':
+    case '/onboarding':
+    case '/devtool':
+      return { to }
+    case '/chat/new':
+      return { to, search: { issueId: readString(search?.issueId) } }
+    case '/work/new':
+      return { to, search: { workspaceId: readString(search?.workspaceId), issueId: readString(search?.issueId) } }
+    case '/pull-requests':
+      return { to, search: { workId: readString(search?.workId) } }
+    case '/diff':
+      return {
+        to,
+        search: {
+          workspace: readString(search?.workspace),
+          repo: readString(search?.repo),
+          path: readString(search?.path),
+          review: readString(search?.review),
+          view: search?.view === 'commit' || search?.view === 'guide' ? search.view : undefined,
+        },
+      }
+    case '/chat/$sessionId': {
+      const sessionId = readString(params.sessionId)
+      return sessionId ? { to, params: { sessionId } } : null
+    }
+    case '/work/$workId': {
+      const workId = readString(params.workId)
+      return workId ? { to, params: { workId } } : null
+    }
+    case '/workspaces/$workspaceId': {
+      const workspaceId = readString(params.workspaceId)
+      return workspaceId ? { to, params: { workspaceId } } : null
+    }
+    case '/workspaces/$workspaceId/diffs': {
+      const workspaceId = readString(params.workspaceId)
+      return workspaceId
+        ? {
+            to,
+            params: { workspaceId },
+            search: {
+              repo: readString(search?.repo),
+              path: readString(search?.path),
+              review: readString(search?.review),
+              view: search?.view === 'commit' || search?.view === 'guide' ? search.view : undefined,
+            },
+          }
+        : null
+    }
+    case '/kanban/$boardId': {
+      const boardId = readString(params.boardId)
+      return boardId
+        ? {
+            to,
+            params: { boardId },
+            search: { issue: readString(search?.issue), milestoneId: readString(search?.milestoneId) },
+          }
+        : null
+    }
+    case '/plugins/$routeSegment/$localId': {
+      const routeSegment = readString(params.routeSegment)
+      const localId = readString(params.localId)
+      return routeSegment && localId ? { to, params: { routeSegment, localId } } : null
+    }
+    case '/settings/$section': {
+      const section = readString(params.section)
+      return section ? { to, params: { section } } : null
+    }
+    default:
+      return null
+  }
 }
 
 export function surfaceDraftFromRoute(input: {

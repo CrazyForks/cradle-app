@@ -9,7 +9,8 @@ import {
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { shallow } from 'zustand/shallow'
 
-import { dropChatSurfaceAtPoint, publishChatSurfaceDrag } from '~/features/chat/split-workspace/chat-split-surface-drop'
+import { publishSurfaceDrag } from '~/features/split-view/dnd/surface-drag-stream'
+import { dropSurfaceRouteAtPoint } from '~/features/split-view/split-commands'
 import { usePreviewCard } from '~/features/workspace/preview-card/preview-card-context'
 import { PreviewCardProvider } from '~/features/workspace/preview-card/preview-card-provider'
 import { useAllSessions, useRunningSessionIds, useUnreadSessionIds } from '~/features/workspace/use-session'
@@ -326,7 +327,7 @@ const SurfaceBarInner = memo(({
     dragStartPointerRef.current = null
     dragReleasePointerRef.current = null
     dragReleaseClientPointerRef.current = null
-    publishChatSurfaceDrag({ clientX: null, clientY: null, sessionId: null })
+    publishSurfaceDrag({ clientX: null, clientY: null, route: null })
   }, [])
 
   const handleActivate = useCallback((surfaceId: string) => {
@@ -461,13 +462,13 @@ const SurfaceBarInner = memo(({
     const draggedSurface = event.operation.source
       ? useSurfaceStore.getState().surfaces.find(surface => surface.id === event.operation.source?.id)
       : null
-    const draggedSessionId = draggedSurface ? readChatSessionId(draggedSurface) : null
+    const draggedRoute = draggedSurface?.route ?? null
 
     const publishPointer = (pointer: ClientCoordinates | null) => {
-      publishChatSurfaceDrag({
+      publishSurfaceDrag({
         clientX: pointer?.clientX ?? null,
         clientY: pointer?.clientY ?? null,
-        sessionId: draggedSessionId,
+        route: draggedRoute,
       })
     }
     publishPointer(startClientPointer)
@@ -519,12 +520,11 @@ const SurfaceBarInner = memo(({
     }
     if (!target) {
       const sourceSurface = useSurfaceStore.getState().surfaces.find(surface => surface.id === source.id)
-      const sessionId = sourceSurface ? readChatSessionId(sourceSurface) : null
       const releasePointer = dragReleaseClientPointerRef.current
-      if (sessionId && releasePointer) {
-        const didSplit = dropChatSurfaceAtPoint({
+      if (sourceSurface && releasePointer) {
+        const didSplit = dropSurfaceRouteAtPoint({
           ...releasePointer,
-          sessionId,
+          route: sourceSurface.route,
         })
         if (didSplit) {
           closeSurfaceById(String(source.id))

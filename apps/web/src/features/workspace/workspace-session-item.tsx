@@ -8,6 +8,7 @@ import {
 import { useTranslation } from 'react-i18next'
 
 import type { RuntimeIconDescriptor } from '~/components/common/provider-icons'
+import { writeSurfaceRouteDrag } from '~/features/split-view/dnd/split-drag-payload'
 import type { WorkSummary } from '~/features/work/use-work'
 import { isElectron } from '~/lib/electron'
 import { useIsActiveSurfaceId } from '~/navigation/active-surface'
@@ -196,6 +197,10 @@ export const WorkspaceSessionItem = memo(
       event: ReactDragEvent<HTMLDivElement>,
     ) => {
       event.dataTransfer.setData(SESSION_DRAG_MIME_TYPE, session.id)
+      // Also advertise the full chat route so the split view treats a sidebar
+      // session drag like any other surface drop; the native tear-off target
+      // still reads the plain id above.
+      writeSurfaceRouteDrag(event.dataTransfer, { to: '/chat/$sessionId', params: { sessionId: session.id } })
       event.dataTransfer.effectAllowed = 'move'
       recordDragPosition(event.nativeEvent)
       dragWasTornOffRef.current = false

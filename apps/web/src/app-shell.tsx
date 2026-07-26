@@ -10,13 +10,14 @@ import { useSyncLayoutSlotScope } from '~/components/layout/use-layout-slots'
 import { useSuppressNativeBrowserSurface } from '~/features/browser/native-surface-suppression'
 import { WhatsNewContainer } from '~/features/changelog/whats-new-container'
 import { WhatsNewPopup } from '~/features/changelog/whats-new-popup'
-import { useChatSplitFocusedSessionId, useChatSplitWorkspaceStore } from '~/features/chat/split-workspace/chat-split-workspace-store'
 import { useDesktopTrayActionBridge } from '~/features/desktop-tray/use-desktop-tray-action-bridge'
 import { CredentialSetupDialog } from '~/features/onboarding/credential-setup-dialog'
 import { useOnboardingStore } from '~/features/onboarding/onboarding-store'
 import { GlobalSearchDialog } from '~/features/search/global-search-dialog'
 import { useGlobalSearchStore } from '~/features/search/global-search-store'
 import { useKeyBindingsOverlayStore } from '~/features/shortcuts/key-bindings-overlay-store'
+import { SplitSurface } from '~/features/split-view/split-surface'
+import { useFocusedSplitPane, useSplitPaneRoutes } from '~/features/split-view/store/split-workspace-store'
 import { useUnreadSessionIds } from '~/features/workspace/use-session'
 import { isWorkspaceFileShortcutScopeEvent } from '~/features/workspace/workspace-file-shortcuts'
 import { isTearoffWindow, tearoffSurfaceRoute } from '~/lib/electron'
@@ -242,24 +243,26 @@ function MainAppRuntime() {
     [layoutSlotScope.validSurfaceIdsKey],
   )
 
-  // A chat surface split into multiple dockview panes registers layout slots
-  // (aside/panel) per pane session id, not just the primary (URL) session —
-  // extend the valid scope so the currently focused pane's chrome resolves,
-  // and follow that pane instead of always the primary one.
+  // A split surface shows several routes at once. Each pane registers its own
+  // layout slots (aside/panel), so widen the valid scope to every pane's slot
+  // id — not just the primary route's — and follow the focused pane's chrome
+  // instead of always the primary one.
   const activeSurfaceId = activeSurface?.id ?? null
-  const activeSplitPaneSessionIds = useChatSplitWorkspaceStore(
-    useShallow(state => (activeSurfaceId ? state.workspaces[activeSurfaceId]?.paneSessionIds : undefined)),
-  )
-  const focusedSplitSessionId = useChatSplitFocusedSessionId(activeSurfaceId)
+  const splitPaneRoutes = useSplitPaneRoutes(activeSurfaceId)
+  const focusedSplitPane = useFocusedSplitPane(activeSurfaceId)
 
   const validSlotIds = useMemo(() => {
     const base = layoutSlotScope.validSlotIdsKey ? layoutSlotScope.validSlotIdsKey.split('\0') : []
-    if (!activeSplitPaneSessionIds || activeSplitPaneSessionIds.length <= 1) {
+    if (splitPaneRoutes.length <= 1) {
       return base
     }
-    return Array.from(new Set([...base, ...activeSplitPaneSessionIds]))
-  }, [layoutSlotScope.validSlotIdsKey, activeSplitPaneSessionIds])
-  const activeSlotId = focusedSplitSessionId ?? layoutSlotIdForSurface(activeSurface)
+    const paneSlotIds = splitPaneRoutes
+      .map(layoutSlotIdForRoute)
+      .filter((id): id is string => id !== null)
+    return Array.from(new Set([...base, ...paneSlotIds]))
+  }, [layoutSlotScope.validSlotIdsKey, splitPaneRoutes])
+  const activeSlotId = (focusedSplitPane ? layoutSlotIdForRoute(focusedSplitPane.route) : null)
+    ?? layoutSlotIdForSurface(activeSurface)
 
   useSyncLayoutSlotScope(activeSlotId, validSlotIds)
 
@@ -309,7 +312,7 @@ function MainAppRuntime() {
       >
         <div className="relative h-full w-full overflow-hidden">
           <SurfaceActivityProvider active>
-            <Outlet />
+            <ActiveSurfaceSplitOutlet activeSurface={activeSurface} />
           </SurfaceActivityProvider>
           <GlobalCommandPaletteHost />
           <KeyBindingsOverlayHost />
@@ -319,6 +322,37 @@ function MainAppRuntime() {
       <WhatsNewContainer />
       <WhatsNewPopup />
     </div>
+  )
+}
+
+/**
+ * Wraps the router outlet in the universal split view. The primary pane's
+ * identity comes from the live router location — what the outlet actually
+ * renders — rather than the active surface, so a route that does not sync a
+ * surface (settings) still splits against the right thing. Keyed by surface id
+ * so switching tabs mounts a fresh dock per surface.
+ */
+function ActiveSurfaceSplitOutlet({ activeSurface }: { activeSurface: ReturnType<typeof useActiveSurface> }) {
+  'use no memo'
+
+  const primary = useRouterState({
+    select: (state) => {
+      const draft = surfaceDraftFromRouterState(state)
+      return draft ? { id: draft.id, route: draft.route } : null
+    },
+    structuralSharing: true,
+  })
+
+  const outlet = <Outlet />
+  const surfaceId = primary?.id ?? activeSurface?.id ?? null
+  if (!primary || !surfaceId) {
+    return outlet
+  }
+
+  return (
+    <SplitSurface key={surfaceId} surfaceId={surfaceId} route={primary.route}>
+      {outlet}
+    </SplitSurface>
   )
 }
 
