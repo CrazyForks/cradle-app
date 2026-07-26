@@ -8,7 +8,7 @@ Uses HTTP only for PTY resource lifecycle (`start-or-attach`, `delete`) and a sh
 
 ## Files
 
-- **app-theme.ts**: `getAppTerminalTheme()` — resolves background, foreground, selection, cursor, and ANSI colours from the app's computed CSS theme tokens with Light/Dark fallbacks; its frame-coalesced watcher updates mounted terminals when the theme profile changes.
+- **app-theme.ts**: `getAppTerminalTheme()` — resolves background, foreground, cursor, and ANSI colours from the app's computed CSS theme tokens with Light/Dark fallbacks; selection uses a fixed high-contrast Light/Dark palette (not `--primary`); its frame-coalesced watcher updates mounted terminals when the theme profile changes.
 - **terminal-font.ts**: Resolves the active theme Code font first, then falls back to the legacy PR #11 terminal preference and finally the product default stack.
 - **terminal-addons.ts**: Shared xterm addon installation for shell and CLI-TUI surfaces, including clipboard, search, progress, Unicode 11, bounded inline images, WebGL, and ligature fallback.
 - **keyboard-handler.ts**: `attachMacKeyboardHandler()` — maps macOS shortcuts (Cmd/Option+arrows, Cmd+Delete) to ANSI sequences.

@@ -107,8 +107,9 @@ describe('theme customization', () => {
     expect(getAppTerminalTheme()).toMatchObject({
       background: '#fffdf8',
       foreground: '#292524',
-      selectionBackground: '#2563eb66',
-      selectionForeground: '#292524',
+      // Selection stays on the fixed terminal palette, not theme accent.
+      selectionBackground: '#add6ff',
+      selectionForeground: '#000000',
     })
 
     removeProfile()

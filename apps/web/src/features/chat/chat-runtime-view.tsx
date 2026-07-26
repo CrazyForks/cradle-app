@@ -15,7 +15,7 @@ import { searchWorkspaceFiles } from '~/features/workspace/use-workspace-files'
 import type { ChatViewProps } from './chat-view'
 import { searchSessionPluginMentions } from './mentions/plugin-mentions'
 import type { SkillMentionItem } from './mentions/skill-mention-panel'
-import { useProviderTargetClaudeAgentModelAliases, useSessionClaudeAgentModelAliases } from './runtime/claude-session-model-matrix-control'
+import { useProviderClaudeAgentModelAliases } from './runtime/claude-session-model-matrix-control'
 import { runtimeSupportsCodexPluginMentions } from './runtime/codex-app-server-bridge'
 import type { SendMessageOptions } from './session/use-chat-session'
 import { useSessionProviderModelPersistence } from './session/use-session-binding'
@@ -206,21 +206,14 @@ export function ChatRuntimeView({
     : null
   const usesAliasMatrixModelSelection = runtimeComposerUsesAliasMatrixModelSelection(sessionComposerState.runtimeComposer)
 
-  const providerTargetAliases = useProviderTargetClaudeAgentModelAliases({
-    providerTargetId: sessionComposerState.selection.profileId,
-    providerKind: selectedApiProviderKind,
-    enabled: sessionComposerState.selection.targetMode === 'provider' && usesAliasMatrixModelSelection,
-  })
-  const claudeModelAliasesSlot = useSessionClaudeAgentModelAliases({
+  const claudeModelAliasesSlot = useProviderClaudeAgentModelAliases({
     active,
-    sessionId,
     enabled: usesAliasMatrixModelSelection,
     providerTargetId: sessionComposerState.selection.profileId,
     providerKind: selectedApiProviderKind,
-    fallbackAliases: providerTargetAliases.aliases,
   })
   const claudeModelAliases = claudeModelAliasesSlot
-    ? { slot: claudeModelAliasesSlot, providerSettingsLoading: providerTargetAliases.isLoading }
+    ? { slot: claudeModelAliasesSlot }
     : null
 
   const composerToolbar = hideRuntimeToolbar

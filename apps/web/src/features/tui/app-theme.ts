@@ -5,7 +5,9 @@ const DARK_FALLBACK: ITheme = {
   foreground: '#f5f5f5',
   cursor: '#f5f5f5',
   cursorAccent: '#191919',
-  selectionBackground: 'rgba(245, 245, 245, 0.22)',
+  // Terminal selection is intentionally independent of --primary (which is often
+  // near-neutral in Cradle themes and reads as "same as background" when washed out).
+  selectionBackground: 'rgba(245, 245, 245, 0.28)',
   selectionForeground: '#ffffff',
   black: '#191919',
   red: '#f87171',
@@ -93,22 +95,15 @@ export function getAppTerminalTheme(): ITheme {
   const fallback = isDarkTheme() ? DARK_FALLBACK : LIGHT_FALLBACK
   const background = themeBackground('--background', fallback.background!)
   const foreground = themeColor('--foreground', fallback.foreground!)
-  const explicitAccent = document.documentElement.style.getPropertyValue('--primary').trim()
-  const explicitForeground = document.documentElement.style.getPropertyValue('--foreground').trim()
 
   return {
     background,
     foreground,
     cursor: themeColor('--primary', fallback.cursor!),
     cursorAccent: background,
-    selectionBackground: /^#[0-9a-f]{6}$/i.test(explicitAccent)
-      ? `${explicitAccent}66`
-      : resolveCssColor(
-          'color-mix(in srgb, var(--primary) 28%, transparent)',
-          fallback.selectionBackground!,
-          'backgroundColor',
-        ),
-    selectionForeground: explicitForeground ? foreground : fallback.selectionForeground,
+    // Fixed high-contrast selection — do not derive from --primary.
+    selectionBackground: fallback.selectionBackground!,
+    selectionForeground: fallback.selectionForeground!,
     black: themeColor('--foreground', fallback.black!),
     red: themeColor('--destructive', fallback.red!),
     green: themeColor('--chart-2', fallback.green!),
