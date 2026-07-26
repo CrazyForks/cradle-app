@@ -80,6 +80,22 @@ duplex adapter 复用同一 transport。locator 复用的进程显式标记为 `
 binary/module-import feasibility gate；Plan 063 只迁移 transport，不重定义 Plan 061 的 Chat
 lifecycle 或 Plan 054 的 cursor 语义。
 
+2026-07-26 在 commit `cc3facef` 上补充 Plans 065-069：Claude Agent SDK 集成正确性系列，
+源自对该 provider 的完整审查（advisor 会话转录）。065 修权限启动竞态、dispose 未接线、
+getPresentation 子进程风暴与 snapshot 无界数组；066 让长生命周期 Query 成为历史与配置的
+权威（修 claudeAi 每轮全量历史重放 O(N²)、claudeAi 模型切换丢失、每轮重建被丢弃的
+queryOptions、长会话 maxTurns=100 静默死亡、apiKey 模式 settingSources 不加载 CLAUDE.md）；
+067 用 PreToolUse hook 让 ExitPlanMode 硬拒绝与 AskUserQuestion 传输在所有权限模式下成立；
+068 把 3041 行的 provider.ts 按 codex owner 目录形态拆分、重新论证 workflow
+declaration-extractor 的 worker 执行式启发、删除 provider-base.ts 中无消费者的
+permissionMode 投影。不重开 Plan 062 既定设计。执行顺序 065 → 066 → 067 → 068。
+同日追加 Plan 069（架构方向，经讨论确认）：把 claude-agent state snapshot 降级为
+resume-state + 可丢弃 checkpoint,UI activity feed 改为从 SDK transcript JSONL 与 Cradle
+事件历史重建的 read model（仓内范本：workflow/artifact-stream.ts 的 journal+reducer
+形态）。分两阶段：Phase A 逐字段证明可重放性、不可重放的补 write-once 事件；Phase B
+切换冷读路径、blob 删除 feed 数组（kit/state-snapshot 注册 v1→v2 迁移）。065 的数组 cap
+保留为 checkpoint 上限。
+
 Each executor: read the plan fully before starting, run its drift check, honor its
 STOP conditions, and update your row below when done. Plans are self-contained —
 they do not assume you saw the audit or any other plan.
@@ -154,6 +170,11 @@ Ordered by leverage (security/correctness first, structural refactors last).
 | 062  | Claude native session projection (SDK owns queue; Cradle projects UI Runs) | P0 | XL | 061 (compose) | DONE |
 | 063  | Eliminate Desktop-owned Server sockets with one multiplexed IPC transport | P0 | XL | 038, 040, 054 | TODO (M0 packaged Electron feasibility gate first; coordinate transport files with 061) |
 | 064  | Connect GitHub through the Cradle App and attribute PR actions to the user | P1 | L | current PR Console work reconciled | IN PROGRESS (implementation complete; real GitHub App acceptance pending) |
+| 065  | Make the Claude Agent SDK integration honest (permission modes, dispose, settle-on-cancel teardown, presentation, snapshot bounds) | P0 | L | — | TODO |
+| 066  | Make the long-lived Claude Query the authority for history and live config | P0 | M | 065 | TODO |
+| 067  | Enforce Cradle's hard tool-call denies via PreToolUse hook in every permission mode | P1 | M | 065 | TODO |
+| 068  | Split claude-agent provider.ts into an owner directory + declaration-extractor re-justification | P2 | L | 065, 066, 067 | TODO |
+| 069  | Demote the claude-agent state snapshot to a checkpoint; rebuild the UI activity feed from authoritative history | P2 | XL | 065, 066 (coordinate with 050, 061) | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED (one-line rationale).
 
@@ -258,6 +279,10 @@ splitting until this track is stable.
   server and replaces only the shared GitHub identity boundary; it does not add
   hosted OAuth, webhooks, or bot automation.
 - 041 requires 038 and 040 so server domain boundaries and web projection boundaries converge on one API contract.
+- 066 requires 065: both rewrite the `streamTurn` prologue; 066's excerpts are pre-065 and must be re-located by symbol name after 065 lands.
+- 067 requires 065: it assumes the Query starts in the user's real permission mode and adds mode-independent denies on top.
+- 068 requires 065-067: splitting `provider.ts` first would force the three behavior plans through a moving target.
+- 069 requires 065 and 066 (it restructures the snapshot and streamTurn code they patch, and reuses 065's caps as checkpoint bounds); its Phase B read-path work assumes the event-history authority that Plans 050/061 establish — if those have not landed, execute Phase A only.
 - 042 follows 040 and removes Automation's remaining raw-fetch/auth exception; its authentication bypass can make the entire feature return 401, so execute this P0 first.
 - 043 follows 040 and centralizes Draft state/transport transitions; it is independent of 042 and may run in parallel in an isolated worktree.
 - 044 builds on 024's durable facts and 041's process lifecycle owner; it must not change event schemas or provider protocols.
@@ -337,6 +362,12 @@ A scoped Effect.TS experiment inside a _new, isolated_ subsystem (e.g. a future 
 orchestration layer) would be reasonable; a whole-codebase migration is negative-value.
 
 ## Findings considered and rejected (so they aren't re-audited)
+
+- **Adopt SDK `sessionStore` (alpha) for claudeAi persistence** — deferred from Plan 066; principled long-term fix for claudeAi session replay, but the API is alpha. Re-evaluate when stable.
+- **Live-reconcile `mcpServers`/`skills`/`tools` mid-session via `setMcpServers`/`reloadSkills`/`applyFlagSettings`** — deferred from Plan 066; needs a product policy on which settings may change mid-session. Until then they are creation-time only.
+- **Migrate claude-agent `activeQueries` onto `provider-runtime/host-manager.ts` (refcount/TTL/idle reap)** — deferred from Plan 065; 065 adds deterministic disposal (shutdown + archive), idle reaping is a follow-up that should reuse the host manager.
+- **Keep AskUserQuestion silently auto-answered in bypassPermissions mode** — rejected in favor of Plan 067's deny-with-reason; flagged there as a product call if owners disagree.
+- **Replace the provider state snapshot blob with derived-on-read projections (split resume state from UI activity feed)** — now planned as **Plan 069** (two phases: re-derivability inventory + write-once emission for non-derivable fields, then read-path switch with the blob demoted to a bounded checkpoint). Plan 065's array caps land first and become the checkpoint bounds.
 
 - **Redo Provider Catalog inventory/enrichment/visibility/selection architecture** — rejected as duplicate of Plan 035. Plan 045 only closes the still-open target query seam and cold-cache Conversation Bridge path.
 - **Recreate `apps/web/src/features/tui/tui-runtime-registry.ts` from the review snapshot** — rejected because the file no longer exists and a shallow registry would duplicate current state. Plan 046 specifies a narrow lifetime controller instead.
