@@ -1,3 +1,8 @@
+import {
+  applyUIMessageChunk,
+  createUIMessageStreamSnapshotChunk,
+  createUIMessageStreamState,
+} from '@cradleapp/ai-sdk'
 import type { UIMessageChunk } from 'ai'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -115,6 +120,29 @@ describe('chat streaming handler store boundary', () => {
       sessionId: 'session-1',
       source: 'local',
     })
+  })
+
+  it('restores a snapshot chunk and continues active deltas without failing the run', async () => {
+    const target = {
+      message: { id: 'assistant-recovered', role: 'assistant', parts: [] } satisfies import('ai').UIMessage,
+      state: createUIMessageStreamState(),
+    }
+    applyUIMessageChunk(target, { type: 'text-start', id: 'text-recovered' })
+    applyUIMessageChunk(target, { type: 'text-delta', id: 'text-recovered', delta: 'before ' })
+    const snapshot = createUIMessageStreamSnapshotChunk({ runId: 'run-recovered', cursor: 40, target })
+
+    const handler = new ChatStreamingHandler('session-1', 'assistant-recovered', 0, { mode: 'passive' })
+    handler.start(new AbortController())
+    await handler.consume(createChunkStream([
+      snapshot,
+      { type: 'text-delta', id: 'text-recovered', delta: 'after' },
+      { type: 'text-end', id: 'text-recovered' },
+    ], true))
+
+    expect(chatSelectors.messages('session-1')(useChatStore.getState())).toMatchObject([
+      { id: 'assistant-recovered', parts: [{ type: 'text', text: 'before after', state: 'done' }] },
+    ])
+    expect(useChatStore.getState().errorMap.has('assistant-recovered')).toBe(false)
   })
 
   it('emits settled events for the default main chat store path', () => {

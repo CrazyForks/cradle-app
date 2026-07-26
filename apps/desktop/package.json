@@ -38,6 +38,7 @@
     "@cradle/download-center": "workspace:*",
     "@cradle/ipc": "workspace:*",
     "@cradle/plugin-sdk": "workspace:*",
+    "@cradleapp/ai-sdk": "workspace:*",
     "electron-sparkle-updater": "0.1.0",
     "electron-updater": "^6.8.9",
     "electron-window-state": "^5.0.3",

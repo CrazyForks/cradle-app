@@ -1,3 +1,9 @@
+import type { UIMessageStreamTarget } from '@cradleapp/ai-sdk'
+import {
+  applyUIMessageChunk,
+  createUIMessageStreamSnapshotChunk,
+  createUIMessageStreamState,
+} from '@cradleapp/ai-sdk'
 import type { WebContents } from 'electron'
 
 import { getDesktopServerAuthHeaders } from './server-process'
@@ -149,6 +155,7 @@ interface UpstreamEntry {
   controller: AbortController
   subscribers: Map<string, StreamSubscriber>
   replayBuffer: ReplayBuffer
+  messageStream: UIMessageStreamTarget
   handlePromise: Promise<UpstreamHandle>
   runId: string | null
   telemetrySessionId: string | null
@@ -302,6 +309,10 @@ export class ChatStreamBroker {
       controller,
       subscribers: new Map(),
       replayBuffer: createReplayBuffer(),
+      messageStream: {
+        message: { id: '', role: 'assistant', parts: [] },
+        state: createUIMessageStreamState(),
+      },
       handlePromise: Promise.resolve({
         sessionId: request.sessionId,
         runId: null,
@@ -529,6 +540,10 @@ export class ChatStreamBroker {
   }
 
   private forwardChunk(entry: UpstreamEntry, chunk: unknown): void {
+    applyUIMessageChunk(
+      entry.messageStream,
+      chunk as Parameters<typeof applyUIMessageChunk>[1],
+    )
     bufferReplayChunk(entry.replayBuffer, chunk)
     for (const subscriber of [...entry.subscribers.values()]) {
       this.sendChunkToSubscriber(entry, subscriber, chunk)
@@ -536,6 +551,16 @@ export class ChatStreamBroker {
   }
 
   private replayChunksToSubscriber(entry: UpstreamEntry, subscriber: StreamSubscriber): void {
+    if (subscriber.replayCursor === 0 && entry.replayBuffer.nextCursor > 0) {
+      const cursor = entry.replayBuffer.nextCursor - 1
+      const chunk = createUIMessageStreamSnapshotChunk({
+        runId: entry.runId ?? entry.upstreamRequestId,
+        cursor,
+        target: entry.messageStream,
+      })
+      this.sendChunkToSubscriber(entry, subscriber, chunk, cursor + 1, true)
+      return
+    }
     for (const item of entry.replayBuffer.chunks) {
       if (item.cursor < subscriber.replayCursor) {
         continue

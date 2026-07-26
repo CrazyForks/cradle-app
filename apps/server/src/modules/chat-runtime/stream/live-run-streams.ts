@@ -1,4 +1,5 @@
 import { backendRuns } from '@cradle/db'
+import { createUIMessageStreamSnapshotChunk } from '@cradleapp/ai-sdk'
 import type { UIMessageChunk } from 'ai'
 import { eq } from 'drizzle-orm'
 
@@ -56,11 +57,23 @@ export function openRunEventStream(runId: string): ReadableStream<Uint8Array> {
   const orphanedWhileStreaming = run.status === 'streaming' && !active
   const replay = active?.runChunkLog.replayAfter()
   const replayUnavailable = replay?.kind === 'snapshot-required'
+  const recoveryChunk = active && replayUnavailable
+    ? createUIMessageStreamSnapshotChunk({
+        runId,
+        cursor: active.runChunkLog.readLatestCursor(),
+        target: { message: active.finalMessage, state: active.finalProjection },
+      })
+    : null
+  const replayChunks = replay?.kind === 'ready'
+    ? replay.items.map(item => item.chunk)
+    : []
   return openBufferedChunkStream({
-    replayChunks: orphanedWhileStreaming || replayUnavailable
+    replayChunks: orphanedWhileStreaming
       ? [createRunInterruptedChunk()]
-      : replay?.items.map(item => item.chunk) ?? [],
-    terminal: run.status !== 'streaming' || !active || replayUnavailable,
+      : recoveryChunk
+        ? [recoveryChunk]
+        : replayChunks,
+    terminal: run.status !== 'streaming' || !active,
     coalesceMaxChars: readPositiveIntegerEnv(
       'CRADLE_CHAT_RUN_DELTA_FLUSH_CHARS',
       DEFAULT_RUN_DELTA_FLUSH_CHARS,

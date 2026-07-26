@@ -29,6 +29,7 @@
     "@cradle/download-center": "workspace:*",
     "@cradle/plugin-sdk": "workspace:*",
     "@cradle/streamdown": "workspace:*",
+    "@cradleapp/ai-sdk": "workspace:*",
     "@dnd-kit/abstract": "^0.5.0",
     "@dnd-kit/dom": "^0.5.0",
     "@dnd-kit/helpers": "^0.5.0",

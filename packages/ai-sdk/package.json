@@ -1,0 +1,23 @@
+{
+  "name": "@cradleapp/ai-sdk",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cradle-owned AI SDK stream state and recovery helpers",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "ai": "^6.0.168"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.4"
+  }
+}

@@ -1,5 +1,11 @@
+import type { UIMessageStreamTarget } from '@cradleapp/ai-sdk'
+import {
+  applyUIMessageChunk,
+  createUIMessageStreamState,
+  flushUIMessageStreamState,
+  flushUIMessageStreamToolInputs,
+} from '@cradleapp/ai-sdk'
 import type { UIMessage, UIMessageChunk } from 'ai'
-import { readUIMessageStream } from 'ai'
 
 import type { ProductAnalyticsTaskTimer } from '~/features/product-analytics/client'
 import {
@@ -100,16 +106,37 @@ export class ChatStreamingHandler {
         )
       : undefined
 
-    for await (const message of readUIMessageStream<UIMessage>({
+    const target: UIMessageStreamTarget = {
       message: initialMessage ?? {
         id: this.activeMessageId ?? this.messageId,
         role: 'assistant',
         parts: [],
       },
-      stream: this.trackStreamChanges(stream),
-      terminateOnError: true,
-    })) {
-      this.applyMessageSnapshot(message, this.currentChunkReplay)
+      state: createUIMessageStreamState(),
+    }
+
+    const trackedStream = this.trackStreamChanges(stream)
+    const reader = trackedStream.getReader()
+    try {
+      while (true) {
+        const next = await reader.read()
+        if (next.done) {
+          break
+        }
+        const chunk = next.value
+        if (chunk.type === 'error') {
+          throw new Error(chunk.errorText)
+        }
+        applyUIMessageChunk(target, chunk)
+        flushUIMessageStreamState(target)
+        if (chunk.type === 'tool-input-delta') {
+          await flushUIMessageStreamToolInputs(target)
+        }
+        this.applyMessageSnapshot(structuredClone(target.message), this.currentChunkReplay)
+      }
+    }
+    finally {
+      reader.releaseLock()
     }
     this.stageLatestMessageSnapshots()
     this.flushPendingMessages()

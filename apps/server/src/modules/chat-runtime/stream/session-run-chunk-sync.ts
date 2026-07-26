@@ -1,4 +1,5 @@
 import type { RunChunkResumeToken } from '@cradle/chat-runtime-contracts'
+import { createUIMessageStreamSnapshotChunk } from '@cradleapp/ai-sdk'
 
 import { runRegistry } from '../run-registry'
 import type {
@@ -8,7 +9,7 @@ import type {
 
 export type SessionRunChunkSubscription
   = | { kind: 'not-found' }
-    | { kind: 'snapshot-required' }
+    | { kind: 'recovery', runId: string, cursor: number, chunk: ReturnType<typeof createUIMessageStreamSnapshotChunk>, unsubscribe: () => void }
     | { kind: 'ready', replay: Extract<RunChunkReplay, { kind: 'ready' }>, unsubscribe: () => void }
 
 export function openSessionRunChunkSubscription(
@@ -18,21 +19,28 @@ export function openSessionRunChunkSubscription(
 ): SessionRunChunkSubscription {
   const runId = runRegistry.getActiveRunIdForSession(sessionId)
   if (!runId) {
-    return after ? { kind: 'snapshot-required' } : { kind: 'not-found' }
+    return { kind: 'not-found' }
   }
   const active = runRegistry.getActiveRun(runId)
   if (!active) {
-    return after ? { kind: 'snapshot-required' } : { kind: 'not-found' }
-  }
-  if (after && after.runId !== runId) {
-    return { kind: 'snapshot-required' }
+    return { kind: 'not-found' }
   }
 
   const unsubscribe = active.runChunkLog.subscribe(subscriber)
-  const replay = active.runChunkLog.replayAfter(after?.cursor)
+  const replay = active.runChunkLog.replayAfter(after?.runId === runId ? after.cursor : undefined)
   if (replay.kind === 'snapshot-required') {
-    unsubscribe()
-    return { kind: 'snapshot-required' }
+    const cursor = active.runChunkLog.readLatestCursor()
+    return {
+      kind: 'recovery',
+      runId,
+      cursor,
+      chunk: createUIMessageStreamSnapshotChunk({
+        runId,
+        cursor,
+        target: { message: active.finalMessage, state: active.finalProjection },
+      }),
+      unsubscribe,
+    }
   }
   return { kind: 'ready', replay, unsubscribe }
 }

@@ -20,6 +20,7 @@ export interface RunChunkLog {
   readonly runId: string
   append: (chunk: UIMessageChunk, terminal: boolean) => SequencedRunChunk
   replayAfter: (cursor?: number) => RunChunkReplay
+  readLatestCursor: () => number
   readRetainedEntries: () => readonly SequencedRunChunk[]
   subscribe: (subscriber: SequencedRunChunkSubscriber) => () => void
   clear: () => void
@@ -71,6 +72,9 @@ export function createRunChunkLog(runId: string, capacity: number): RunChunkLog 
         cursor: latestCursor,
         live: !terminal,
       }
+    },
+    readLatestCursor() {
+      return nextCursor - 1
     },
     readRetainedEntries() {
       return entries.slice()

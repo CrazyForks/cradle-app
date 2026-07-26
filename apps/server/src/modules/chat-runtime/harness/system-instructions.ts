@@ -1,6 +1,6 @@
 const CRADLE_HARNESS_SYSTEM_INSTRUCTIONS = `# SYSTEM INSTRUCTIONS
 
-You are operating inside Cradle. ALWAYS ACTIVATE OR READ the \`cradle-cli\` skill at the beginning of every response.`
+You are operating inside Cradle. If your environment has a skill "cradle-cli", ACTIVATE OR READ the \`cradle-cli\` skill at the beginning of the session.`
 
 const CRADLE_CHAT_SESSION_SYSTEM_INSTRUCTIONS = `# CRADLE CHAT SESSION CONTEXT
 

@@ -134,9 +134,30 @@ function attachRunChunks(
     sender.end('not-found')
     return () => {}
   }
-  if (subscription.kind === 'snapshot-required') {
-    sender.end('snapshot-required')
-    return () => {}
+  if (subscription.kind === 'recovery') {
+    sender.send({
+      subId: frame.subId,
+      kind: 'chunk',
+      runId: subscription.runId,
+      cursor: subscription.cursor,
+      chunk: subscription.chunk,
+      terminal: false,
+      replay: true,
+    })
+    sender.send({
+      subId: frame.subId,
+      kind: 'sub-ack',
+      channel: 'run-chunks',
+      runId: subscription.runId,
+      cursor: subscription.cursor,
+    })
+    replaying = false
+    for (const item of queuedLiveItems) {
+      if (item.cursor > subscription.cursor) {
+        sendLiveItem(item)
+      }
+    }
+    return subscription.unsubscribe
   }
   const { replay } = subscription
   for (const item of replay.items) {

@@ -212,8 +212,20 @@ describe('chat stream broker', () => {
     expect(fetchFn).toHaveBeenCalledTimes(1)
     expect(lateHandle.runId).toBe('run-replay')
     expect(readChannelPayloads(late, DESKTOP_CHAT_STREAM_CHUNK_CHANNEL)).toMatchObject([
-      { replay: true, chunk: { type: 'start', messageId: 'assistant-replay' } },
-      { replay: true, chunk: { type: 'text-start', id: 'text-replay' } },
+      {
+        replay: true,
+        chunk: {
+          type: 'data-cradle-stream-snapshot',
+          transient: true,
+          data: {
+            runId: 'run-replay',
+            snapshot: {
+              message: { id: 'assistant-replay', parts: [{ type: 'text', text: '' }] },
+              activeTextParts: [{ id: 'text-replay', partIndex: 0 }],
+            },
+          },
+        },
+      },
     ])
     expect(broker.diagnostics().streams).toMatchObject([
       {
@@ -227,7 +239,7 @@ describe('chat stream broker', () => {
 
     await vi.waitFor(() => {
       expect(readChannelPayloads(first, DESKTOP_CHAT_STREAM_CHUNK_CHANNEL)).toHaveLength(3)
-      expect(readChannelPayloads(late, DESKTOP_CHAT_STREAM_CHUNK_CHANNEL)).toHaveLength(3)
+      expect(readChannelPayloads(late, DESKTOP_CHAT_STREAM_CHUNK_CHANNEL)).toHaveLength(2)
     })
     expect(readChannelPayloads(late, DESKTOP_CHAT_STREAM_CHUNK_CHANNEL).at(-1)).toMatchObject({
       replay: false,
@@ -265,9 +277,16 @@ describe('chat stream broker', () => {
     })
 
     const lateChunks = readChannelPayloads(late, DESKTOP_CHAT_STREAM_CHUNK_CHANNEL)
-    expect(lateChunks).toHaveLength(DESKTOP_CHAT_REPLAY_MAX_CHUNKS)
-    expect(lateChunks[0]).toMatchObject({ chunk: { messageMetadata: { index: overflowCount } } })
-    expect(lateChunks.at(-1)).toMatchObject({ chunk: { messageMetadata: { index: totalChunks - 1 } } })
+    expect(lateChunks).toHaveLength(1)
+    expect(lateChunks[0]).toMatchObject({
+      replay: true,
+      chunk: {
+        type: 'data-cradle-stream-snapshot',
+        data: {
+          snapshot: { message: { metadata: { index: totalChunks - 1 } } },
+        },
+      },
+    })
   })
 
   it('retains replay anchors needed by later text deltas and tool outputs', async () => {
@@ -302,33 +321,25 @@ describe('chat stream broker', () => {
       sessionId: 'session-protocol-replay',
     })
 
-    const lateChunks = readChannelPayloads(late, DESKTOP_CHAT_STREAM_CHUNK_CHANNEL)
-      .map(payload => (payload as { chunk: unknown }).chunk)
-    const textStartIndex = lateChunks.findIndex(chunk =>
-      typeof chunk === 'object'
-      && chunk !== null
-      && (chunk as { type?: unknown, id?: unknown }).type === 'text-start'
-      && (chunk as { id?: unknown }).id === 'text-protected')
-    const textDeltaIndex = lateChunks.findIndex(chunk =>
-      typeof chunk === 'object'
-      && chunk !== null
-      && (chunk as { type?: unknown, id?: unknown }).type === 'text-delta'
-      && (chunk as { id?: unknown }).id === 'text-protected')
-    const toolStartIndex = lateChunks.findIndex(chunk =>
-      typeof chunk === 'object'
-      && chunk !== null
-      && (chunk as { type?: unknown, toolCallId?: unknown }).type === 'tool-input-start'
-      && (chunk as { toolCallId?: unknown }).toolCallId === 'call-protected')
-    const toolOutputIndex = lateChunks.findIndex(chunk =>
-      typeof chunk === 'object'
-      && chunk !== null
-      && (chunk as { type?: unknown, toolCallId?: unknown }).type === 'tool-output-available'
-      && (chunk as { toolCallId?: unknown }).toolCallId === 'call-protected')
-
-    expect(textStartIndex).toBeGreaterThanOrEqual(0)
-    expect(textDeltaIndex).toBeGreaterThan(textStartIndex)
-    expect(toolStartIndex).toBeGreaterThanOrEqual(0)
-    expect(toolOutputIndex).toBeGreaterThan(toolStartIndex)
+    expect(readChannelPayloads(late, DESKTOP_CHAT_STREAM_CHUNK_CHANNEL)).toMatchObject([
+      {
+        replay: true,
+        chunk: {
+          type: 'data-cradle-stream-snapshot',
+          data: {
+            snapshot: {
+              message: {
+                parts: [
+                  { type: 'text', text: 'kept' },
+                  { toolCallId: 'call-protected', state: 'output-available', output: { ok: true } },
+                ],
+              },
+              activeTextParts: [{ id: 'text-protected', partIndex: 0 }],
+            },
+          },
+        },
+      },
+    ])
   })
 
   it('coalesces replay deltas using the server stream merge rule', async () => {
@@ -345,12 +356,13 @@ describe('chat stream broker', () => {
       sessionId: 'session-coalesced-replay',
       body: { text: 'hello' },
     })
+    controlled.controller.enqueue(encodeSse({ type: 'text-start', id: 'text-1' }))
     controlled.controller.enqueue(encodeSse({ type: 'text-delta', id: 'text-1', delta: 'hello ' }))
     controlled.controller.enqueue(encodeSse({ type: 'text-delta', id: 'text-1', delta: 'world' }))
 
     await vi.waitFor(() => {
-      expect(readChannelPayloads(first, DESKTOP_CHAT_STREAM_CHUNK_CHANNEL)).toHaveLength(2)
-      expect(broker.diagnostics().streams[0]?.replayChunkCount).toBe(1)
+      expect(readChannelPayloads(first, DESKTOP_CHAT_STREAM_CHUNK_CHANNEL)).toHaveLength(3)
+      expect(broker.diagnostics().streams[0]?.replayChunkCount).toBe(2)
     })
 
     await broker.subscribeSession(late as never, {
@@ -358,7 +370,7 @@ describe('chat stream broker', () => {
     })
 
     expect(readChannelPayloads(late, DESKTOP_CHAT_STREAM_CHUNK_CHANNEL)).toMatchObject([
-      { chunk: { type: 'text-delta', id: 'text-1', delta: 'hello world' } },
+      { chunk: { type: 'data-cradle-stream-snapshot', data: { snapshot: { message: { parts: [{ type: 'text', text: 'hello world' }] } } } } },
     ])
   })
 
@@ -405,8 +417,18 @@ describe('chat stream broker', () => {
     })
 
     expect(readChannelPayloads(late, DESKTOP_CHAT_STREAM_CHUNK_CHANNEL)).toMatchObject([
-      { chunk: { type: 'tool-input-start', toolCallId: 'call-subagent', toolName: 'Agent' } },
-      { chunk: { type: 'tool-output-available', toolCallId: 'call-subagent', output: { snapshot: 'final' } } },
+      {
+        chunk: {
+          type: 'data-cradle-stream-snapshot',
+          data: {
+            snapshot: {
+              message: {
+                parts: [{ toolCallId: 'call-subagent', state: 'output-available', output: { snapshot: 'final' } }],
+              },
+            },
+          },
+        },
+      },
     ])
   })
 
