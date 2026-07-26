@@ -353,7 +353,10 @@ In `apps/server/src/modules/chat-runtime-providers/claude-agent/README.md`:
 ## Test plan
 
 Model new tests after the existing patterns in `provider.test.ts` (fake
-`query` factory capturing `Options` and pushed content):
+`query` factory capturing `Options` and pushed content). The history-replay
+claim (item 1) is wire-observable and gets an end-to-end twin in Plan 070's
+simulator integration suite — the unit test here still pins the provider-side
+scope decision:
 
 1. **History scope follows the live Query (the O(N²) regression)**: with
    `authMode: 'claudeAi'`, run turn 1 (creates the Query — assert pushed user

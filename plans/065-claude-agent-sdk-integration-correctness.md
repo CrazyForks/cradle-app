@@ -491,6 +491,8 @@ Run, in order:
 
 Extend existing colocated suites (model new tests after the existing style in `provider.test.ts` — it already builds fake SDK `query` factories and asserts on captured `Options`):
 
+> Note: items whose claim crosses the SDK/CLI boundary (history content on the wire, permission gating round-trips, cancel/process lifecycle) are exactly the assertions that mocks make self-referential. Plan 070 ports those to the shared model-api-simulator integration harness; write them here as unit tests now (they still pin provider-side logic), and 070 will lift the wire-level versions.
+
 1. **`input-projector` / `provider.test.ts`** — *query starts in user mode*: with `runtimeSettings.permissionMode = 'plan'` (and `'default'`), assert the `Options` passed to `query()` carry that mode and that no `setPermissionMode` call is issued at startup. Regression name should reference the bypass-window bug.
 2. **`provider.test.ts`** — *mode cache not poisoned*: make `setPermissionMode` reject once; assert a subsequent `updateActiveQueryPermissionMode` with the same target mode retries the SDK call (cache was not pre-written).
 3. **`runtime-settings.test.ts`** (exists) — fallback for unknown mode is now `'default'`, not `'bypassPermissions'`.

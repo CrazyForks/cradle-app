@@ -94,7 +94,12 @@ resume-state + 可丢弃 checkpoint,UI activity feed 改为从 SDK transcript JS
 事件历史重建的 read model（仓内范本：workflow/artifact-stream.ts 的 journal+reducer
 形态）。分两阶段：Phase A 逐字段证明可重放性、不可重放的补 write-once 事件；Phase B
 切换冷读路径、blob 删除 feed 数组（kit/state-snapshot 注册 v1→v2 迁移）。065 的数组 cap
-保留为 checkpoint 上限。
+保留为 checkpoint 上限。同日追加 Plan 070（测试方向，经讨论确认）：兑现
+advisor-plans/001 留下的"provider 接入 simulator"后续——vitest globalSetup 全局单实例
+@cradle/model-api-simulator,claude-agent 集成测试走真实 CLI 子进程 + 真实 HTTP 线路,
+把 mock 掉 SDK 后自指的行为断言（历史重放、权限门禁、cancel 进程生命周期）迁移到
+request ledger 断言;Options 构造类断言保留 unit test。Step 1 为可行性门(CLI 离线
+带不起来就 STOP,维持 unit 现状)。
 
 Each executor: read the plan fully before starting, run its drift check, honor its
 STOP conditions, and update your row below when done. Plans are self-contained —
@@ -175,6 +180,7 @@ Ordered by leverage (security/correctness first, structural refactors last).
 | 067  | Enforce Cradle's hard tool-call denies via PreToolUse hook in every permission mode | P1 | M | 065 | TODO |
 | 068  | Split claude-agent provider.ts into an owner directory + declaration-extractor re-justification | P2 | L | 065, 066, 067 | TODO |
 | 069  | Demote the claude-agent state snapshot to a checkpoint; rebuild the UI activity feed from authoritative history | P2 | XL | 065, 066 (coordinate with 050, 061) | TODO |
+| 070  | Test the Claude Agent provider against the real wire via a shared model-api-simulator harness | P1 | L | 065, 066 | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED (one-line rationale).
 
@@ -283,6 +289,7 @@ splitting until this track is stable.
 - 067 requires 065: it assumes the Query starts in the user's real permission mode and adds mode-independent denies on top.
 - 068 requires 065-067: splitting `provider.ts` first would force the three behavior plans through a moving target.
 - 069 requires 065 and 066 (it restructures the snapshot and streamTurn code they patch, and reuses 065's caps as checkpoint bounds); its Phase B read-path work assumes the event-history authority that Plans 050/061 establish — if those have not landed, execute Phase A only.
+- 070 requires 065 and 066 (its integration specs assert the fixed behavior; landing them earlier would pin the bugs as green). Its Step 1 is a feasibility gate — if the bundled CLI cannot run against the simulator offline, the plan stops at "keep unit tests" and reports.
 - 042 follows 040 and removes Automation's remaining raw-fetch/auth exception; its authentication bypass can make the entire feature return 401, so execute this P0 first.
 - 043 follows 040 and centralizes Draft state/transport transitions; it is independent of 042 and may run in parallel in an isolated worktree.
 - 044 builds on 024's durable facts and 041's process lifecycle owner; it must not change event schemas or provider protocols.
