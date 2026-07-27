@@ -5,6 +5,7 @@ import type { ServerBootstrapReporter } from './bootstrap-lifecycle'
 import type { ServerConfigValues } from './config/server-config'
 import { ServerConfig } from './config/server-config'
 import { DatabaseConfig } from './database/database.config'
+import type { DatabaseCompactionResult } from './database/database.provider'
 import { DbProvider } from './database/database.provider'
 import { MigrationRunner } from './database/migration-runner'
 import type { Logger } from './logging/logger'
@@ -108,6 +109,10 @@ export function db(): BetterSQLite3Database<typeof dbSchema> {
 /** Initialize the database before other bootstrap services acquire it lazily. */
 export function initializeDatabase(bootstrapReporter?: ServerBootstrapReporter): void {
   ensureDbProvider(bootstrapReporter)
+}
+
+export function compactDatabase(): DatabaseCompactionResult {
+  return ensureDbProvider().compactDatabase()
 }
 
 /** Gracefully close the database and clear all cached singletons. */

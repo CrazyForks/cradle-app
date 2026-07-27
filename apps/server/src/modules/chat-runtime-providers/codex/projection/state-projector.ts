@@ -130,6 +130,25 @@ export function readRestorableCodexNativeHistory(raw: string | null | undefined)
   }
 }
 
+export function hasCompleteCurrentCodexNativeHistory(
+  raw: string | null | undefined,
+  threadId: string,
+): boolean {
+  try {
+    const snapshot = readWorkspaceProviderStateSnapshot(raw) as CodexProviderStateSnapshot
+    const nativeHistory = snapshot.codex?.nativeHistory
+    return nativeHistory?.threadId === threadId
+      && nativeHistory.itemsView === 'full'
+      && nativeHistory.complete
+      && Array.isArray(nativeHistory.turns)
+      && nativeHistory.nextCursor === null
+      && nativeHistory.error === null
+  }
+  catch {
+    return false
+  }
+}
+
 export function projectCodexProviderStateSnapshot(
   runtimeSession: RuntimeSession,
   notification: CodexAppServerMessage,

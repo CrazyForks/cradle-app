@@ -121,6 +121,7 @@ import { projectCodexEstimatedContextUsage } from './projection/context-usage-pr
 import {
   clearCodexGoalSnapshot,
   hasActiveGoal,
+  hasCompleteCurrentCodexNativeHistory,
   pauseCodexGoalSnapshot,
   projectCodexGoalSnapshotFromGoal,
   projectCodexProviderStateSnapshot,
@@ -1251,7 +1252,11 @@ export class CodexProvider implements ChatRuntime {
       await injectCradleTranscriptHistory(client, threadId, input.transcript?.history ?? input.history)
       return
     }
-    if (!context.isLiveSideFork) {
+    const hasCurrentHistory = hasCompleteCurrentCodexNativeHistory(
+      input.runtimeSession.providerStateSnapshot,
+      threadId,
+    )
+    if (!context.isLiveSideFork && !hasCurrentHistory) {
       await hydrateCodexNativeHistory(client, input.runtimeSession, threadId)
     }
   }

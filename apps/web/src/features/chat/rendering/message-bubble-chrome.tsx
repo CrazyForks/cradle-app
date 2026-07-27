@@ -1,9 +1,9 @@
-import { TargetLine as TargetIcon } from '@mingcute/react'
+import { RightSmallLine as ChevronRightIcon, TargetLine as TargetIcon } from '@mingcute/react'
+import { m } from 'motion/react'
 import type { ReactNode } from 'react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { Button } from '~/components/ui/button'
 import { cn } from '~/lib/cn'
 
 export function SteerMessageLabel() {
@@ -51,30 +51,61 @@ export function GoalMessageLabel() {
   )
 }
 
+const FOLD_CHEVRON_SPRING = { stiffness: 600, damping: 40 } as const
+
+/**
+ * Collapsed execution-phase group. Reads as one faded feed-style row —
+ * "Worked for 14s" with an inline chevron — matching the activity feed rows
+ * instead of a standalone button.
+ */
 export function ExecutionPhaseFold({
   children,
   defaultOpen = false,
+  durationMs,
 }: {
   children: ReactNode
   defaultOpen?: boolean
+  durationMs?: number | null
 }) {
   const [expanded, setExpanded] = useState(defaultOpen)
+  const workedLabel = durationMs != null && durationMs >= 1000
+    ? `for ${Math.round(durationMs / 1000)}s`
+    : null
 
   return (
     <div className="my-1">
-      <Button
+      <button
         type="button"
-        variant="ghost"
-        size="xs"
         onClick={() => setExpanded(v => !v)}
-        className="h-6 px-1.5 text-[11px] text-muted-foreground/60 hover:text-muted-foreground"
+        aria-expanded={expanded}
+        className={cn(
+          'flex w-full min-w-0 items-baseline text-left',
+          'text-sm leading-relaxed',
+          'cursor-default transition-opacity duration-[var(--duration-quick)] hover:opacity-80',
+        )}
       >
-        {expanded ? 'Hide execution details' : 'Show execution details'}
-      </Button>
+        <span className="text-[var(--text-secondary)]">Worked</span>
+        {workedLabel && (
+          <span className="ml-1 min-w-0 text-[var(--text-tertiary)]">{workedLabel}</span>
+        )}
+        <m.span
+          className="ml-1 inline-flex shrink-0 items-center"
+          initial={false}
+          animate={{ rotate: expanded ? 90 : 0 }}
+          transition={FOLD_CHEVRON_SPRING}
+        >
+          <ChevronRightIcon className="size-3 !text-[var(--text-dim)]" aria-hidden />
+        </m.span>
+      </button>
       {expanded && (
-        <div className="overflow-hidden -mx-3 px-3">
-          <div className="mt-1 space-y-1">{children}</div>
-        </div>
+        <m.div
+          className="flex flex-col gap-0.5"
+          initial={{ opacity: 0, y: -2 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={FOLD_CHEVRON_SPRING}
+        >
+          {children}
+        </m.div>
       )}
     </div>
   )

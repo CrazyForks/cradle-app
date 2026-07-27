@@ -109,6 +109,10 @@ export class RunRegistry {
     return Array.from(this.activeRuns.keys())
   }
 
+  hasActiveOrPendingRuns(): boolean {
+    return this.activeRuns.size > 0 || this.pendingRunSessions.size > 0
+  }
+
   /**
    * Clear all in-flight run and maintenance state (abortAllRuns / shutdown).
    */

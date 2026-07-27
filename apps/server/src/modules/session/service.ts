@@ -11,6 +11,7 @@ import {
   sessionEvents,
   sessionGroups,
   sessions,
+  turnCheckpoints,
   usageLogs,
 } from '@cradle/db'
 import { and, desc, eq, inArray, isNotNull, isNull, max, sql } from 'drizzle-orm'
@@ -1164,9 +1165,11 @@ export async function updateTitle(input: { id: string, title: string }): Promise
 type CleanupHandler = (sessionId: string) => void
 type ArchiveHandler = (sessionId: string) => void
 type ArchivingHandler = (sessionId: string) => void | Promise<void>
+type DeletingHandler = (sessionId: string) => void | Promise<void>
 const cleanupHandlers: CleanupHandler[] = []
 const archiveHandlers: ArchiveHandler[] = []
 const archivingHandlers: ArchivingHandler[] = []
+let deletingHandler: DeletingHandler | null = null
 
 export function onSessionCleanup(handler: CleanupHandler): void {
   cleanupHandlers.push(handler)
@@ -1178,6 +1181,10 @@ export function onSessionArchived(handler: ArchiveHandler): void {
 
 export function onSessionArchiving(handler: ArchivingHandler): void {
   archivingHandlers.push(handler)
+}
+
+export function registerSessionDeletingHandler(handler: DeletingHandler): void {
+  deletingHandler = handler
 }
 
 async function notifySessionArchiving(id: string): Promise<void> {
@@ -1212,6 +1219,22 @@ export async function remove(id: string): Promise<void> {
   if (isRemoteProjectedSession(id)) {
     await removeRemoteProjectedSession(id)
   }
+  const checkpoint = db()
+    .select({ id: turnCheckpoints.id })
+    .from(turnCheckpoints)
+    .where(eq(turnCheckpoints.sessionId, id))
+    .get()
+  if (checkpoint) {
+    if (!deletingHandler) {
+      throw new AppError({
+        code: 'session_checkpoint_cleanup_required',
+        status: 409,
+        message: 'Turn checkpoint cleanup is not registered for session deletion.',
+        details: { sessionId: id },
+      })
+    }
+    await deletingHandler(id)
+  }
   cleanupSessionResources(id)
   db().transaction((tx) => {
     tx.delete(runStreamCheckpoints).where(eq(runStreamCheckpoints.sessionId, id)).run()
@@ -1223,6 +1246,22 @@ export async function remove(id: string): Promise<void> {
 type SessionDeleteDb = Pick<ReturnType<typeof db>, 'select' | 'delete'>
 
 function deleteSessionIdsInDb(ids: string[], d: SessionDeleteDb): void {
+  const checkpoint = ids.length === 0
+    ? undefined
+    : d
+        .select({ sessionId: turnCheckpoints.sessionId })
+        .from(turnCheckpoints)
+        .where(inArray(turnCheckpoints.sessionId, ids))
+        .get()
+  if (checkpoint) {
+    throw new AppError({
+      code: 'session_checkpoint_cleanup_required',
+      status: 409,
+      message: 'Turn checkpoint refs must be cleaned before deleting this session.',
+      details: { sessionId: checkpoint.sessionId },
+    })
+  }
+
   for (const id of ids) {
     cleanupSessionResources(id)
   }
@@ -1343,7 +1382,7 @@ export function exportMarkdown(sessionId: string): string {
     .all()
 
   const binding = d
-    .select()
+    .select({ requestedModelId: backendSessionBindings.requestedModelId })
     .from(backendSessionBindings)
     .where(
       and(
@@ -1404,7 +1443,7 @@ export function exportArchive(sessionId: string): { archive: SessionArchive, fil
   }
 
   const binding = d
-    .select()
+    .select({ requestedModelId: backendSessionBindings.requestedModelId })
     .from(backendSessionBindings)
     .where(
       and(

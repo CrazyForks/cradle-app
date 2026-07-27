@@ -15,9 +15,13 @@ export const turnCheckpoints = sqliteTable('turn_checkpoints', {
   workspacePath: text('workspace_path').notNull(),
   startRef: text('start_ref').notNull(),
   endRef: text('end_ref'),
-  status: text('status', { enum: ['capturing', 'completed', 'failed'] })
+  status: text('status', { enum: ['capturing', 'completed', 'failed', 'cleanup_pending'] })
     .notNull()
     .default('capturing'),
+  cleanupReason: text('cleanup_reason', {
+    enum: ['terminal-run', 'session-delete', 'historical-rewind'],
+  }),
+  cleanupClaimedAt: int('cleanup_claimed_at'),
   changedFiles: int('changed_files').notNull().default(0),
   additions: int('additions').notNull().default(0),
   deletions: int('deletions').notNull().default(0),

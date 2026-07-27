@@ -344,6 +344,13 @@
       "when": 1784904863001,
       "tag": "0048_green_barracuda",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "6",
+      "when": 1785122771576,
+      "tag": "0049_pretty_nextwave",
+      "breakpoints": true
     }
   ]
 }

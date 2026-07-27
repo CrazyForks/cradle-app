@@ -9,7 +9,6 @@ import { and, desc, eq, isNotNull, or, sql } from 'drizzle-orm'
 import { AppError } from '../../errors/app-error'
 import { parseJsonObjectOrEmpty } from '../../helpers/json-record'
 import { db } from '../../infra'
-import * as BackgroundActivity from '../background-activity/service'
 import { runGitCommand } from '../git/git-command'
 import {
   addGitWorktree,
@@ -26,6 +25,7 @@ import {
   resolveRemoteDefaultBaseRef,
   stashAndPopAcrossCheckouts,
 } from '../git/worktree-ops'
+import * as Maintenance from '../maintenance/service'
 import * as Workspace from '../workspace/service'
 import { ensureWorktreeCheckoutParentDir, resolveWorktreeCheckoutPath } from './worktree-paths'
 import type { WorktreeHealth } from './worktree-reconcile'
@@ -41,7 +41,15 @@ import {
 } from './worktree-setup-trust'
 
 const BRANCH_PREFIX = 'cradle/wt/'
+const STORAGE_MEASUREMENT_CHECK_INTERVAL_MS = 15 * 60 * 1000
+const STORAGE_MEASUREMENT_STALE_SECONDS = 6 * 60 * 60
+const MAX_AUTOMATIC_SERVER_CPU_PERCENT = 5
 const execFileAsync = promisify(execFile)
+
+interface StorageMeasurementActivityDependencies {
+  hasActiveOrPendingRuns: () => boolean
+  readServerCpuPercent: () => number | null
+}
 
 export type WorkBaseStrategy = 'source-head' | 'remote-default'
 
@@ -271,19 +279,47 @@ async function measureWorktreeSizeBytes(path: string): Promise<number> {
   return kibibytes * 1024
 }
 
-export function registerStorageMeasurementActivity(): void {
-  BackgroundActivity.register({
+export function registerStorageMeasurementActivity(
+  dependencies: StorageMeasurementActivityDependencies,
+): void {
+  Maintenance.registerTask({
     ownerNamespace: 'worktree',
     key: 'measure-storage',
     title: 'Measure worktree storage',
     priority: 'low',
-    trigger: 'explicit refresh',
+    intervalMs: STORAGE_MEASUREMENT_CHECK_INTERVAL_MS,
+    runOnStart: false,
     manuallyRunnable: true,
-    async run(reporter) {
-      const records = db().select().from(worktrees).where(eq(worktrees.status, 'active')).all()
+    async run(context): Promise<Maintenance.MaintenanceResult> {
+      if (context.source === 'automatic' && dependencies.hasActiveOrPendingRuns()) {
+        return { deferred: true, reason: 'chat_runs_active', measured: 0 }
+      }
+
+      const cpuPercent = dependencies.readServerCpuPercent()
+      if (context.source === 'automatic') {
+        if (cpuPercent === null) {
+          return { deferred: true, reason: 'cpu_sample_unavailable', measured: 0 }
+        }
+        if (cpuPercent > MAX_AUTOMATIC_SERVER_CPU_PERCENT) {
+          return {
+            deferred: true,
+            reason: 'server_cpu_busy',
+            cpuPercent,
+            thresholdPercent: MAX_AUTOMATIC_SERVER_CPU_PERCENT,
+            measured: 0,
+          }
+        }
+      }
+
+      const activeRecords = db().select().from(worktrees).where(eq(worktrees.status, 'active')).all()
+      const staleBefore = Math.floor(context.now / 1000) - STORAGE_MEASUREMENT_STALE_SECONDS
+      const records = context.source === 'manual'
+        ? activeRecords
+        : activeRecords.filter(record => record.sizeMeasuredAt === null || record.sizeMeasuredAt <= staleBefore)
+      let failed = 0
       for (let index = 0; index < records.length; index += 1) {
         const record = records[index]!
-        reporter.report({ completed: index, total: records.length, worktree: record.name })
+        context.report({ completed: index, total: records.length, worktree: record.name })
         try {
           const sizeBytes = await measureWorktreeSizeBytes(record.path)
           db().update(worktrees).set({
@@ -293,12 +329,18 @@ export function registerStorageMeasurementActivity(): void {
           }).where(eq(worktrees.id, record.id)).run()
         }
         catch (error) {
+          failed += 1
           db().update(worktrees).set({
             sizeMeasurementError: error instanceof Error ? error.message : String(error),
           }).where(eq(worktrees.id, record.id)).run()
         }
       }
-      reporter.report({ completed: records.length, total: records.length })
+      return {
+        measured: records.length - failed,
+        failed,
+        skippedFresh: activeRecords.length - records.length,
+        cpuPercent,
+      }
     },
   })
 }

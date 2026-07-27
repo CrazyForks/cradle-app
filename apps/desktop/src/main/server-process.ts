@@ -8,6 +8,7 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs'
 import { homedir } from 'node:os'
@@ -53,6 +54,8 @@ const KEYCHAIN_BACKUP_SUFFIX = '.keychain-backup'
 const CLI_SERVER_LOCATOR_FILE = 'cli/server.json'
 const NETWORK_PREFERENCES_FILE = 'preferences/network.json'
 const SERVER_EXIT_DIAGNOSTICS_FILE = 'server-process-exits.ndjson'
+export const SERVER_EXIT_DIAGNOSTICS_MAX_BYTES = 8 * 1024 * 1024
+export const SERVER_EXIT_DIAGNOSTICS_GENERATIONS = 3
 const DEV_SERVER_ENTRY_PATTERN = '/apps/server/src/index.ts'
 const PACKAGED_SERVER_ENTRY_PATTERN = '/server/dist/main.js'
 const DESKTOP_SERVER_OBSERVABILITY_ENV_KEYS = [
@@ -465,6 +468,7 @@ function writeServerExitDiagnostic(input: {
   )
   try {
     mkdirSync(dirname(diagnosticsPath), { recursive: true })
+    rotateServerExitDiagnostics(diagnosticsPath)
     appendFileSync(
       diagnosticsPath,
       `${JSON.stringify({
@@ -488,6 +492,30 @@ function writeServerExitDiagnostic(input: {
     console.error('[desktop] Failed to write server exit diagnostics:', err)
     return null
   }
+}
+
+export function rotateServerExitDiagnostics(
+  diagnosticsPath: string,
+  maxBytes = SERVER_EXIT_DIAGNOSTICS_MAX_BYTES,
+  generations = SERVER_EXIT_DIAGNOSTICS_GENERATIONS,
+): boolean {
+  if (
+    generations < 1
+    || !existsSync(diagnosticsPath)
+    || statSync(diagnosticsPath).size < maxBytes
+  ) {
+    return false
+  }
+
+  rmSync(`${diagnosticsPath}.${generations}`, { force: true })
+  for (let generation = generations - 1; generation >= 1; generation -= 1) {
+    const source = `${diagnosticsPath}.${generation}`
+    if (existsSync(source)) {
+      renameSync(source, `${diagnosticsPath}.${generation + 1}`)
+    }
+  }
+  renameSync(diagnosticsPath, `${diagnosticsPath}.1`)
+  return true
 }
 
 function readChildSpawnCommand(child: ChildProcess): string[] {

@@ -46,4 +46,14 @@ describe('run registry session maintenance', () => {
 
     expect(registry.hasSessionMaintenance('session-1')).toBe(false)
   })
+
+  it('reports active and pending work that blocks database compaction', () => {
+    const registry = new RunRegistry()
+
+    expect(registry.hasActiveOrPendingRuns()).toBe(false)
+    registry.setPendingRun('session-1', { cancelled: false })
+    expect(registry.hasActiveOrPendingRuns()).toBe(true)
+    registry.deletePendingRun('session-1')
+    expect(registry.hasActiveOrPendingRuns()).toBe(false)
+  })
 })

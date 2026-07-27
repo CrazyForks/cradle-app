@@ -3,7 +3,16 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { recallFileTouches, recallToolEvents, sessions, workspaces } from '@cradle/db'
+import {
+  backendRuns,
+  recallFileTouches,
+  recallMessages,
+  recallRuns,
+  recallToolEvents,
+  sessions,
+  workspaces,
+} from '@cradle/db'
+import { eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { insertMessageFixtures } from '../../../tests/helpers/message-fixture'
@@ -19,7 +28,7 @@ import {
 } from './attune-service'
 import { executeRecallQuery } from './evaluator'
 import { fileHistory, search } from './query-service'
-import { projectRecallMessage } from './service'
+import { projectRecallMessage, reconcileRecallProjection } from './service'
 
 const dataDirs: string[] = []
 const workspaceRoots: string[] = []
@@ -41,6 +50,60 @@ function tempDirectory(prefix: string, target: string[]): string {
 }
 
 describe('recall query', () => {
+  it('reconciles only projectable missing messages and becomes a no-op', async () => {
+    process.env.CRADLE_DATA_DIR = tempDirectory('cradle-recall-reconcile-', dataDirs)
+    await createServerApp()
+    const d = db()
+    const workspaceId = randomUUID()
+    const sessionId = randomUUID()
+    const messageId = randomUUID()
+    const now = Math.floor(Date.now() / 1000)
+
+    d.insert(workspaces).values(workspaceFixture({
+      id: workspaceId,
+      name: 'Recall Reconciliation',
+      path: tempDirectory('cradle-recall-reconcile-workspace-', workspaceRoots),
+    })).run()
+    d.insert(sessions).values({ id: sessionId, workspaceId, title: 'Reconcile' }).run()
+    insertMessageFixtures(d, [{
+      id: messageId,
+      sessionId,
+      role: 'assistant',
+      status: 'complete',
+      content: 'Project this evidence once.',
+      messageJson: JSON.stringify({
+        id: messageId,
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'Project this evidence once.' }],
+      }),
+      createdAt: now,
+      updatedAt: now,
+    }])
+    d.insert(backendRuns).values({
+      id: 'run-reconcile',
+      chatSessionId: sessionId,
+      origin: 'user',
+      status: 'complete',
+      startedAt: now,
+      finishedAt: now,
+    }).run()
+
+    expect(reconcileRecallProjection()).toMatchObject({
+      projectedMessages: 1,
+      projectedRuns: 1,
+    })
+    expect(d.select().from(recallMessages).where(eq(recallMessages.messageId, messageId)).get())
+      .toEqual(expect.objectContaining({ excerpt: 'Project this evidence once.' }))
+    expect(d.select().from(recallRuns).where(eq(recallRuns.runId, 'run-reconcile')).get())
+      .toEqual(expect.objectContaining({ status: 'complete' }))
+    expect(reconcileRecallProjection()).toEqual({
+      projectedMessages: 0,
+      projectedRuns: 0,
+      projectedToolEvents: 0,
+      prunedToolEvents: 0,
+    })
+  })
+
   it('projects evidence and executes workspace-scoped CodeAct helpers', async () => {
     process.env.CRADLE_DATA_DIR = tempDirectory('cradle-recall-data-', dataDirs)
     const app = await createServerApp()

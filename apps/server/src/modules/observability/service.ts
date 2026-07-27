@@ -1,7 +1,7 @@
 import type { BackendRunSnapshot, BackendRunSnapshotEvent, NewObservabilityEventRow, ObservabilityEventRow, ObservabilityIncidentRow } from '@cradle/db'
 import { backendRunSnapshotEvents, backendRunSnapshots, observabilityEvents, observabilityIncidents } from '@cradle/db'
 import type { SQL } from 'drizzle-orm'
-import { and, desc, eq, gte } from 'drizzle-orm'
+import { and, desc, eq, gte, lte } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { db } from '../../infra'
@@ -178,57 +178,39 @@ export async function flushEvents(): Promise<void> {
 }
 
 export function getEvents(filter: ObservabilityEventFilter = {}): ObservabilityEvent[] {
-  const rows = db().select().from(observabilityEvents).orderBy(desc(observabilityEvents.recordedAt)).all()
+  const conditions: SQL[] = []
+  if (filter.chatSessionId) { conditions.push(eq(observabilityEvents.chatSessionId, filter.chatSessionId)) }
+  if (filter.runId) { conditions.push(eq(observabilityEvents.runId, filter.runId)) }
+  if (filter.code) { conditions.push(eq(observabilityEvents.code, filter.code)) }
+  if (filter.severity) { conditions.push(eq(observabilityEvents.severity, filter.severity)) }
+  if (filter.since !== undefined) { conditions.push(gte(observabilityEvents.recordedAt, filter.since)) }
+  if (filter.until !== undefined) { conditions.push(lte(observabilityEvents.recordedAt, filter.until)) }
 
-  return rows
-    .filter((row) => {
-      if (filter.chatSessionId && row.chatSessionId !== filter.chatSessionId) {
-        return false
-      }
-      if (filter.runId && row.runId !== filter.runId) {
-        return false
-      }
-      if (filter.code && row.code !== filter.code) {
-        return false
-      }
-      if (filter.severity && row.severity !== filter.severity) {
-        return false
-      }
-      if (filter.since !== undefined && row.recordedAt < filter.since) {
-        return false
-      }
-      if (filter.until !== undefined && row.recordedAt > filter.until) {
-        return false
-      }
-      return true
-    })
-    .slice(0, filter.limit ?? 2000)
+  return db()
+    .select()
+    .from(observabilityEvents)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(observabilityEvents.recordedAt))
+    .limit(filter.limit ?? 2000)
+    .all()
     .map(toObservabilityEvent)
 }
 
 export function getIncidents(filter: ObservabilityIncidentFilter = {}): ObservabilityIncident[] {
-  const rows = db().select().from(observabilityIncidents).orderBy(desc(observabilityIncidents.lastRecordedAt)).all()
+  const conditions: SQL[] = []
+  if (filter.dedupeKey) { conditions.push(eq(observabilityIncidents.dedupeKey, filter.dedupeKey)) }
+  if (filter.code) { conditions.push(eq(observabilityIncidents.code, filter.code)) }
+  if (filter.status) { conditions.push(eq(observabilityIncidents.status, filter.status)) }
+  if (filter.chatSessionId) { conditions.push(eq(observabilityIncidents.chatSessionId, filter.chatSessionId)) }
+  if (filter.runId) { conditions.push(eq(observabilityIncidents.runId, filter.runId)) }
 
-  return rows
-    .filter((row) => {
-      if (filter.dedupeKey && row.dedupeKey !== filter.dedupeKey) {
-        return false
-      }
-      if (filter.code && row.code !== filter.code) {
-        return false
-      }
-      if (filter.status && row.status !== filter.status) {
-        return false
-      }
-      if (filter.chatSessionId && row.chatSessionId !== filter.chatSessionId) {
-        return false
-      }
-      if (filter.runId && row.runId !== filter.runId) {
-        return false
-      }
-      return true
-    })
-    .slice(0, filter.limit ?? 2000)
+  return db()
+    .select()
+    .from(observabilityIncidents)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(observabilityIncidents.lastRecordedAt))
+    .limit(filter.limit ?? 2000)
+    .all()
     .map(toObservabilityIncident)
 }
 

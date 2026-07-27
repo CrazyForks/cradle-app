@@ -9,8 +9,10 @@ import { loadServerAuthConfig } from './config/server-config'
 import { createAuthPlugin } from './http/auth'
 import { createOpenApiPlugin, registerOpenApiAlias } from './http/openapi'
 import { createRequestIdPlugin } from './http/request-id'
-import { getServerConfig, initializeDatabase, shutdownInfra } from './infra'
+import { compactDatabase, getServerConfig, initializeDatabase, shutdownInfra } from './infra'
 import { setGitHubAuthProvider } from './lib/github/auth-provider'
+import * as GitHubCache from './lib/github-cache'
+import { rotateServerLog } from './logging/logger'
 import { createAcpModule } from './modules/acp'
 import { agentIdentity } from './modules/agent-identity'
 import { agentInteractionRuntime } from './modules/agent-interaction-runtime'
@@ -23,11 +25,13 @@ import { backgroundJob } from './modules/background-job'
 import * as BackgroundJobPoller from './modules/background-job/poller'
 import { chatRuntime } from './modules/chat-runtime'
 import { getRuntimeRegistry } from './modules/chat-runtime/chat-runtime-provider-registry'
+import * as ComposerDrafts from './modules/chat-runtime/composer-drafts'
 import {
   chatRuntimeEventRoutes,
   chatRuntimeGlobalEventRoutes,
 } from './modules/chat-runtime/http/events.routes'
 import { linkedChatSessionProxyPlugin } from './modules/chat-runtime/http/linked-session-proxy'
+import { runRegistry } from './modules/chat-runtime/run-registry'
 import { registerTurnCheckpointHooks } from './modules/chat-runtime/turn-checkpoint-hooks'
 import { ClaudeUsageReconciliationScheduler } from './modules/chat-runtime-providers/claude-agent/usage-reconciliation-scheduler'
 import { createOpencodeManagedResourceAdapter } from './modules/chat-runtime-providers/opencode/managed-resource-adapter'
@@ -48,6 +52,7 @@ import { git } from './modules/git'
 import { githubAuth } from './modules/github-auth'
 import * as GitHubAuth from './modules/github-auth/service'
 import { health } from './modules/health'
+import * as Health from './modules/health/service'
 import { imageOcr } from './modules/image-ocr'
 import { issue } from './modules/issue'
 import { issueAgent } from './modules/issue-agent'
@@ -55,6 +60,7 @@ import { javascriptEval } from './modules/javascript-eval'
 import { kanban } from './modules/kanban'
 import { kimiServer } from './modules/kimi-server'
 import { linkPreview } from './modules/link-preview'
+import * as Maintenance from './modules/maintenance/service'
 import { createManagedResourcesModule } from './modules/managed-resources'
 import { ManagedResourceService } from './modules/managed-resources/service'
 import { mcpServers } from './modules/mcp-servers'
@@ -76,6 +82,7 @@ import { remoteHosts } from './modules/remote-hosts'
 import { search } from './modules/search'
 import { secrets } from './modules/secrets'
 import { session } from './modules/session'
+import * as Session from './modules/session/service'
 import { sessionAwait } from './modules/session-await'
 import { sessionEnvironment } from './modules/session-environment'
 import { sessionGroup } from './modules/session-group'
@@ -153,6 +160,7 @@ export async function createServerContractApp(options: CreateServerContractAppOp
       await TurnCheckpoint.captureRunEnd(input)
     },
   })
+  Session.registerSessionDeletingHandler(TurnCheckpoint.prepareSessionDeletion)
   const { includeRuntimeHttpPlugins = false } = options
   const downloadCenter = createDownloadCenterModule(options.downloadCenterService)
   const chronicle = createChronicleModule(downloadCenter.service)
@@ -325,7 +333,7 @@ export async function createServerApp(options: CreateServerAppOptions = {}) {
       { shutdownRemoteHostConnections, startEnabledRelayRemoteHostConnections },
       { shutdownImageOcr },
       { CodexUsageReconciliationScheduler },
-      { RunSnapshotMaintenanceScheduler },
+      { registerRunSnapshotMaintenance },
       { hydrateCustomMcpServers },
     ] = await Promise.all([
       import('./modules/chat-runtime/runtime'),
@@ -363,7 +371,39 @@ export async function createServerApp(options: CreateServerAppOptions = {}) {
       managedResourceService,
       opencodeRuntimeInstallationService,
     })
-    Worktree.registerStorageMeasurementActivity()
+    Health.check()
+    Worktree.registerStorageMeasurementActivity({
+      hasActiveOrPendingRuns: () => runRegistry.hasActiveOrPendingRuns(),
+      readServerCpuPercent: () => Health.check().cpu.percent,
+    })
+    GitHubCache.registerGithubCacheMaintenance()
+    ComposerDrafts.registerComposerDraftMaintenance()
+    registerRunSnapshotMaintenance()
+    TurnCheckpoint.registerTurnCheckpointMaintenance()
+    Maintenance.registerTask({
+      ownerNamespace: 'logging',
+      key: 'rotate-server-log',
+      title: 'Rotate server log',
+      intervalMs: 15 * 60 * 1000,
+      runOnStart: true,
+      manuallyRunnable: true,
+      run: () => ({ ...rotateServerLog() }),
+    })
+    Maintenance.registerTask({
+      ownerNamespace: 'database',
+      key: 'compact',
+      title: 'Compact database',
+      priority: 'normal',
+      intervalMs: null,
+      runOnStart: false,
+      manuallyRunnable: true,
+      run: () => {
+        if (runRegistry.hasActiveOrPendingRuns()) {
+          throw new Error('Database compaction cannot run while chat runs are active or starting')
+        }
+        return { ...compactDatabase() }
+      },
+    })
     registerAgentToolsMcpServer()
     const serverConfig = getServerConfig()
     const hostConnector = initHostConnectorService({
@@ -397,7 +437,6 @@ export async function createServerApp(options: CreateServerAppOptions = {}) {
         startEnabledRelayRemoteHostConnections,
         shutdownImageOcr,
         CodexUsageReconciliationScheduler,
-        RunSnapshotMaintenanceScheduler,
         hydrateCustomMcpServers,
       },
     ] as const
@@ -424,7 +463,6 @@ export async function createServerApp(options: CreateServerAppOptions = {}) {
     startEnabledRelayRemoteHostConnections,
     shutdownImageOcr,
     CodexUsageReconciliationScheduler,
-    RunSnapshotMaintenanceScheduler,
     hydrateCustomMcpServers,
   } = runtime
 
@@ -443,7 +481,6 @@ export async function createServerApp(options: CreateServerAppOptions = {}) {
   const runtimeResources = new RuntimeResourceRegistry()
   const claudeUsageReconciliation = new ClaudeUsageReconciliationScheduler()
   const codexUsageReconciliation = new CodexUsageReconciliationScheduler()
-  const runSnapshotMaintenance = new RunSnapshotMaintenanceScheduler()
   runtimeResources.register({
     name: 'download-center',
     phase: 'cancel',
@@ -456,14 +493,14 @@ export async function createServerApp(options: CreateServerAppOptions = {}) {
   })
   runtimeResources.register({ name: 'active-chat-runs', phase: 'drain', stop: abortAllRuns })
   runtimeResources.register({
+    name: 'maintenance',
+    phase: 'cancel',
+    stop: () => Maintenance.stop(),
+  })
+  runtimeResources.register({
     name: 'background-activity',
     phase: 'cancel',
     stop: () => BackgroundActivity.stop(),
-  })
-  runtimeResources.register({
-    name: 'run-snapshot-maintenance',
-    phase: 'cancel',
-    stop: () => runSnapshotMaintenance.stop(),
   })
   runtimeResources.register({
     name: 'opencode-runtime-installation',
@@ -547,7 +584,7 @@ export async function createServerApp(options: CreateServerAppOptions = {}) {
   if (startBackgroundTasks) {
     claudeUsageReconciliation.start()
     codexUsageReconciliation.start()
-    runSnapshotMaintenance.start()
+    Maintenance.start()
     BackgroundJobPoller.start()
     const chronicleRuntimeAllowed = chronicleService.isChronicleRuntimeAllowed()
     void refreshAllExternalProviderSources()

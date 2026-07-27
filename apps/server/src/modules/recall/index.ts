@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { AppError } from '../../errors/app-error'
 import { db } from '../../infra'
 import { registerChatRuntimeReadModelProjector } from '../chat-runtime/read-model-projectors'
+import * as Maintenance from '../maintenance/service'
 import * as Session from '../session/service'
 import { executeRecallAttune } from './attune-evaluator'
 import { requestAttunement, resolveAttunementRequest } from './attune-service'
@@ -14,6 +15,7 @@ import {
   projectRecallRun,
   projectRecallToolEvent,
   rebuildRecallProjection,
+  reconcileRecallProjection,
 } from './service'
 
 const AttuneIntentSchema = z.discriminatedUnion('operation', [
@@ -85,7 +87,18 @@ export function initializeRecallProjection(): void {
     })
     recallProjectorRegistered = true
   }
-  db().transaction((tx) => {
-    rebuildRecallProjection(tx)
+  reconcileRecallProjection()
+  Maintenance.registerTask({
+    ownerNamespace: 'recall',
+    key: 'reconcile-projection',
+    title: 'Reconcile Recall projection',
+    intervalMs: 15 * 60 * 1000,
+    runOnStart: false,
+    manuallyRunnable: true,
+    run: () => ({ ...reconcileRecallProjection() }),
   })
+}
+
+export function repairRecallProjection(): void {
+  db().transaction(tx => rebuildRecallProjection(tx))
 }

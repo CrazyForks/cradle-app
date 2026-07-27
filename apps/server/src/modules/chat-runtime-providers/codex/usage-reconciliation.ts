@@ -169,7 +169,12 @@ export async function reconcileCradleCodexUsage(input: {
   runtimeHome?: string
 } = {}): Promise<CodexUsageReconciliationSummary> {
   const bindings = db()
-    .select()
+    .select({
+      id: backendSessionBindings.id,
+      chatSessionId: backendSessionBindings.chatSessionId,
+      backendSessionId: backendSessionBindings.backendSessionId,
+      providerTargetId: backendSessionBindings.providerTargetId,
+    })
     .from(backendSessionBindings)
     .where(and(
       eq(backendSessionBindings.runtimeKind, 'codex'),

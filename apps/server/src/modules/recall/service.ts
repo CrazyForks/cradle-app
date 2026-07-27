@@ -9,13 +9,15 @@ import {
   recallToolEvents,
   sessions,
 } from '@cradle/db'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 
-import type { ChatRuntimeWriteDb } from '../chat-runtime/es/event-store'
+import { db } from '../../infra'
+import type { ChatRuntimeTx, ChatRuntimeWriteDb } from '../chat-runtime/es/event-store'
 import { messagePayloadJoinCondition } from '../chat-runtime/message-payload-store'
 import { extractRecallFileTouchPaths } from './file-touch-extractor'
 
 const MAX_EXCERPT_LENGTH = 8_000
+const RECONCILIATION_BATCH_SIZE = 500
 
 type RecallProjectionDb = Pick<ChatRuntimeWriteDb, 'delete' | 'insert' | 'select'>
 
@@ -30,6 +32,13 @@ export interface RecallRunProjectionInput {
 
 export interface RecallToolEventProjectionInput {
   sourceEventId: string
+}
+
+export interface RecallProjectionReconciliationResult {
+  projectedMessages: number
+  projectedRuns: number
+  projectedToolEvents: number
+  prunedToolEvents: number
 }
 
 export function projectRecallMessage(
@@ -212,6 +221,102 @@ export function rebuildRecallProjection(d: RecallProjectionDb): void {
   for (const row of toolEventIds) {
     projectRecallToolEvent(d, { sourceEventId: row.id })
   }
+}
+
+/**
+ * Repairs normal projection drift without rewriting the complete Recall read
+ * model. Every batch commits independently so startup does not hold SQLite's
+ * writer lock for the duration of the full evidence history.
+ */
+export function reconcileRecallProjection(): RecallProjectionReconciliationResult {
+  const result: RecallProjectionReconciliationResult = {
+    projectedMessages: 0,
+    projectedRuns: 0,
+    projectedToolEvents: 0,
+    prunedToolEvents: 0,
+  }
+
+  result.projectedMessages = runReconciliationBatch((tx) => {
+    const ids = tx
+      .select({ id: messages.id })
+      .from(messages)
+      .innerJoin(chatMessagePayloads, messagePayloadJoinCondition())
+      .innerJoin(sessions, eq(sessions.id, messages.sessionId))
+      .leftJoin(recallMessages, eq(recallMessages.messageId, messages.id))
+      .where(and(eq(messages.status, 'complete'), isNull(recallMessages.messageId)))
+      .limit(RECONCILIATION_BATCH_SIZE)
+      .all()
+      .map(row => row.id)
+    for (const messageId of ids) {
+      projectRecallMessage(tx, { messageId })
+    }
+    return ids.length
+  })
+
+  result.projectedRuns = runReconciliationBatch((tx) => {
+    const ids = tx
+      .select({ id: backendRuns.id })
+      .from(backendRuns)
+      .innerJoin(sessions, eq(sessions.id, backendRuns.chatSessionId))
+      .leftJoin(recallRuns, eq(recallRuns.runId, backendRuns.id))
+      .where(isNull(recallRuns.runId))
+      .limit(RECONCILIATION_BATCH_SIZE)
+      .all()
+      .map(row => row.id)
+    for (const runId of ids) {
+      projectRecallRun(tx, { runId })
+    }
+    return ids.length
+  })
+
+  result.projectedToolEvents = runReconciliationBatch((tx) => {
+    const ids = tx
+      .select({ id: backendRunSnapshotEvents.id })
+      .from(backendRunSnapshotEvents)
+      .innerJoin(sessions, eq(sessions.id, backendRunSnapshotEvents.chatSessionId))
+      .leftJoin(
+        recallToolEvents,
+        eq(recallToolEvents.sourceEventId, backendRunSnapshotEvents.id),
+      )
+      .where(and(
+        isNull(recallToolEvents.id),
+        isNotNull(backendRunSnapshotEvents.chatSessionId),
+        isNotNull(backendRunSnapshotEvents.toolCallId),
+      ))
+      .limit(RECONCILIATION_BATCH_SIZE)
+      .all()
+      .map(row => row.id)
+    for (const sourceEventId of ids) {
+      projectRecallToolEvent(tx, { sourceEventId })
+    }
+    return ids.length
+  })
+
+  result.prunedToolEvents = runReconciliationBatch((tx) => {
+    const ids = tx
+      .select({ id: recallToolEvents.id })
+      .from(recallToolEvents)
+      .leftJoin(
+        backendRunSnapshotEvents,
+        eq(backendRunSnapshotEvents.id, recallToolEvents.sourceEventId),
+      )
+      .where(isNull(backendRunSnapshotEvents.id))
+      .limit(RECONCILIATION_BATCH_SIZE)
+      .all()
+      .map(row => row.id)
+    if (ids.length > 0) {
+      tx.delete(recallToolEvents).where(inArray(recallToolEvents.id, ids)).run()
+    }
+    return ids.length
+  })
+
+  return result
+}
+
+function runReconciliationBatch(
+  reconcileBatch: (tx: ChatRuntimeTx) => number,
+): number {
+  return db().transaction(reconcileBatch)
 }
 
 function truncate(value: string): string {

@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs'
 import { dirname } from 'node:path'
 
 import pc from 'picocolors'
@@ -14,9 +14,18 @@ export interface LoggerFields {
 interface FlushableDestination extends pino.DestinationStream {
   flush?: () => void
   flushSync?: () => void
+  reopen?: (file?: string | number) => void
 }
 
-const fileDestinations: FlushableDestination[] = []
+interface FileDestination {
+  path: string
+  stream: FlushableDestination
+}
+
+export const SERVER_LOG_MAX_BYTES = 64 * 1024 * 1024
+export const SERVER_LOG_GENERATIONS = 3
+
+const fileDestinations: FileDestination[] = []
 
 /* ------------------------------------------------------------------ */
 /*  Pretty-print stream for TUI / terminal stdout                     */
@@ -125,8 +134,9 @@ function createStreams() {
       mkdirSync(dirname(logFile), { recursive: true })
     }
     catch { /* ignore */ }
+    rotateFileGenerations(logFile, SERVER_LOG_MAX_BYTES, SERVER_LOG_GENERATIONS)
     const dest = pino.destination({ dest: logFile, sync: process.env.CRADLE_LOG_SYNC === '1' })
-    fileDestinations.push(dest)
+    fileDestinations.push({ path: logFile, stream: dest })
     streams.push({ level, stream: dest })
     writeTerminalStream(process.stderr, `[logger] file logging enabled: ${logFile}\n`)
   }
@@ -241,7 +251,7 @@ export function flushLogger(): void {
   catch {
     // Logging flush is best-effort during process shutdown.
   }
-  for (const dest of fileDestinations) {
+  for (const { stream: dest } of fileDestinations) {
     try {
       dest.flush?.()
       dest.flushSync?.()
@@ -250,4 +260,54 @@ export function flushLogger(): void {
       // SonicBoom can reject synchronous flush before the destination is ready.
     }
   }
+}
+
+export interface LogRotationResult {
+  rotated: boolean
+  bytesBefore: number
+  generations: number
+}
+
+export function rotateServerLog(): LogRotationResult {
+  const logFile = resolveLogFile()
+  if (!logFile) {
+    return { rotated: false, bytesBefore: 0, generations: SERVER_LOG_GENERATIONS }
+  }
+  const destination = fileDestinations.find(candidate => candidate.path === logFile)
+  destination?.stream.flush?.()
+  destination?.stream.flushSync?.()
+  const shouldReopen = Boolean(
+    destination?.stream.reopen
+    && existsSync(logFile)
+    && statSync(logFile).size >= SERVER_LOG_MAX_BYTES,
+  )
+  try {
+    return rotateFileGenerations(logFile, SERVER_LOG_MAX_BYTES, SERVER_LOG_GENERATIONS)
+  }
+  finally {
+    if (shouldReopen) {
+      destination?.stream.reopen?.(logFile)
+    }
+  }
+}
+
+export function rotateFileGenerations(
+  filePath: string,
+  maxBytes: number,
+  generations: number,
+): LogRotationResult {
+  const bytesBefore = existsSync(filePath) ? statSync(filePath).size : 0
+  if (bytesBefore < maxBytes || generations < 1) {
+    return { rotated: false, bytesBefore, generations }
+  }
+
+  rmSync(`${filePath}.${generations}`, { force: true })
+  for (let generation = generations - 1; generation >= 1; generation -= 1) {
+    const source = `${filePath}.${generation}`
+    if (existsSync(source)) {
+      renameSync(source, `${filePath}.${generation + 1}`)
+    }
+  }
+  renameSync(filePath, `${filePath}.1`)
+  return { rotated: true, bytesBefore, generations }
 }

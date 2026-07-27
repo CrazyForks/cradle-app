@@ -1,6 +1,7 @@
 # Observability Module
 
 Provides canonical observability event capture, incident projection, queue-backed persistence, error-pattern inspection, runtime snapshot inspection, and HTTP query/export surfaces.
+Event and incident list filters, newest-first ordering, and limits are applied by SQLite through Drizzle so diagnostic reads do not materialize the full retained history in server memory.
 Observability reads Chat Runtime-owned run snapshots to build diagnostics timelines and error pattern buckets, but it does not own provider runtime semantics or write provider namespaces.
 Incident dedupe is intentionally signal-oriented rather than always run-scoped: chat stream failures aggregate by code so development-time interrupted runs do not create one incident per run, while producers may still pass an explicit dedupe key for cases that need narrower ownership.
 Route metadata includes `x-cradle-cli` descriptors for generated CLI commands. `GET /observability/runtime-snapshot` is CLI-facing because it is useful for agents, leak harnesses, and local diagnostics. Internal producer or dangerous diagnostic endpoints such as `POST /observability/runtime-samples` and `POST /observability/diagnostics/heap-snapshot` are not exposed as generated CLI commands by default. Tab working set trend collection is script-owned by `scripts/tab_working_set_collector.py` so it can run as a timed sampler and write NDJSON/analysis artifacts under the Cradle data directory without adding another product API.

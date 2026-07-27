@@ -9,9 +9,12 @@ export function closeRelayWebSocket(ws: WebSocket): void {
   if (ws.readyState === WebSocket.CLOSED) {
     return
   }
-  // Closing a CONNECTING ws aborts its HTTP upgrade request. ws emits the
-  // resulting error on the next tick, so keep one listener installed after
-  // teardown to prevent it from becoming an uncaught process error.
+  // Aborting an in-flight upgrade emits an error on the next tick, so keep one
+  // listener installed after teardown to prevent an uncaught process error.
   ws.once('error', () => {})
-  ws.close()
+  if (ws.readyState === WebSocket.OPEN) {
+    ws.close()
+    return
+  }
+  ws.terminate()
 }

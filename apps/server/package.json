@@ -112,6 +112,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@alint-js/cli": "^0.1.4",
     "@cradle/model-api-simulator": "workspace:*",
     "@electron/rebuild": "4.0.4",
     "@hey-api/openapi-ts": "^0.97.1",

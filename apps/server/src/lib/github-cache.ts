@@ -1,7 +1,8 @@
 import { githubApiCache } from '@cradle/db'
-import { eq, lt } from 'drizzle-orm'
+import { eq, inArray, lt } from 'drizzle-orm'
 
 import { db } from '../infra'
+import * as Maintenance from '../modules/maintenance/service'
 
 const DEFAULT_TTL_S = 60 * 60 // 1 hour
 
@@ -110,11 +111,34 @@ export async function cachedFetch<T>(options: CachedFetchOptions<T>): Promise<T 
   return result.data
 }
 
-export function pruneStaleCache(ttlS = DEFAULT_TTL_S * 24): number {
-  const threshold = Math.floor(Date.now() / 1000) - ttlS
-  const stale = db().select({ key: githubApiCache.cacheKey }).from(githubApiCache).where(lt(githubApiCache.fetchedAt, threshold)).all()
-  for (const row of stale) {
-    db().delete(githubApiCache).where(eq(githubApiCache.cacheKey, row.key)).run()
-  }
-  return stale.length
+export function pruneStaleCache(
+  ttlS = DEFAULT_TTL_S * 24,
+  limit = 250,
+  now = Math.floor(Date.now() / 1000),
+): number {
+  return db().transaction((tx) => {
+    const keys = tx
+      .select({ key: githubApiCache.cacheKey })
+      .from(githubApiCache)
+      .where(lt(githubApiCache.fetchedAt, now - ttlS))
+      .limit(limit)
+      .all()
+      .map(row => row.key)
+    if (keys.length === 0) {
+      return 0
+    }
+    return tx.delete(githubApiCache).where(inArray(githubApiCache.cacheKey, keys)).run().changes
+  })
+}
+
+export function registerGithubCacheMaintenance(): void {
+  Maintenance.registerTask({
+    ownerNamespace: 'github-cache',
+    key: 'prune-stale',
+    title: 'Prune stale GitHub cache',
+    intervalMs: 60 * 60 * 1000,
+    runOnStart: true,
+    manuallyRunnable: true,
+    run: ({ now }) => ({ pruned: pruneStaleCache(DEFAULT_TTL_S * 24, 250, Math.floor(now / 1000)) }),
+  })
 }

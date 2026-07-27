@@ -1,9 +1,10 @@
 import { composerDrafts } from '@cradle/db'
 import type { FileUIPart } from 'ai'
-import { eq } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull, ne } from 'drizzle-orm'
 
 import { currentUnixSeconds } from '../../helpers/time'
 import { db } from '../../infra'
+import * as Maintenance from '../maintenance/service'
 import type { ChatContextPart } from './context-parts'
 
 export interface ComposerPastedTextPayload {
@@ -97,7 +98,7 @@ export function deleteComposerDraft(surfaceId: string): ComposerDraftDto {
     .insert(composerDrafts)
     .values({
       surfaceId,
-      draftJson: existing?.draftJson ?? '{}',
+      draftJson: '{}',
       revision,
       deletedAt: now,
       createdAt: existing?.createdAt ?? now,
@@ -106,6 +107,7 @@ export function deleteComposerDraft(surfaceId: string): ComposerDraftDto {
     .onConflictDoUpdate({
       target: composerDrafts.surfaceId,
       set: {
+        draftJson: '{}',
         revision,
         deletedAt: now,
         updatedAt: now,
@@ -114,6 +116,39 @@ export function deleteComposerDraft(surfaceId: string): ComposerDraftDto {
     .run()
 
   return readComposerDraft(surfaceId)
+}
+
+export function scrubDeletedComposerDraftPayloads(limit = 100): number {
+  return db().transaction((tx) => {
+    const surfaceIds = tx
+      .select({ surfaceId: composerDrafts.surfaceId })
+      .from(composerDrafts)
+      .where(and(isNotNull(composerDrafts.deletedAt), ne(composerDrafts.draftJson, '{}')))
+      .limit(limit)
+      .all()
+      .map(row => row.surfaceId)
+    if (surfaceIds.length === 0) {
+      return 0
+    }
+    return tx
+      .update(composerDrafts)
+      .set({ draftJson: '{}' })
+      .where(inArray(composerDrafts.surfaceId, surfaceIds))
+      .run()
+      .changes
+  })
+}
+
+export function registerComposerDraftMaintenance(): void {
+  Maintenance.registerTask({
+    ownerNamespace: 'chat-runtime',
+    key: 'scrub-composer-tombstones',
+    title: 'Scrub deleted composer drafts',
+    intervalMs: 60 * 60 * 1000,
+    runOnStart: true,
+    manuallyRunnable: true,
+    run: () => ({ scrubbed: scrubDeletedComposerDraftPayloads() }),
+  })
 }
 
 function toComposerDraftDto(row: typeof composerDrafts.$inferSelect): ComposerDraftDto {

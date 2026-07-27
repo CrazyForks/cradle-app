@@ -17,6 +17,12 @@ export interface BackgroundActivityReporter {
   report: (progress: BackgroundActivityProgress | null) => void
 }
 
+export type BackgroundActivityRunSource = 'automatic' | 'manual'
+
+export interface BackgroundActivityRunContext {
+  source: BackgroundActivityRunSource
+}
+
 export interface BackgroundActivityDescriptor {
   ownerNamespace: string
   key: string
@@ -24,7 +30,10 @@ export interface BackgroundActivityDescriptor {
   priority: BackgroundActivityPriority
   trigger: string
   manuallyRunnable: boolean
-  run: (reporter: BackgroundActivityReporter) => Promise<void>
+  run: (
+    reporter: BackgroundActivityReporter,
+    context: BackgroundActivityRunContext,
+  ) => Promise<void>
 }
 
 export interface BackgroundActivitySnapshot {
@@ -96,7 +105,10 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function compareSnapshots(left: BackgroundActivitySnapshot, right: BackgroundActivitySnapshot): number {
+function compareSnapshots(
+  left: BackgroundActivitySnapshot,
+  right: BackgroundActivitySnapshot,
+): number {
   const runningOrder = Number(right.status === 'running') - Number(left.status === 'running')
   if (runningOrder !== 0) {
     return runningOrder
@@ -110,10 +122,15 @@ function compareSnapshots(left: BackgroundActivitySnapshot, right: BackgroundAct
 }
 
 function isCurrent(record: ActivityRecord): boolean {
-  return activities.get(storageKey(record.descriptor.ownerNamespace, record.descriptor.key)) === record
+  return (
+    activities.get(storageKey(record.descriptor.ownerNamespace, record.descriptor.key)) === record
+  )
 }
 
-function run(record: ActivityRecord): Promise<BackgroundActivitySnapshot> {
+function run(
+  record: ActivityRecord,
+  source: BackgroundActivityRunSource,
+): Promise<BackgroundActivitySnapshot> {
   const descriptor = record.descriptor
   const now = Date.now()
   record.status = 'running'
@@ -134,7 +151,7 @@ function run(record: ActivityRecord): Promise<BackgroundActivitySnapshot> {
   }
 
   const promise = Promise.resolve()
-    .then(() => descriptor.run(reporter))
+    .then(() => descriptor.run(reporter, { source }))
     .then(
       () => {
         if (isCurrent(record) && record.status === 'running') {
@@ -202,9 +219,12 @@ export function list(): BackgroundActivitySnapshot[] {
   return Array.from(activities.values(), snapshot).sort(compareSnapshots)
 }
 
-export function requestRun(ownerNamespace: string, key: string): Promise<BackgroundActivitySnapshot> {
+export function requestRun(
+  ownerNamespace: string,
+  key: string,
+): Promise<BackgroundActivitySnapshot> {
   const record = requireActivity(ownerNamespace, key)
-  return record.runPromise ?? run(record)
+  return record.runPromise ?? run(record, 'automatic')
 }
 
 export function requestManualRun(
@@ -220,7 +240,7 @@ export function requestManualRun(
       details: { ownerNamespace, key },
     })
   }
-  return record.runPromise ?? run(record)
+  return record.runPromise ?? run(record, 'manual')
 }
 
 /** Starts a manually runnable activity without making an HTTP caller wait for it. */
@@ -234,7 +254,7 @@ export function startManualRun(ownerNamespace: string, key: string): BackgroundA
       details: { ownerNamespace, key },
     })
   }
-  void (record.runPromise ?? run(record))
+  void (record.runPromise ?? run(record, 'manual'))
   return snapshot(record)
 }
 

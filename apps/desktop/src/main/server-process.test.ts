@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -369,5 +369,26 @@ describe('desktop server exit classification', () => {
         expectation: null,
       }),
     ).toBe('external-signal-or-os-kill')
+  })
+})
+
+describe('desktop server exit diagnostic rotation', () => {
+  it('rotates diagnostics before the next append and bounds retained generations', async () => {
+    const { rotateServerExitDiagnostics } = await import('./server-process')
+    const dataDir = mkdtempSync(join(tmpdir(), 'cradle-server-exit-rotation-'))
+    const diagnosticsPath = join(dataDir, 'server-process-exits.ndjson')
+
+    try {
+      writeFileSync(diagnosticsPath, 'current')
+      writeFileSync(`${diagnosticsPath}.1`, 'previous')
+      writeFileSync(`${diagnosticsPath}.2`, 'old')
+
+      expect(rotateServerExitDiagnostics(diagnosticsPath, 7, 2)).toBe(true)
+      expect(readFileSync(`${diagnosticsPath}.1`, 'utf8')).toBe('current')
+      expect(readFileSync(`${diagnosticsPath}.2`, 'utf8')).toBe('previous')
+    }
+    finally {
+      rmSync(dataDir, { recursive: true, force: true })
+    }
   })
 })

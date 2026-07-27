@@ -8,7 +8,10 @@ import { describe, expect, it } from 'vitest'
 
 import { createServerApp } from '../src/app'
 import { db, shutdownInfra } from '../src/infra'
+import * as BackgroundActivity from '../src/modules/background-activity/service'
+import * as Maintenance from '../src/modules/maintenance/service'
 import { localWorkspaceLocator, serializeWorkspaceLocator } from '../src/modules/workspace/workspace-locator'
+import * as Worktree from '../src/modules/worktree/service'
 
 interface TestInfraEnv {
   dataDir?: string
@@ -112,6 +115,74 @@ describe('worktree capability', () => {
       rmSync(workspaceRoot, { recursive: true, force: true })
       rmSync(firstWorktreePath, { recursive: true, force: true })
       rmSync(secondWorktreePath, { recursive: true, force: true })
+    }
+  })
+
+  it('measures stale storage automatically only during low load while manual refresh bypasses the gate', async () => {
+    const dataDir = makeTempDir('cradle-data-')
+    const workspaceRoot = makeTempDir('cradle-worktree-workspace-')
+    const worktreePath = makeTempDir('cradle-worktree-storage-')
+    const previousEnv = useIsolatedTestInfra(dataDir)
+
+    try {
+      await createServerApp({ startBackgroundTasks: false })
+      Maintenance.reset()
+      BackgroundActivity.reset()
+      const database = db()
+      database.insert(workspaces).values({
+        id: 'workspace-worktree-storage',
+        name: 'Workspace Worktree Storage',
+        locatorJson: serializeWorkspaceLocator(localWorkspaceLocator(workspaceRoot)),
+      }).run()
+      writeFileSync(join(worktreePath, 'payload.txt'), 'storage measurement\n', 'utf8')
+      database.insert(worktrees).values({
+        id: 'worktree-storage',
+        sourceWorkspaceId: 'workspace-worktree-storage',
+        name: 'worktree-storage',
+        path: worktreePath,
+        branch: 'cradle/wt/worktree-storage',
+        baseRef: 'HEAD',
+        status: 'active',
+      }).run()
+
+      Worktree.registerStorageMeasurementActivity({
+        hasActiveOrPendingRuns: () => true,
+        readServerCpuPercent: () => 1,
+      })
+      await expect(BackgroundActivity.requestRun('worktree', 'measure-storage')).resolves.toMatchObject({
+        status: 'succeeded',
+        progress: { deferred: true, reason: 'chat_runs_active', measured: 0 },
+      })
+
+      Worktree.registerStorageMeasurementActivity({
+        hasActiveOrPendingRuns: () => true,
+        readServerCpuPercent: () => 90,
+      })
+      await expect(BackgroundActivity.requestManualRun('worktree', 'measure-storage')).resolves.toMatchObject({
+        status: 'succeeded',
+        progress: { measured: 1, failed: 0 },
+      })
+      expect(database.select().from(worktrees).where(eq(worktrees.id, 'worktree-storage')).get()).toMatchObject({
+        sizeMeasuredAt: expect.any(Number),
+        sizeMeasurementError: null,
+      })
+
+      Worktree.registerStorageMeasurementActivity({
+        hasActiveOrPendingRuns: () => false,
+        readServerCpuPercent: () => 1,
+      })
+      await expect(BackgroundActivity.requestRun('worktree', 'measure-storage')).resolves.toMatchObject({
+        status: 'succeeded',
+        progress: { measured: 0, failed: 0, skippedFresh: 1 },
+      })
+    }
+    finally {
+      Maintenance.reset()
+      BackgroundActivity.reset()
+      restoreTestInfra(previousEnv)
+      rmSync(dataDir, { recursive: true, force: true })
+      rmSync(workspaceRoot, { recursive: true, force: true })
+      rmSync(worktreePath, { recursive: true, force: true })
     }
   })
 })

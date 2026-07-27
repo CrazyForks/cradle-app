@@ -33,6 +33,9 @@ relay server registry rows. The controller-side remote host row remains owned by
   handling, stream multiplexing, and credit-based flow control.
 - `websocket-data.ts`: zero-copy WebSocket `RawData` views for the endpoint hot
   path.
+- `websocket.ts`: shared state-aware teardown. Open sockets close gracefully;
+  connecting or already-closing sockets terminate without calling the `ws`
+  library's synchronously throwing CONNECTING `close()` path.
 - `controller-transport.ts`: controller-side WebSocket connection and local TCP
   listener. It returns the shared `LocalTunnelHandle` contract owned by
   `src/runtime/local-tunnel.ts`.

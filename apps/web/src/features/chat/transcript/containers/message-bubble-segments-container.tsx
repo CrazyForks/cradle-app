@@ -1,15 +1,24 @@
+import { useQuery } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useState } from 'react'
 
+import { getChatSessionsBySessionIdRunSnapshotsOptions } from '~/api-gen/@tanstack/react-query.gen'
+import { chatSelectors } from '~/store/chat'
+
 import { BangCommandBlock, BangCommandPromptBlock } from '../../rendering/blocks/bang-command-block'
 import type { ChatRenderSegment } from '../../rendering/chat-render-plan'
+import { splitSegmentExecutionPhase } from '../../rendering/chat-render-plan'
+import { useChatRenderStore } from '../../rendering/chat-render-store'
 import { ImageLightbox } from '../../rendering/image-lightbox'
+import { ExecutionPhaseFold } from '../../rendering/message-bubble-chrome'
 import type {
   MessageFrame,
   MessageImageAttachment,
   MessageTextTransform,
 } from '../../rendering/message-bubble-selectors'
 import { readActiveStreamingSegmentKey } from '../../rendering/message-bubble-selectors'
+import { readLocalRunTimings } from '../../rendering/run-debug-timings'
+import { describeToolCall } from '../../rendering/tool-ui-classifier'
 import type { MessageBubbleByIdProps, MessageToolApprovalHandler } from '../lib/message-bubble-types'
 import { MessageBubbleFrameView } from '../views/message-bubble-frame-view'
 import { MessageBubbleActionsById } from './message-bubble-actions-by-id'
@@ -45,6 +54,23 @@ export function MessageBubbleSegmentsContainer({
   const activeStreamingSegmentKey = isStreaming && !frame.hasHiddenRuntimeUserInputTail
     ? readActiveStreamingSegmentKey(segments)
     : null
+  const executionPhaseSplit = isStreaming
+    ? null
+    : splitSegmentExecutionPhase(segments, { describeToolKind: part => describeToolCall(part).kind })
+  const runMeta = useChatRenderStore(chatSelectors.runDisplayMeta(frame.id), (a, b) => a === b)
+  const localRunTotalMs = runMeta ? readLocalRunTimings(runMeta).totalMs : null
+  // History restores have no session-local run meta; fall back to the durable
+  // per-session run snapshots keyed by assistant messageId.
+  const { data: runSnapshotPage } = useQuery({
+    ...getChatSessionsBySessionIdRunSnapshotsOptions({ path: { sessionId } }),
+    enabled: isAssistant && !isStreaming && localRunTotalMs === null,
+    staleTime: 60_000,
+  })
+  const restoredRunTotalMs = (() => {
+    const snapshot = runSnapshotPage?.snapshots.find(candidate => candidate.messageId === frame.id)
+    return snapshot?.completedAt != null ? Math.max(0, snapshot.completedAt - snapshot.startedAt) : null
+  })()
+  const runTotalMs = localRunTotalMs ?? restoredRunTotalMs
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState(0)
   const imageAttachmentBySegmentKey = new Map(imageAttachments.map(attachment => [attachment.segmentKey, attachment.part]))
@@ -99,7 +125,14 @@ export function MessageBubbleSegmentsContainer({
     ? <BangCommandPromptBlock command={frame.bangCommand.command} />
     : frame.bangResult
       ? <BangCommandBlock result={frame.bangResult} />
-      : renderSegmentsWithImageGrid(segments)
+      : !executionPhaseSplit
+        ? renderSegmentsWithImageGrid(segments)
+        : (
+            <>
+              <ExecutionPhaseFold durationMs={runTotalMs}>{executionPhaseSplit.executionItems.map(renderSegment)}</ExecutionPhaseFold>
+              {renderSegmentsWithImageGrid(executionPhaseSplit.finalItems)}
+            </>
+          )
 
   return (
     <>

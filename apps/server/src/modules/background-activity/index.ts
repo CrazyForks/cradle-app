@@ -17,7 +17,10 @@ export const backgroundActivity = new Elysia({
   .post('/:ownerNamespace/:key/run', ({ params }) => {
     return BackgroundActivity.startManualRun(params.ownerNamespace, params.key)
   }, {
-    detail: { summary: 'Run a background activity now' },
+    detail: {
+      'summary': 'Run a background activity now',
+      'x-cradle-cli': { command: ['background-activity', 'run'] },
+    },
     params: BackgroundActivityModel.keyParams,
     response: { 200: BackgroundActivityModel.activity },
   })

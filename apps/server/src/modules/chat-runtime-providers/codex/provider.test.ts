@@ -5878,6 +5878,38 @@ describe('codexProvider app-server integration', () => {
       'thread/turns/list',
       'turn/start',
     ])
+
+    client.requests.length = 0
+    const resumedStream = provider.streamTurn({
+      runId: 'run-codex-test-resumed',
+      runtimeSession,
+      profile: createProfile(),
+      message: createUserMessage('Continue again'),
+      workspaceId: 'workspace-1',
+    })
+    const resumedFirstChunk = resumedStream.next()
+
+    await vi.waitFor(() => {
+      expect(client.requests.map(request => request.method).slice(0, 2)).toEqual([
+        'thread/resume',
+        'turn/start',
+      ])
+    })
+    client.pushNotification({
+      method: 'item/agentMessage/delta',
+      params: { threadId: 'existing-thread', turnId: 'codex-turn-1', itemId: 'assistant-message-2', delta: 'Continued again' },
+    })
+    await resumedFirstChunk
+    client.pushNotification({
+      method: 'turn/completed',
+      params: { threadId: 'existing-thread', turn: { id: 'codex-turn-1', status: 'completed' } },
+    })
+    for await (const _chunk of resumedStream) {
+      // Drain stream.
+    }
+    expect(client.requests.map(request => request.method)).toContain('thread/turns/list')
+    expect(client.requests.findIndex(request => request.method === 'thread/turns/list'))
+      .toBeGreaterThan(client.requests.findIndex(request => request.method === 'turn/start'))
   })
 
   it('injects Work harness context once as a developer item', async () => {

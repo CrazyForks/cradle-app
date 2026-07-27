@@ -29,6 +29,8 @@ const checkpoint = {
   startRef: 'refs/cradle/checkpoints/session/run/start',
   endRef: 'refs/cradle/checkpoints/session/run/end',
   status: 'completed' as const,
+  cleanupReason: null,
+  cleanupClaimedAt: null,
   changedFiles: 1,
   additions: 1,
   deletions: 0,

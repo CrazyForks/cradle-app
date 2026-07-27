@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { sessions, turnCheckpoints } from '@cradle/db'
+import { backendRuns, sessions, turnCheckpoints } from '@cradle/db'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { db, shutdownInfra } from '../../infra'
@@ -10,7 +10,9 @@ import {
   captureRunStart,
   cleanupHistoricalRewind,
   listForSession,
+  maintainTurnCheckpointCleanup,
   planHistoricalRewind,
+  prepareSessionDeletion,
   restoreHistoricalCheckpoint,
 } from './service'
 
@@ -71,7 +73,11 @@ afterEach(() => {
   }
 })
 
-function seedCheckpoint(id: string, runId: string): void {
+function seedCheckpoint(
+  id: string,
+  runId: string,
+  status: 'capturing' | 'completed' | 'failed' = 'completed',
+): void {
   db().insert(turnCheckpoints).values({
     id,
     sessionId: 'session-1',
@@ -80,11 +86,21 @@ function seedCheckpoint(id: string, runId: string): void {
     workspaceId: null,
     workspacePath: '/tmp/workspace',
     startRef: `refs/cradle/checkpoints/session/${runId}/start`,
-    endRef: `refs/cradle/checkpoints/session/${runId}/end`,
-    status: 'completed',
-    completedAt: 1,
+    endRef: status === 'completed' ? `refs/cradle/checkpoints/session/${runId}/end` : null,
+    status,
+    completedAt: status === 'completed' ? 1 : null,
     createdAt: 1,
     updatedAt: 1,
+  }).run()
+}
+
+function seedRun(runId: string, status: 'streaming' | 'complete' | 'aborted' | 'failed'): void {
+  db().insert(backendRuns).values({
+    id: runId,
+    chatSessionId: 'session-1',
+    origin: 'user',
+    status,
+    startedAt: 1,
   }).run()
 }
 
@@ -167,12 +183,79 @@ describe('historical checkpoint rewind', () => {
       subsequentCheckpointIds: ['checkpoint-3', 'checkpoint-2'],
     })
 
-    expect(gitStoreMocks.deleteCheckpointRefs).toHaveBeenCalledWith('/tmp/workspace', [
-      'refs/cradle/checkpoints/session/run-3/start',
-      'refs/cradle/checkpoints/session/run-3/end',
+    expect(gitStoreMocks.deleteCheckpointRefs).toHaveBeenNthCalledWith(1, '/tmp/workspace', [
       'refs/cradle/checkpoints/session/run-2/start',
       'refs/cradle/checkpoints/session/run-2/end',
     ])
+    expect(gitStoreMocks.deleteCheckpointRefs).toHaveBeenNthCalledWith(2, '/tmp/workspace', [
+      'refs/cradle/checkpoints/session/run-3/start',
+      'refs/cradle/checkpoints/session/run-3/end',
+    ])
     expect(listForSession('session-1').map(checkpoint => checkpoint.id)).toEqual(['checkpoint-1'])
+  })
+})
+
+describe('turn checkpoint cleanup', () => {
+  it('claims and cleans only unusable checkpoints whose run is terminal', async () => {
+    seedRun('run-terminal', 'failed')
+    seedRun('run-active', 'streaming')
+    seedCheckpoint('checkpoint-terminal', 'run-terminal', 'failed')
+    seedCheckpoint('checkpoint-active', 'run-active', 'capturing')
+
+    await expect(maintainTurnCheckpointCleanup()).resolves.toEqual({
+      claimed: 1,
+      cleaned: 1,
+      failed: 0,
+    })
+
+    expect(gitStoreMocks.deleteCheckpointRefs).toHaveBeenCalledWith('/tmp/workspace', [
+      'refs/cradle/checkpoints/session/run-terminal/start',
+    ])
+    expect(db().select().from(turnCheckpoints).all()).toEqual([
+      expect.objectContaining({ id: 'checkpoint-active', status: 'capturing' }),
+    ])
+  })
+
+  it('retains a durable claim after Git cleanup failure and completes on retry', async () => {
+    seedRun('run-failed-cleanup', 'aborted')
+    seedCheckpoint('checkpoint-failed-cleanup', 'run-failed-cleanup', 'failed')
+    gitStoreMocks.deleteCheckpointRefs.mockRejectedValueOnce(new Error('git unavailable'))
+
+    await expect(maintainTurnCheckpointCleanup()).resolves.toEqual({
+      claimed: 1,
+      cleaned: 0,
+      failed: 1,
+    })
+    expect(db().select().from(turnCheckpoints).get()).toEqual(expect.objectContaining({
+      id: 'checkpoint-failed-cleanup',
+      status: 'cleanup_pending',
+      cleanupReason: 'terminal-run',
+      errorText: 'git unavailable',
+    }))
+
+    await expect(maintainTurnCheckpointCleanup()).resolves.toEqual({
+      claimed: 1,
+      cleaned: 1,
+      failed: 0,
+    })
+    expect(db().select().from(turnCheckpoints).all()).toEqual([])
+  })
+
+  it('blocks session deletion until every checkpoint ref has been cleaned', async () => {
+    seedCheckpoint('checkpoint-session-delete', 'run-session-delete')
+    gitStoreMocks.deleteCheckpointRefs.mockRejectedValueOnce(new Error('locked ref'))
+
+    await expect(prepareSessionDeletion('session-1')).rejects.toMatchObject({
+      code: 'turn_checkpoint_cleanup_failed',
+      status: 503,
+    })
+    expect(db().select().from(turnCheckpoints).get()).toEqual(expect.objectContaining({
+      status: 'cleanup_pending',
+      cleanupReason: 'session-delete',
+      errorText: 'locked ref',
+    }))
+
+    await expect(prepareSessionDeletion('session-1')).resolves.toBeUndefined()
+    expect(db().select().from(turnCheckpoints).all()).toEqual([])
   })
 })
