@@ -69,7 +69,6 @@
   "tools.dimension.overall": "Overall",
   "tools.dimension.runtime": "By runtime",
   "tools.empty": "No tool calls in this range",
-  "tools.groupSummary": "{{calls}} calls · {{rate}}% success",
   "tools.otherTools": "Other tools",
   "tools.outcome.denied": "{{count}} denied",
   "tools.outcome.failed": "{{count}} failed",
@@ -91,5 +90,9 @@
   "trend.toggleCost": "Cost",
   "trend.toggleTokens": "Tokens",
   "trend.total": "Total",
-  "trend.visibleRange": "{{start}} – {{end}}"
+  "trend.visibleRange": "{{start}} – {{end}}",
+  "tools.compare.titleRuntime": "Compare tool preference by runtime",
+  "tools.compare.titleModel": "Compare tool preference by model",
+  "tools.compare.hint": "Up to {{max}}",
+  "tools.compare.empty": "Select at least one to compare"
 }

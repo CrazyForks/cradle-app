@@ -141,7 +141,8 @@ export function getHourlyUsagePattern(): HourlyUsage[] {
   })
 }
 
-export function getUsageSummary(): UsageSummary {
+export function getUsageSummary(from?: string, to?: string): UsageSummary {
+  const { fromEpoch, toEpoch } = resolveTimeRange(from, to)
   const totals = db().get<{
     prompt_tokens: number
     completion_tokens: number
@@ -154,6 +155,8 @@ export function getUsageSummary(): UsageSummary {
       COALESCE(SUM(${usageLogs.totalTokens}), 0) AS total_tokens,
       COUNT(DISTINCT ${usageTurnKey}) AS count
     FROM ${usageLogs}
+    WHERE ${usageLogs.createdAt} >= ${fromEpoch}
+      AND ${usageLogs.createdAt} < ${toEpoch}
   `)
 
   // Agent-level aggregation: usage_logs → sessions → agents
@@ -171,6 +174,8 @@ export function getUsageSummary(): UsageSummary {
     FROM ${usageLogs}
     INNER JOIN ${sessions} ON ${sessions.id} = ${usageLogs.sessionId}
     INNER JOIN ${agents} ON ${agents.id} = ${sessions.agentId}
+    WHERE ${usageLogs.createdAt} >= ${fromEpoch}
+      AND ${usageLogs.createdAt} < ${toEpoch}
     GROUP BY ${agents.id}, ${agents.name}
     ORDER BY total_tokens DESC
   `)
@@ -190,6 +195,8 @@ export function getUsageSummary(): UsageSummary {
     FROM ${usageLogs}
     LEFT JOIN ${providerTargets} ON ${providerTargets.id} = ${usageLogs.providerTargetId}
     WHERE ${usageLogs.providerTargetId} IS NOT NULL
+      AND ${usageLogs.createdAt} >= ${fromEpoch}
+      AND ${usageLogs.createdAt} < ${toEpoch}
     GROUP BY ${usageLogs.providerTargetId}, ${providerTargets.displayName}
     ORDER BY total_tokens DESC
   `)
@@ -205,6 +212,8 @@ export function getUsageSummary(): UsageSummary {
       COUNT(DISTINCT ${usageTurnKey}) AS count
     FROM ${usageLogs}
     WHERE ${usageLogs.modelId} IS NOT NULL
+      AND ${usageLogs.createdAt} >= ${fromEpoch}
+      AND ${usageLogs.createdAt} < ${toEpoch}
     GROUP BY ${usageLogs.modelId}
     ORDER BY total_tokens DESC
   `)
@@ -829,12 +838,22 @@ export interface DailyToolUsage {
   count: number
 }
 
+export interface DailyToolUsageByRuntime extends DailyToolUsage {
+  runtimeKind: string
+}
+
+export interface DailyToolUsageByModel extends DailyToolUsage {
+  modelId: string
+}
+
 export interface ToolUsageBreakdown {
   overall: ToolUsageEntry[]
   byRuntime: ToolUsageByRuntime[]
   byModel: ToolUsageByModel[]
   summary: ToolUsageSummary
   daily: DailyToolUsage[]
+  dailyByRuntime: DailyToolUsageByRuntime[]
+  dailyByModel: DailyToolUsageByModel[]
 }
 
 type ToolCallOutcome = 'success' | 'failure' | 'denied' | 'interrupted'
@@ -880,6 +899,8 @@ export function getToolUsageBreakdown(from?: number): ToolUsageBreakdown {
   const runtimeMap = new Map<string, Map<string, ToolAccumulator>>()
   const modelMap = new Map<string, Map<string, ToolAccumulator>>()
   const dailyMap = new Map<string, number>()
+  const dailyRuntimeMap = new Map<string, number>()
+  const dailyModelMap = new Map<string, number>()
   const summaryAcc = createToolAccumulator()
 
   for (const call of calls) {
@@ -894,12 +915,30 @@ export function getToolUsageBreakdown(from?: number): ToolUsageBreakdown {
     const date = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`
     const dailyKey = `${date}|${call.toolName}`
     dailyMap.set(dailyKey, (dailyMap.get(dailyKey) ?? 0) + 1)
+    const dailyRuntimeKey = `${date}|${call.runtimeKind}|${call.toolName}`
+    dailyRuntimeMap.set(dailyRuntimeKey, (dailyRuntimeMap.get(dailyRuntimeKey) ?? 0) + 1)
+    const dailyModelKey = `${date}|${call.modelId}|${call.toolName}`
+    dailyModelMap.set(dailyModelKey, (dailyModelMap.get(dailyModelKey) ?? 0) + 1)
   }
 
   const daily = Array.from(dailyMap.entries())
     .map(([key, count]) => {
       const [date, toolName] = key.split('|')
       return { date, toolName, count }
+    })
+    .sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
+
+  const dailyByRuntime = Array.from(dailyRuntimeMap.entries())
+    .map(([key, count]) => {
+      const [date, runtimeKind, toolName] = key.split('|')
+      return { date, runtimeKind, toolName, count }
+    })
+    .sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
+
+  const dailyByModel = Array.from(dailyModelMap.entries())
+    .map(([key, count]) => {
+      const [date, modelId, toolName] = key.split('|')
+      return { date, modelId, toolName, count }
     })
     .sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
 
@@ -926,6 +965,8 @@ export function getToolUsageBreakdown(from?: number): ToolUsageBreakdown {
       medianDurationMs: medianDurationMs(summaryAcc.durationsMs),
     },
     daily,
+    dailyByRuntime,
+    dailyByModel,
   }
 }
 

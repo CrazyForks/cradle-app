@@ -3,7 +3,6 @@ import { useMemo } from 'react'
 
 import { RouteErrorFallback } from '~/components/common/route-error-fallback'
 import type { SurfaceRoute } from '~/navigation/surface-identity'
-import { routeTree } from '~/routeTree.gen'
 
 import { SplitPaneRootProvider } from './split-pane-root-context'
 
@@ -28,7 +27,9 @@ export function SplitPaneRouter({ route }: { route: SurfaceRoute }) {
   const paneRouter = useMemo(
     () =>
       createRouter({
-        routeTree,
+        // Reuse the initialized host tree. Importing the generated tree from
+        // this lazy chunk can re-enter router initialization during Vite HMR.
+        routeTree: hostRouter.routeTree,
         history: createMemoryHistory({ initialEntries: [href] }),
         defaultErrorComponent: RouteErrorFallback,
         defaultPendingComponent: () => null,
@@ -36,7 +37,7 @@ export function SplitPaneRouter({ route }: { route: SurfaceRoute }) {
         // would warm routes the user cannot navigate the window to anyway.
         defaultPreload: false,
       }),
-    [href],
+    [hostRouter.routeTree, href],
   )
 
   return (

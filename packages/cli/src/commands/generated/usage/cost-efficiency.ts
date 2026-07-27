@@ -3,35 +3,22 @@ import type { CliOperationSpec } from '../../../runtime/types'
 import type { Command } from 'commander'
 
 const spec = {
-  "arguments": [
-    {
-      "name": "sessionId",
-      "required": true,
-      "target": "path.sessionId",
-      "type": "string"
-    }
-  ],
+  "arguments": [],
   "command": [
-    "chat",
-    "messages"
+    "usage",
+    "cost-efficiency"
   ],
-  "description": "Get chat message rows",
+  "description": "Get cost efficiency trend (avg tokens per run over time)",
   "flags": [
     {
-      "name": "cursor",
+      "name": "days",
       "required": false,
-      "target": "query.cursor",
+      "target": "query.days",
       "type": "string"
-    },
-    {
-      "name": "limit",
-      "required": false,
-      "target": "query.limit",
-      "type": "number"
     }
   ],
   "method": "get",
-  "path": "/chat/sessions/{sessionId}/messages"
+  "path": "/usage/cost-efficiency"
 } satisfies CliOperationSpec
 
 export function register(program: Command): void {

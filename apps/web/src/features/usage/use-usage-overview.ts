@@ -56,30 +56,31 @@ export function useUsageOverview(range: UsageRangeKey) {
   const hourlyQuery = useQuery({
     ...getUsagePatternsHourlyOptions(),
   })
+  // Summary, cost summary, and tool stats are server-aggregated over the
+  // selected range (rankings and totals can't be sliced client-side like the
+  // dense daily series), so a range change triggers refetches here — cached
+  // per range by React Query.
+  // `from` must be a bare YYYY-MM-DD date: the contract is `format: 'date'`,
+  // and the generated client zod-validates it (full ISO datetimes are rejected).
+  const rangeFrom = useMemo(() => {
+    const date = new Date()
+    date.setDate(date.getDate() - rangeDays(range))
+    return date.toISOString().slice(0, 10)
+  }, [range])
   const summaryQuery = useQuery({
-    ...getUsageSummaryOptions(),
+    ...getUsageSummaryOptions({ query: { from: rangeFrom } }),
   })
   const statsQuery = useQuery({
     ...getUsageStatsOptions(),
   })
   const costSummaryQuery = useQuery({
-    ...getUsageCostSummaryOptions(),
+    ...getUsageCostSummaryOptions({ query: { from: rangeFrom } }),
   })
   const dailyCostQuery = useQuery({
     ...getUsageCostDailyOptions(),
   })
-  // Tool stats are server-aggregated over the selected range (rankings and
-  // summary can't be sliced client-side like the dense daily series), so the
-  // range change does trigger one refetch here — cached per range by React Query.
-  // `from` must be a bare YYYY-MM-DD date: the contract is `format: 'date'`,
-  // and the generated client zod-validates it (full ISO datetimes are rejected).
-  const toolsFrom = useMemo(() => {
-    const date = new Date()
-    date.setDate(date.getDate() - rangeDays(range))
-    return date.toISOString().slice(0, 10)
-  }, [range])
   const toolsQuery = useQuery({
-    ...getUsageToolsOptions({ query: { from: toolsFrom } }),
+    ...getUsageToolsOptions({ query: { from: rangeFrom } }),
   })
   const costEfficiencyQuery = useQuery({
     ...getUsageCostEfficiencyOptions({ query: { days: '365' } }),
@@ -116,6 +117,5 @@ export function useUsageOverview(range: UsageRangeKey) {
       && statsQuery.isSuccess
       && costSummaryQuery.isSuccess
       && dailyCostQuery.isSuccess,
-    hasData: Boolean(summary && summary.totalTokens > 0),
   }
 }

@@ -168,13 +168,17 @@ export function createChatStore() {
           const sourceMessage = sourceIdx === -1 ? null : messages[sourceIdx]
           const steerMessage = ensureSteerSplitMetadata(message, sourceMessage)
 
-          const nextMessages = sourceIdx === -1
-            ? [...messages, steerMessage]
-            : [
-                ...messages.slice(0, sourceIdx + 1),
-                steerMessage,
-                ...messages.slice(sourceIdx + 1),
-              ]
+          // Append after existing steers for this assistant — never insert at
+          // sourceIdx+1 or a later steer would reverse chronological order and
+          // corrupt head/mid/tail cuts in expandMessagesForDisplay.
+          const insertIdx = sourceIdx === -1 || !effectiveSourceId
+            ? messages.length
+            : findLiveSteerAppendIndex(messages, sourceIdx, effectiveSourceId)
+          const nextMessages = [
+            ...messages.slice(0, insertIdx),
+            steerMessage,
+            ...messages.slice(insertIdx),
+          ]
 
           return produce(state, (draft) => {
             draft.messagesMap.set(sessionId, nextMessages as Draft<UIMessage[]>)
@@ -1098,6 +1102,18 @@ function canonicalMessageId(messageId: string): string {
 }
 
 function readSteerSourceMessageId(message: UIMessage): string | null {
+  const continuation = readSteerContinuation(message)
+  if (!continuation) {
+    return null
+  }
+  const sourceMessageId = continuation.sourceMessageId
+  return typeof sourceMessageId === 'string' && sourceMessageId ? sourceMessageId : null
+}
+
+function readSteerContinuation(message: UIMessage): {
+  mode?: unknown
+  sourceMessageId?: unknown
+} | null {
   const metadata = (message as { metadata?: unknown }).metadata
   if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
     return null
@@ -1110,8 +1126,30 @@ function readSteerSourceMessageId(message: UIMessage): string | null {
   if (!continuation || typeof continuation !== 'object' || Array.isArray(continuation)) {
     return null
   }
-  const sourceMessageId = (continuation as { sourceMessageId?: unknown }).sourceMessageId
-  return typeof sourceMessageId === 'string' && sourceMessageId ? sourceMessageId : null
+  return continuation as { mode?: unknown, sourceMessageId?: unknown }
+}
+
+/** Index after the last same-source live steer following `sourceIdx`, else `sourceIdx + 1`. */
+function findLiveSteerAppendIndex(
+  messages: UIMessage[],
+  sourceIdx: number,
+  sourceMessageId: string,
+): number {
+  let insertIdx = sourceIdx + 1
+  while (insertIdx < messages.length) {
+    const candidate = messages[insertIdx]!
+    const continuation = readSteerContinuation(candidate)
+    if (
+      candidate.role === 'user'
+      && continuation?.mode === 'steer'
+      && continuation.sourceMessageId === sourceMessageId
+    ) {
+      insertIdx++
+      continue
+    }
+    break
+  }
+  return insertIdx
 }
 
 /** Move leases / run refs off synthetic `:steer-tail` ids onto the real assistant id. */

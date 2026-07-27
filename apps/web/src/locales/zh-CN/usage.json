@@ -69,7 +69,6 @@
   "tools.dimension.overall": "全部",
   "tools.dimension.runtime": "按 Runtime",
   "tools.empty": "该时间范围内没有工具调用",
-  "tools.groupSummary": "{{calls}} 次调用 · 成功率 {{rate}}%",
   "tools.otherTools": "其他工具",
   "tools.outcome.denied": "{{count}} 次被拒绝",
   "tools.outcome.failed": "{{count}} 次失败",
@@ -91,5 +90,9 @@
   "trend.toggleCost": "成本",
   "trend.toggleTokens": "Tokens",
   "trend.total": "总计",
-  "trend.visibleRange": "{{start}} – {{end}}"
+  "trend.visibleRange": "{{start}} – {{end}}",
+  "tools.compare.titleRuntime": "对比各 Runtime 的工具偏好",
+  "tools.compare.titleModel": "对比各模型的工具偏好",
+  "tools.compare.hint": "最多选 {{max}} 个",
+  "tools.compare.empty": "选择至少一个进行对比"
 }

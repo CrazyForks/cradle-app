@@ -1445,7 +1445,10 @@ export type GetUsagePatternsHourlyResponse = GetUsagePatternsHourlyResponses[key
 export type GetUsageSummaryData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        from?: string;
+        to?: string;
+    };
     url: '/usage/summary';
 };
 
@@ -1731,6 +1734,18 @@ export type GetUsageToolsResponses = {
         };
         daily: Array<{
             date: string;
+            toolName: string;
+            count: number;
+        }>;
+        dailyByRuntime: Array<{
+            date: string;
+            runtimeKind: string;
+            toolName: string;
+            count: number;
+        }>;
+        dailyByModel: Array<{
+            date: string;
+            modelId: string;
             toolName: string;
             count: number;
         }>;
@@ -7629,7 +7644,9 @@ export type GetSessionsByIdEnvironmentResponses = {
             workspacePath: string;
             startRef: string;
             endRef: string | null;
-            status: 'capturing' | 'completed' | 'failed';
+            status: 'capturing' | 'completed' | 'failed' | 'cleanup_pending';
+            cleanupReason: string | null;
+            cleanupClaimedAt: number | null;
             changedFiles: number;
             additions: number;
             deletions: number;
@@ -7969,7 +7986,9 @@ export type GetSessionsByIdTurnCheckpointsResponses = {
         workspacePath: string;
         startRef: string;
         endRef: string | null;
-        status: 'capturing' | 'completed' | 'failed';
+        status: 'capturing' | 'completed' | 'failed' | 'cleanup_pending';
+        cleanupReason: string | null;
+        cleanupClaimedAt: number | null;
         changedFiles: number;
         additions: number;
         deletions: number;
@@ -8007,7 +8026,9 @@ export type PostSessionsByIdTurnCheckpointsByCheckpointIdRestoreResponses = {
             workspacePath: string;
             startRef: string;
             endRef: string | null;
-            status: 'capturing' | 'completed' | 'failed';
+            status: 'capturing' | 'completed' | 'failed' | 'cleanup_pending';
+            cleanupReason: string | null;
+            cleanupClaimedAt: number | null;
             changedFiles: number;
             additions: number;
             deletions: number;
@@ -8048,7 +8069,9 @@ export type PostSessionsByIdTurnCheckpointsByCheckpointIdRewindResponses = {
             workspacePath: string;
             startRef: string;
             endRef: string | null;
-            status: 'capturing' | 'completed' | 'failed';
+            status: 'capturing' | 'completed' | 'failed' | 'cleanup_pending';
+            cleanupReason: string | null;
+            cleanupClaimedAt: number | null;
             changedFiles: number;
             additions: number;
             deletions: number;

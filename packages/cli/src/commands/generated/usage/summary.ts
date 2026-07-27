@@ -9,7 +9,20 @@ const spec = {
     "summary"
   ],
   "description": "Get usage summary",
-  "flags": [],
+  "flags": [
+    {
+      "name": "from",
+      "required": false,
+      "target": "query.from",
+      "type": "string"
+    },
+    {
+      "name": "to",
+      "required": false,
+      "target": "query.to",
+      "type": "string"
+    }
+  ],
   "method": "get",
   "path": "/usage/summary"
 } satisfies CliOperationSpec

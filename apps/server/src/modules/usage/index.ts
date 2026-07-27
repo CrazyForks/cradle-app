@@ -46,13 +46,14 @@ export const usage = new Elysia({
     },
     response: { 200: t.Array(UsageModel.hourlyUsage) },
   })
-  .get('/summary', () => Usage.getUsageSummary(), {
+  .get('/summary', ({ query }) => Usage.getUsageSummary(query.from, query.to), {
     detail: {
       'summary': 'Get usage summary',
       'x-cradle-cli': {
         command: ['usage', 'summary'],
       },
     },
+    query: UsageModel.dateRangeQuery,
     response: { 200: UsageModel.usageSummary },
   })
   .get('/stats', () => Usage.getUsageStats(), {

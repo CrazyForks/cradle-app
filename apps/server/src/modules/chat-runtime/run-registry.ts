@@ -16,6 +16,8 @@ export interface ActiveRun {
   runId: string
   sessionId: string
   messageId: string
+  /** Unix seconds when the run row was created; used for the terminal durationMs stamp. */
+  startedAtSeconds: number
   providerTargetKind: 'manual' | 'external' | null
   providerTargetId: string | null
   runtime: ChatRuntime

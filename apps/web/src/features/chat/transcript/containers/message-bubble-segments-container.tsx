@@ -60,17 +60,17 @@ export function MessageBubbleSegmentsContainer({
   const runMeta = useChatRenderStore(chatSelectors.runDisplayMeta(frame.id), (a, b) => a === b)
   const localRunTotalMs = runMeta ? readLocalRunTimings(runMeta).totalMs : null
   // History restores have no session-local run meta; fall back to the durable
-  // per-session run snapshots keyed by assistant messageId.
+  // duration stamped on the message, then to per-session run snapshots.
   const { data: runSnapshotPage } = useQuery({
     ...getChatSessionsBySessionIdRunSnapshotsOptions({ path: { sessionId } }),
-    enabled: isAssistant && !isStreaming && localRunTotalMs === null,
+    enabled: isAssistant && !isStreaming && localRunTotalMs === null && frame.runDurationMs === null,
     staleTime: 60_000,
   })
   const restoredRunTotalMs = (() => {
     const snapshot = runSnapshotPage?.snapshots.find(candidate => candidate.messageId === frame.id)
     return snapshot?.completedAt != null ? Math.max(0, snapshot.completedAt - snapshot.startedAt) : null
   })()
-  const runTotalMs = localRunTotalMs ?? restoredRunTotalMs
+  const runTotalMs = localRunTotalMs ?? frame.runDurationMs ?? restoredRunTotalMs
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState(0)
   const imageAttachmentBySegmentKey = new Map(imageAttachments.map(attachment => [attachment.segmentKey, attachment.part]))

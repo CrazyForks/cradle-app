@@ -7,6 +7,7 @@ import {
 } from '~/features/chat/session/use-chat-session-types'
 
 import { chatSelectors, useChatStore } from './chat'
+import { applyPartsProjection } from './chat/expand-messages-for-display'
 
 function resetChatStore(): void {
   useChatStore.setState(state => ({
@@ -581,6 +582,94 @@ describe('chat store messages', () => {
       role: 'assistant',
       parts: [{ type: 'text', text: 'Before steer. After steer.' }],
     })
+  })
+
+  it('appends a second live steer after the first and keeps chronological display cuts', () => {
+    useChatStore.getState().setMessages('session-1', [{
+      id: 'assistant-1',
+      role: 'assistant',
+      parts: [{ type: 'text', text: 'A' }],
+    }])
+    useChatStore.getState().startGeneration('session-1', 'assistant-1', new AbortController())
+
+    useChatStore.getState().insertLiveSteerMessage('session-1', {
+      id: 'steer-1',
+      role: 'user',
+      parts: [{ type: 'text', text: 'first steer' }],
+      metadata: {
+        cradle: {
+          continuation: {
+            mode: 'steer',
+            queueItemId: 'steer-1',
+            sourceMessageId: 'assistant-1',
+            splitParts: [{ type: 'text', text: 'A' }],
+          },
+        },
+      },
+    } as UIMessage)
+
+    useChatStore.getState().updateMessage('session-1', 'assistant-1', message => ({
+      ...message,
+      parts: [
+        { type: 'text', text: 'A' },
+        { type: 'text', text: 'B' },
+      ],
+    }))
+
+    useChatStore.getState().insertLiveSteerMessage('session-1', {
+      id: 'steer-2',
+      role: 'user',
+      parts: [{ type: 'text', text: 'second steer' }],
+      metadata: {
+        cradle: {
+          continuation: {
+            mode: 'steer',
+            queueItemId: 'steer-2',
+            sourceMessageId: 'assistant-1',
+            splitParts: [
+              { type: 'text', text: 'A' },
+              { type: 'text', text: 'B' },
+            ],
+          },
+        },
+      },
+    } as UIMessage)
+
+    useChatStore.getState().updateMessage('session-1', 'assistant-1', message => ({
+      ...message,
+      parts: [
+        { type: 'text', text: 'A' },
+        { type: 'text', text: 'B' },
+        { type: 'text', text: 'C' },
+      ],
+    }))
+
+    const messages = useChatStore.getState().messagesMap.get('session-1')!
+    expect(messages.map(message => message.id)).toEqual([
+      'assistant-1',
+      'steer-1',
+      'steer-2',
+    ])
+
+    const rows = chatSelectors.displayRows('session-1')(useChatStore.getState())
+    expect(rows.map(row => row.rowKey)).toEqual([
+      'assistant-1#steer-head-steer-1',
+      'steer-1',
+      'assistant-1#steer-mid-steer-2',
+      'steer-2',
+      'assistant-1#steer-tail-steer-2',
+    ])
+
+    const assistant = messages[0]!
+    expect(applyPartsProjection(assistant, rows[0]!.partsProjection).parts).toEqual([
+      { type: 'text', text: 'A' },
+    ])
+    expect(applyPartsProjection(assistant, rows[2]!.partsProjection).parts).toEqual([
+      { type: 'text', text: 'B' },
+    ])
+    expect(applyPartsProjection(assistant, rows[4]!.partsProjection).parts).toEqual([
+      { type: 'text', text: 'C' },
+    ])
   })
 
   it('keeps canonical live steer snapshots anchored by queue item id', () => {

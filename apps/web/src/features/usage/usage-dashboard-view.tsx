@@ -58,7 +58,10 @@ export function UsageDashboardView({
   themeMode,
 }: UsageDashboardViewProps) {
   const { t } = useTranslation('usage')
-  const hasData = Boolean(summary && summary.totalTokens > 0)
+  // "Ever used" must come from the unscoped 365-day series, not the
+  // range-scoped summary — otherwise a range with zero usage hides the range
+  // selector behind the empty state with no way back.
+  const hasData = daily.some(entry => entry.totalTokens > 0)
 
   const hasCost = Boolean(costSummary && costSummary.totalCostUsd > 0)
   const hasRankedUsage = Boolean(

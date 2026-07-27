@@ -287,6 +287,11 @@ export const zGetUsageDailyByModelQuery = z.object({
     ]).optional()
 });
 
+export const zGetUsageSummaryQuery = z.object({
+    from: z.iso.date().optional(),
+    to: z.iso.date().optional()
+});
+
 export const zGetUsageSessionsRecentQuery = z.object({
     limit: z.union([
         z.string(),

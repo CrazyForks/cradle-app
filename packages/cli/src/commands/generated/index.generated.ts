@@ -157,6 +157,7 @@ import { register as registerIssueMove } from './issue/move'
 import { register as registerIssueRelationCreate } from './issue/relation/create'
 import { register as registerIssueRelationDelete } from './issue/relation/delete'
 import { register as registerIssueRelationList } from './issue/relation/list'
+import { register as registerIssueReorder } from './issue/reorder'
 import { register as registerIssueSearch } from './issue/search'
 import { register as registerIssueSessions } from './issue/sessions'
 import { register as registerIssueStatusCreate } from './issue/status/create'
@@ -295,6 +296,7 @@ import { register as registerSkillSourceImport } from './skill/source/import'
 import { register as registerUsageCostDaily } from './usage/cost/daily'
 import { register as registerUsageCostSessions } from './usage/cost/sessions'
 import { register as registerUsageCostSummary } from './usage/cost/summary'
+import { register as registerUsageCostEfficiency } from './usage/cost-efficiency'
 import { register as registerUsageDaily } from './usage/daily'
 import { register as registerUsageDailyByModel } from './usage/daily-by-model'
 import { register as registerUsagePatternsHourly } from './usage/patterns/hourly'
@@ -303,6 +305,7 @@ import { register as registerUsageSession } from './usage/session'
 import { register as registerUsageSessionsRecent } from './usage/sessions/recent'
 import { register as registerUsageStats } from './usage/stats'
 import { register as registerUsageSummary } from './usage/summary'
+import { register as registerUsageTools } from './usage/tools'
 import { register as registerWorkArchive } from './work/archive'
 import { register as registerWorkCreate } from './work/create'
 import { register as registerWorkGet } from './work/get'
@@ -528,6 +531,7 @@ export function registerGeneratedCommands(program: Command): void {
   registerIssueRelationCreate(program)
   registerIssueRelationDelete(program)
   registerIssueRelationList(program)
+  registerIssueReorder(program)
   registerIssueSearch(program)
   registerIssueSessions(program)
   registerIssueStatusCreate(program)
@@ -666,6 +670,7 @@ export function registerGeneratedCommands(program: Command): void {
   registerUsageCostDaily(program)
   registerUsageCostSessions(program)
   registerUsageCostSummary(program)
+  registerUsageCostEfficiency(program)
   registerUsageDaily(program)
   registerUsageDailyByModel(program)
   registerUsagePatternsHourly(program)
@@ -674,6 +679,7 @@ export function registerGeneratedCommands(program: Command): void {
   registerUsageSessionsRecent(program)
   registerUsageStats(program)
   registerUsageSummary(program)
+  registerUsageTools(program)
   registerWorkArchive(program)
   registerWorkCreate(program)
   registerWorkGet(program)

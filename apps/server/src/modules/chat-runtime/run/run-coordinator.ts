@@ -291,6 +291,7 @@ export async function createRun(
       runId: run.id,
       sessionId: input.sessionId,
       messageId: draft.assistantMessageId,
+      startedAtSeconds: run.startedAt,
       providerTargetKind: context.providerTarget?.kind ?? null,
       providerTargetId: context.providerTarget?.id ?? null,
       runtime,

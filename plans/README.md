@@ -101,6 +101,13 @@ advisor-plans/001 留下的"provider 接入 simulator"后续——vitest globalS
 request ledger 断言;Options 构造类断言保留 unit test。Step 1 为可行性门(CLI 离线
 带不起来就 STOP,维持 unit 现状)。
 
+2026-07-27 在 commit `28ff968c` 上补充 Plan 071：删除 top-level active Chat run 的
+append-only `UIMessageChunk` replay retention。Plan 054 的 run-owned monotonic cursor、
+terminal ordering 与 Sync liveness 保留；所有 active-run 初次连接/重连统一从当前
+`UIMessage + UIMessageStreamState` 生成 snapshot，再衔接更大 cursor 的 live chunks。
+原 replay observability 改为不持有 payload 的 scalar publication counters。明确不做
+payload 截断、provider 限流、DB raw-chunk log、短 tail cache 或兼容 shim。
+
 Each executor: read the plan fully before starting, run its drift check, honor its
 STOP conditions, and update your row below when done. Plans are self-contained —
 they do not assume you saw the audit or any other plan.
@@ -181,6 +188,7 @@ Ordered by leverage (security/correctness first, structural refactors last).
 | 068  | Split claude-agent provider.ts into an owner directory + declaration-extractor re-justification | P2 | L | 065, 066, 067 | DONE |
 | 069  | Demote the claude-agent state snapshot to a checkpoint; rebuild the UI activity feed from authoritative history | P2 | XL | 065, 066 (coordinate with 050, 061) | BLOCKED (SDK transcripts are pruned and omit provider activity facts; re-plan over Cradle `session_events`) |
 | 070  | Test the Claude Agent provider against the real wire via a shared model-api-simulator harness | P1 | L | 065, 066 | DONE |
+| 071  | Eliminate active-run replay retention and recover from snapshots | P0 | M | — (supersedes Plan 054 replay retention only) | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED (one-line rationale).
 
@@ -290,6 +298,7 @@ splitting until this track is stable.
 - 068 requires 065-067: splitting `provider.ts` first would force the three behavior plans through a moving target.
 - 069 is blocked: the SDK transcript defaults to 30-day cleanup and omits permission, auth, rate-limit, and task lifecycle facts, so it cannot be the cold-read authority. Re-plan durable Claude activity as normalized Cradle `session_events`; keep transcripts as optional provider artifacts.
 - 070 requires 065 and 066 (its integration specs assert the fixed behavior; landing them earlier would pin the bugs as green). Its Step 1 is a feasibility gate — if the bundled CLI cannot run against the simulator offline, the plan stops at "keep unit tests" and reports.
+- 071 preserves completed Plan 054's run-scoped cursor, terminal ordering, and WebSocket liveness but supersedes its append-only active-run replay retention after snapshot recovery landed. It is independent of Plan 061 semantics; coordinate overlapping lifecycle files and stop on drift rather than changing admission/completion ownership.
 - 042 follows 040 and removes Automation's remaining raw-fetch/auth exception; its authentication bypass can make the entire feature return 401, so execute this P0 first.
 - 043 follows 040 and centralizes Draft state/transport transitions; it is independent of 042 and may run in parallel in an isolated worktree.
 - 044 builds on 024's durable facts and 041's process lifecycle owner; it must not change event schemas or provider protocols.
@@ -370,6 +379,9 @@ orchestration layer) would be reasonable; a whole-codebase migration is negative
 
 ## Findings considered and rejected (so they aren't re-audited)
 
+- **Bound or truncate active-run replay by bytes/count** — rejected in favor of Plan 071. A cap only changes when complete recovery fails and still retains repeated large payload copies below the cap; snapshot bootstrap preserves complete current state without historical retention.
+- **Move raw active-run chunk replay into SQLite** — rejected. Raw AI SDK deltas and repeated tool-output snapshots are transient transport, not domain facts; persisting them duplicates the current message projection and moves the same incorrect retention model to disk.
+- **Throttle repeated provider tool-output updates** — rejected. Live consumers must continue receiving provider updates; Plan 071 changes reconnect storage semantics rather than suppressing upstream events.
 - **Adopt SDK `sessionStore` (alpha) for claudeAi persistence** — deferred from Plan 066; principled long-term fix for claudeAi session replay, but the API is alpha. Re-evaluate when stable.
 - **Live-reconcile `mcpServers`/`skills`/`tools` mid-session via `setMcpServers`/`reloadSkills`/`applyFlagSettings`** — deferred from Plan 066; needs a product policy on which settings may change mid-session. Until then they are creation-time only.
 - **Migrate claude-agent `activeQueries` onto `provider-runtime/host-manager.ts` (refcount/TTL/idle reap)** — deferred from Plan 065; 065 adds deterministic disposal (shutdown + archive), idle reaping is a follow-up that should reuse the host manager.

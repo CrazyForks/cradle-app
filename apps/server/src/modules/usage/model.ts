@@ -234,6 +234,18 @@ export const UsageModel = {
       toolName: t.String(),
       count: t.Number(),
     })),
+    dailyByRuntime: t.Array(t.Object({
+      date: t.String(),
+      runtimeKind: t.String(),
+      toolName: t.String(),
+      count: t.Number(),
+    })),
+    dailyByModel: t.Array(t.Object({
+      date: t.String(),
+      modelId: t.String(),
+      toolName: t.String(),
+      count: t.Number(),
+    })),
   }),
 
   // ── Cost Efficiency Trend models ──

@@ -200,6 +200,14 @@ export const populatedUsageDashboardFixture: UsageDashboardViewProps = {
       medianDurationMs: 820,
     },
     daily: toolDaily,
+    dailyByRuntime: toolDaily.flatMap(row => [
+      { date: row.date, runtimeKind: 'opencode', toolName: row.toolName, count: Math.ceil(row.count * 0.6) },
+      { date: row.date, runtimeKind: 'codex', toolName: row.toolName, count: Math.floor(row.count * 0.4) },
+    ]),
+    dailyByModel: toolDaily.flatMap(row => [
+      { date: row.date, modelId: 'gpt-5.2', toolName: row.toolName, count: Math.ceil(row.count * 0.55) },
+      { date: row.date, modelId: 'claude-opus-4.6', toolName: row.toolName, count: Math.floor(row.count * 0.45) },
+    ]),
     overall: toolOverall,
     byRuntime: [
       { runtimeKind: 'opencode', tools: [

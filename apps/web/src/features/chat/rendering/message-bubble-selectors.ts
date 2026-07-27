@@ -43,6 +43,8 @@ export interface MessageFrame {
   isGoalMessage: boolean
   bangCommand: BangCommandMetadata | null
   bangResult: BangResultMetadata | null
+  /** Durable run duration stamped by the server on terminal assistant messages. */
+  runDurationMs: number | null
   hasHiddenRuntimeUserInputTail: boolean
 }
 
@@ -187,8 +189,18 @@ export function readMessageFrame(message: UIMessage): MessageFrame {
     isGoalMessage: isCodexGoalUserMessage(message),
     bangCommand: message.role === 'user' ? readBangCommandMetadata(message) : null,
     bangResult: message.role === 'user' ? readBangResultMetadata(message) : null,
+    runDurationMs: message.role === 'assistant' ? readRunDurationMs(message) : null,
     hasHiddenRuntimeUserInputTail: hasHiddenRuntimeUserInputTail(message),
   }
+}
+
+function readRunDurationMs(message: UIMessage): number | null {
+  const metadata = readRecord((message as { metadata?: unknown }).metadata)
+  const cradleMetadata = readRecord(metadata.cradle)
+  const run = readRecord(cradleMetadata.run)
+  return typeof run.durationMs === 'number' && Number.isFinite(run.durationMs)
+    ? run.durationMs
+    : null
 }
 
 export function areMessageFramesEqual(
@@ -202,6 +214,7 @@ export function areMessageFramesEqual(
     && left?.isGoalMessage === right?.isGoalMessage
     && left?.bangCommand?.command === right?.bangCommand?.command
     && areBangResultsEqual(left?.bangResult ?? null, right?.bangResult ?? null)
+    && left?.runDurationMs === right?.runDurationMs
     && left?.hasHiddenRuntimeUserInputTail === right?.hasHiddenRuntimeUserInputTail
   )
 }

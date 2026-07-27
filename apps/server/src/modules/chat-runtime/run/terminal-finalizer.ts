@@ -15,6 +15,7 @@ import { attachBinding } from '../runtime-session-context'
 import { deleteRunStreamCheckpoint } from '../stream/checkpoint-store'
 import { isChatStreamTraceEnabled, recordChatStreamTrace } from '../stream-trace'
 import {
+  annotateRunResultMessage,
   extractMessageText,
   normalizeMessageSnapshot,
 } from '../ui-message'
@@ -142,7 +143,13 @@ export function createTerminalRunFinalizer(deps: TerminalRunFinalizerDeps) {
     bindingId?: string | null,
   ): Promise<{ messageJsonBytes: number }> {
     const now = currentUnixSeconds()
-    const message = compactStoredMessageSnapshot(normalizeMessageSnapshot(activeRun.finalMessage))
+    const message = annotateRunResultMessage(
+      compactStoredMessageSnapshot(normalizeMessageSnapshot(activeRun.finalMessage)),
+      {
+        runId: activeRun.runId,
+        durationMs: Math.max(0, (now - activeRun.startedAtSeconds) * 1000),
+      },
+    )
     const messageJson = JSON.stringify(message)
     await commitSessionEventsWithProjection(
       activeRun.sessionId,

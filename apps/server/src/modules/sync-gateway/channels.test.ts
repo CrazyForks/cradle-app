@@ -16,6 +16,7 @@ function createActiveRun(): ActiveRun {
     runId: 'run-1',
     sessionId: 'session-1',
     messageId: 'message-1',
+    startedAtSeconds: 0,
     providerTargetKind: null,
     providerTargetId: null,
     runtime: {} as ActiveRun['runtime'],

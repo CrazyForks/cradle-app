@@ -3,35 +3,28 @@ import type { CliOperationSpec } from '../../../runtime/types'
 import type { Command } from 'commander'
 
 const spec = {
-  "arguments": [
-    {
-      "name": "sessionId",
-      "required": true,
-      "target": "path.sessionId",
-      "type": "string"
-    }
-  ],
+  "arguments": [],
   "command": [
-    "chat",
-    "messages"
+    "usage",
+    "tools"
   ],
-  "description": "Get chat message rows",
+  "description": "Get tool usage breakdown by runtime and model",
   "flags": [
     {
-      "name": "cursor",
+      "name": "from",
       "required": false,
-      "target": "query.cursor",
+      "target": "query.from",
       "type": "string"
     },
     {
-      "name": "limit",
+      "name": "to",
       "required": false,
-      "target": "query.limit",
-      "type": "number"
+      "target": "query.to",
+      "type": "string"
     }
   ],
   "method": "get",
-  "path": "/chat/sessions/{sessionId}/messages"
+  "path": "/usage/tools"
 } satisfies CliOperationSpec
 
 export function register(program: Command): void {

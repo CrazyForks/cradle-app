@@ -134,6 +134,7 @@ async function startProviderSyntheticTurn(
     runId: run.id,
     sessionId: parentRun.sessionId,
     messageId,
+    startedAtSeconds: run.startedAt,
     providerTargetKind: parentRun.providerTargetKind,
     providerTargetId: parentRun.providerTargetId,
     runtime: parentRun.runtime,

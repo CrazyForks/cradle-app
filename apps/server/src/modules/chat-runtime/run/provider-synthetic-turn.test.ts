@@ -23,6 +23,7 @@ function parentRun(): ActiveRun {
     runId: 'parent-run',
     sessionId: 'session-1',
     messageId: 'parent-message',
+    startedAtSeconds: 0,
     providerTargetKind: null,
     providerTargetId: null,
     runtime: {} as ActiveRun['runtime'],

@@ -149,6 +149,34 @@ export interface BangCommandResultMetadata {
   truncated: boolean
 }
 
+export interface ChatRunResultMetadata {
+  runId: string
+  durationMs: number
+}
+
+/**
+ * Stamps the terminal assistant message with its run identity and wall-clock
+ * duration so history restores can render "Worked for Ns" without querying
+ * run snapshots.
+ */
+export function annotateRunResultMessage(
+  message: UIMessage,
+  run: ChatRunResultMetadata,
+): UIMessage {
+  const metadata = readObjectRecord((message as { metadata?: unknown }).metadata)
+  const cradleMetadata = readObjectRecord(metadata.cradle)
+  return {
+    ...message,
+    metadata: {
+      ...metadata,
+      cradle: {
+        ...cradleMetadata,
+        run,
+      },
+    },
+  } as UIMessage
+}
+
 export function annotateBangResultMessage(
   message: UIMessage,
   result: BangCommandResultMetadata,
