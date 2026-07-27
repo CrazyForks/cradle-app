@@ -39,6 +39,7 @@ import type {
 import {
   createClaudeAgentCanUseTool,
   createClaudeAgentPermissionBridgeState,
+  createClaudeAgentPreToolUseHook,
   updateClaudeAgentPermissionBridgeState,
 } from './permission-bridge'
 import {
@@ -230,11 +231,8 @@ export function buildClaudeQueryOptions(input: {
   const queryOptions: Options = {
     abortController: input.abortController,
     cwd: runtimeContext.cwd,
-    // The SDK process must start in bypass mode so a later live switch back to it works reliably.
-    // streamTurn syncs the user's actual mode immediately after creating the query.
-    permissionMode: 'bypassPermissions',
+    permissionMode,
     allowDangerouslySkipPermissions: readClaudeAgentAllowDangerouslySkipPermissions(runtimeSettings),
-    maxTurns: config.maxTurns,
     additionalDirectories: uniquePaths([
       ...runtimeContext.additionalDirectories,
       ...config.additionalDirectories,
@@ -289,6 +287,13 @@ export function buildClaudeQueryOptions(input: {
       state: permissionBridgeState,
       emitToolApprovalRequest: input.emitToolApprovalRequest,
     })
+    queryOptions.hooks = {
+      ...queryOptions.hooks,
+      PreToolUse: [
+        ...(queryOptions.hooks?.PreToolUse ?? []),
+        { hooks: [createClaudeAgentPreToolUseHook({ state: permissionBridgeState })] },
+      ],
+    }
   }
   if (shouldPersistSession && input.input.runtimeSession.providerSessionId) {
     queryOptions.resume = input.input.runtimeSession.providerSessionId
@@ -419,7 +424,8 @@ function claudeAgentSettingSourcesForAuthMode(
       return ['user', 'project', 'local']
     case 'apiKey':
     default:
-      return []
+      // Keep user-global hooks and MCP servers isolated from custom credential-bearing endpoints.
+      return ['project', 'local']
   }
 }
 
