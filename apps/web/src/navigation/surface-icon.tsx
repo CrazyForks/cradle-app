@@ -5,7 +5,6 @@ import {
   Chat1Line as MessageSquarePlusIcon,
   DashboardLine as KanbanSquareIcon,
   DotCircleLine as CircleDotIcon,
-  DownloadLine as ResourcesIcon,
   FolderOpenLine as FolderOpenIcon,
   GitCompareLine as FileDiffIcon,
   GitPullRequestLine as WorkIcon,
@@ -53,8 +52,6 @@ export function SurfaceIcon({ surface, className }: { surface: Pick<AppSurface, 
       return <CalendarClockIcon className={cls} />
     case 'usage':
       return <BarChart2Icon className={cls} />
-    case 'resources':
-      return <ResourcesIcon className={cls} />
     case 'settings':
       return <SettingsIcon className={cls} />
     case 'onboarding':

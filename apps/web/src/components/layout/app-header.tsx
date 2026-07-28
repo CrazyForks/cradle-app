@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next'
 import { AppHeaderView } from '~/components/layout/app-header-view'
 import { CHROME_COLLAPSED_SIDEBAR_WIDTH } from '~/components/layout/layout-responsive'
 import { useChatSessionLayoutRecord } from '~/components/layout/use-layout-query-records'
-import { DownloadCenterChrome } from '~/features/download-center/download-center-chrome'
 import { SessionExecutionChrome } from '~/features/remote-hosts/session-execution-chrome'
 import { SessionIsolationChrome } from '~/features/session/session-isolation-chrome'
 import { SessionPullRequestChrome } from '~/features/session/session-pull-request-chrome'
@@ -140,7 +139,6 @@ export function AppHeader({
       actions={(
         <>
           {headerActions}
-          <DownloadCenterChrome className="text-muted-foreground" />
           {activeWorkId && <WorkHeaderChrome workId={activeWorkId} />}
         </>
       )}

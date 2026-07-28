@@ -273,16 +273,6 @@ export function openUsage(options: { replace?: boolean } = {}): void {
   }, options)
 }
 
-export function openResources(options: { replace?: boolean } = {}): void {
-  openSurface({
-    id: 'resources',
-    kind: 'resources',
-    title: getI18n().t('chrome:surface.resources'),
-    route: { to: '/resources' },
-    closable: true,
-  }, options)
-}
-
 function readFallbackSurface(
   previousSurfaces: readonly AppSurface[],
   nextSurfaces: readonly AppSurface[],

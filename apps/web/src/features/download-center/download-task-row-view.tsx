@@ -5,7 +5,7 @@ import { Button } from '~/components/ui/button'
 import { cn } from '~/lib/cn'
 import { formatCompactBytes } from '~/lib/number-format'
 
-import { downloadErrorKey, downloadStatusKey, retryDestination } from './presentation'
+import { downloadStatusKey, retryDestination } from './presentation'
 import type { DownloadTask } from './types'
 import { isActiveDownload } from './types'
 
@@ -103,11 +103,15 @@ export function DownloadTaskRowView({
         </Button>
       )}
 
-      {task.status === 'failed' && (
-        <p className="mt-1.5 text-[11px] text-muted-foreground">
+      {task.status === 'failed' && task.error && (
+        <p className="mt-1.5 break-words text-[11px] text-muted-foreground">
           {t('download.error.last')}
           {' '}
-          {t(downloadErrorKey(task))}
+          <span className="font-mono text-foreground">
+            {`[${task.error.code}]`}
+          </span>
+          {': '}
+          <span className="whitespace-pre-wrap">{task.error.message}</span>
         </p>
       )}
     </div>

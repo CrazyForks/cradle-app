@@ -2,6 +2,7 @@ import { AgentList } from '~/features/agent-management/agent-list'
 import { AgentRuntimeSettings } from '~/features/agent-management/agent-runtime-settings'
 import { RuntimesSettings } from '~/features/agent-runtimes/runtimes-settings'
 import { ChronicleSettings } from '~/features/chronicle/chronicle-settings'
+import { ManagedResourcesPage } from '~/features/managed-resources/managed-resources-page'
 import { cn } from '~/lib/cn'
 
 import { AboutSettings } from './about-settings'
@@ -38,6 +39,7 @@ const SECTION_MAP: Record<string, React.ComponentType> = {
   serverEndpoint: ServerEndpointSettings,
   network: ServerEndpointSettings,
   desktop: DesktopUpdateSettings,
+  downloads: ManagedResourcesPage,
   features: FeatureSettings,
   externalIssues: ExternalIssueSourceSettings,
   import: ExternalWorkImportSettings,
@@ -45,7 +47,7 @@ const SECTION_MAP: Record<string, React.ComponentType> = {
   about: AboutSettings,
 }
 
-const FIXED_HEIGHT_SECTIONS = new Set(['import', 'providers', 'agents', 'runtimes', 'integrations'])
+const FIXED_HEIGHT_SECTIONS = new Set(['import', 'providers', 'agents', 'runtimes', 'integrations', 'downloads'])
 
 interface SettingsContentProps {
   section: string
@@ -55,12 +57,14 @@ export function SettingsContent({ section }: SettingsContentProps) {
   const activeSection = !import.meta.env.DEV && (section === 'chronicle' || section === 'externalIssues') ? 'appearance' : section
   const ActiveSection = SECTION_MAP[activeSection] ?? AppearanceSettings
   const fixedHeight = FIXED_HEIGHT_SECTIONS.has(activeSection)
+  const fullBleed = activeSection === 'downloads'
 
   return (
     <div className="h-full min-h-0 w-full min-w-0 flex-1 overflow-hidden">
       <div
         className={cn(
-          'box-border h-full w-full min-w-0 px-8 pt-10',
+          'box-border h-full w-full min-w-0',
+          fullBleed ? 'overflow-hidden' : 'px-8 pt-10',
           fixedHeight ? 'overflow-hidden' : 'overflow-y-auto pb-10',
         )}
       >

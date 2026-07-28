@@ -13,6 +13,7 @@ export default {
   'nav.serverEndpoint': 'Server Endpoint',
   'nav.network': 'Network',
   'nav.desktop': 'Desktop',
+  'nav.downloads': 'Downloads',
   'nav.editor': 'Editor',
   'nav.features': 'Features',
   'nav.externalIssues': 'Issue sources',

@@ -4,6 +4,7 @@ import {
   ChipLine as ChipIcon,
   Cursor2Line as MousePointer2Icon,
   CylinderLine as DatabaseIcon,
+  DownloadLine as DownloadIcon,
   Flag2Line as FlagIcon,
   GiftLine as GiftIcon,
   GitBranchLine as GitBranchIcon,
@@ -204,6 +205,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
         icon: ServerIcon,
         searchKeys: ['remoteHosts.form.sshTarget' as SettingsKey, 'remoteHosts.form.displayName' as SettingsKey],
       },
+      { id: 'downloads', labelKey: 'nav.downloads', icon: DownloadIcon },
       ...(import.meta.env.DEV
         ? [{ id: 'chronicle', labelKey: 'nav.chronicle', icon: ActivityIcon } satisfies SettingsNavItem]
         : []),

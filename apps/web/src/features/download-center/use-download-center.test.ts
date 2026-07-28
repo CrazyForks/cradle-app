@@ -3,7 +3,7 @@
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
-import { downloadErrorKey, downloadStatusKey, retryDestination } from './presentation'
+import { downloadStatusKey, retryDestination } from './presentation'
 import type { DownloadTask } from './types'
 import { downloadTaskKey } from './types'
 import {
@@ -66,17 +66,21 @@ describe('download Center projection', () => {
   })
 
   it('routes retries to the owning feature rather than exposing a generic retry', () => {
-    expect(retryDestination(task({ owner: { namespace: 'chronicle', resourceType: 'model-resource', resourceId: 'audio-asr', displayName: 'Chronicle' } }))).toBe('resources')
-    expect(retryDestination(task({ owner: { namespace: 'opencode', resourceType: 'runtime', resourceId: 'cli', displayName: 'OpenCode' } }))).toBe('resources')
+    expect(retryDestination(task({ owner: { namespace: 'chronicle', resourceType: 'model-resource', resourceId: 'audio-asr', displayName: 'Chronicle' } }))).toBe('downloads')
+    expect(retryDestination(task({ owner: { namespace: 'opencode', resourceType: 'runtime', resourceId: 'cli', displayName: 'OpenCode' } }))).toBe('downloads')
     expect(retryDestination(task({ owner: { namespace: 'desktop-update', resourceType: 'macos-update', resourceId: 'x', displayName: 'Desktop' } }))).toBe('desktop')
     expect(retryDestination(task({ owner: { namespace: 'chronicle', resourceType: 'model-resource-file', resourceId: 'x', displayName: 'Legacy Chronicle' } }))).toBeNull()
     expect(retryDestination(task({ owner: { namespace: 'plugins', resourceType: 'archive', resourceId: 'x', displayName: 'Plugin' } }))).toBeNull()
   })
 
-  it('redacts raw download errors from the global status label', () => {
+  it('keeps the global status label separate from raw task failure details', () => {
     const failedTask = task({ status: 'failed', error: { code: 'network_error', message: 'https://secret.example/path?token=nope', retryable: true } })
     expect(downloadStatusKey(failedTask)).toBe('download.status.failed')
-    expect(downloadErrorKey(failedTask)).toBe('download.error.network')
+    expect(failedTask.error).toEqual({
+      code: 'network_error',
+      message: 'https://secret.example/path?token=nope',
+      retryable: true,
+    })
   })
 
   it('refreshes an owner selector on remount after it unsubscribed while a global subscriber remained', () => {

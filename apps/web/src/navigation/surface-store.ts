@@ -90,7 +90,6 @@ const surfaceRouteSchema = z.discriminatedUnion('to', [
   z.object({ to: z.literal('/awaits') }),
   z.object({ to: z.literal('/automation') }),
   z.object({ to: z.literal('/usage') }),
-  z.object({ to: z.literal('/resources') }),
   z.object({
     to: z.literal('/settings/$section'),
     params: z.object({ section: z.string() }),
@@ -116,7 +115,6 @@ const appSurfaceSchema = z.object({
     'awaits',
     'automation',
     'usage',
-    'resources',
     'settings',
     'onboarding',
     'devtool',

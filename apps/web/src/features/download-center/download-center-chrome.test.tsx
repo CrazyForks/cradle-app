@@ -6,13 +6,12 @@ import { describe, expect, it, vi } from 'vitest'
 import { DownloadTaskRow } from './download-task-row'
 import type { DownloadTask } from './types'
 
-const { openResources, openSettingsSection } = vi.hoisted(() => ({
-  openResources: vi.fn(),
+const { openSettingsSection } = vi.hoisted(() => ({
   openSettingsSection: vi.fn(),
 }))
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
-vi.mock('~/navigation/navigation-commands', () => ({ openResources, openSettingsSection }))
+vi.mock('~/navigation/navigation-commands', () => ({ openSettingsSection }))
 vi.mock('./use-download-center', () => ({ useDownloadCenterCancel: () => vi.fn() }))
 
 function task(overrides: Partial<DownloadTask> = {}): DownloadTask {
@@ -38,12 +37,12 @@ finishedAt: null,
 }
 
 describe('download center chrome', () => {
-  it('navigates the retry action to the owning feature and never displays Bearer details', () => {
+  it('navigates the retry action to the owning feature and displays raw failure details', () => {
     render(<DownloadTaskRow task={task({ error: { code: 'updater_error', message: 'Authorization: Bearer secret-token', retryable: true } })} />)
     fireEvent.click(screen.getByText('download.action.openOwnerRetry'))
-    expect(openResources).toHaveBeenCalledOnce()
-    expect(screen.getByText(/download.error.last/).textContent).toContain('download.error.network')
-    expect(screen.queryByText(/Bearer secret-token/)).toBeNull()
+    expect(openSettingsSection).toHaveBeenCalledWith('downloads')
+    expect(screen.getByText('[updater_error]')).not.toBeNull()
+    expect(screen.getByText('Authorization: Bearer secret-token')).not.toBeNull()
   })
 
   it('uses an accessible progressbar and a 40px cancellation hit target', () => {

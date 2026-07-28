@@ -16,7 +16,6 @@ export type SurfaceKind
     | 'awaits'
     | 'automation'
     | 'usage'
-    | 'resources'
     | 'settings'
     | 'onboarding'
     | 'devtool'
@@ -37,7 +36,6 @@ export type SurfaceRoute
     | { to: '/awaits', params?: undefined, search?: undefined }
     | { to: '/automation', params?: undefined, search?: undefined }
     | { to: '/usage', params?: undefined, search?: undefined }
-    | { to: '/resources', params?: undefined, search?: undefined }
     | { to: '/settings/$section', params: { section: string }, search?: undefined }
     | { to: '/onboarding', params?: undefined, search?: undefined }
     | { to: '/devtool', params?: undefined, search?: undefined }
@@ -150,8 +148,6 @@ export function surfaceIdForRoute(route: SurfaceRoute): string {
       return 'automation'
     case '/usage':
       return 'usage'
-    case '/resources':
-      return 'resources'
     case '/settings/$section':
       return 'settings'
     case '/onboarding':
@@ -193,7 +189,6 @@ function surfaceRouteFromParts(
     case '/awaits':
     case '/automation':
     case '/usage':
-    case '/resources':
     case '/onboarding':
     case '/devtool':
       return { to }
@@ -454,16 +449,6 @@ export function surfaceDraftFromRoute(input: {
       kind: 'usage',
       title: getI18n().t('chrome:surface.usage'),
       route: { to: '/usage' },
-      closable: true,
-    }
-  }
-
-  if (input.pathname === '/resources') {
-    return {
-      id: 'resources',
-      kind: 'resources',
-      title: getI18n().t('chrome:surface.resources'),
-      route: { to: '/resources' },
       closable: true,
     }
   }

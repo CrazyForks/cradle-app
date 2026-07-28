@@ -1,6 +1,6 @@
 import type { DownloadTask } from './types'
 
-export type DownloadRetryDestination = 'resources' | 'desktop'
+export type DownloadRetryDestination = 'downloads' | 'desktop'
 
 /** Failed downloads return to their exact owning flow; the Download Center never retries itself. */
 export function retryDestination(task: DownloadTask): DownloadRetryDestination | null {
@@ -8,14 +8,14 @@ export function retryDestination(task: DownloadTask): DownloadRetryDestination |
     task.owner.namespace === 'chronicle'
     && task.owner.resourceType === 'model-resource'
   ) {
-    return 'resources'
+    return 'downloads'
   }
   if (
     task.owner.namespace === 'opencode'
     && task.owner.resourceType === 'runtime'
     && task.owner.resourceId === 'cli'
   ) {
-    return 'resources'
+    return 'downloads'
   }
   if (task.owner.namespace === 'desktop-update') {
     return 'desktop'
@@ -23,7 +23,7 @@ export function retryDestination(task: DownloadTask): DownloadRetryDestination |
   return null
 }
 
-/** Do not project raw transport errors (URLs, paths, retry details, or stacks) into chrome. */
+/** Status labels describe lifecycle only; failed rows render their own error code and message. */
 export function downloadStatusKey(task: DownloadTask):
   | 'download.status.cancelled'
   | 'download.status.completed'
@@ -40,21 +40,4 @@ export function downloadStatusKey(task: DownloadTask):
     verifying: 'download.status.verifying',
   } as const
   return keys[task.status]
-}
-
-export function downloadErrorKey(task: DownloadTask): 'download.error.cancelled' | 'download.error.network' | 'download.error.storage' | 'download.error.integrity' | 'download.error.general' {
-  switch (task.error?.code) {
-    case 'cancelled': return 'download.error.cancelled'
-    case 'filesystem_error': return 'download.error.storage'
-    case 'size_mismatch':
-    case 'checksum_mismatch': return 'download.error.integrity'
-    case 'timeout':
-    case 'network_error':
-    case 'http_client_error':
-    case 'http_server_error':
-    case 'redirect_error':
-    case 'invalid_response':
-    case 'updater_error': return 'download.error.network'
-    default: return 'download.error.general'
-  }
 }
