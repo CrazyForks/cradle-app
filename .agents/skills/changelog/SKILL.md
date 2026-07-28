@@ -24,7 +24,7 @@ Collect user-facing changes from the Cradle repo since the last release tag, the
 - **Two files per version** — one per language:
   - `<version>.zh.md` — Chinese (primary)
   - `<version>.en.md` — English
-- Collect changes from the **private Cradle repo** at `/Users/wibus/dev/Cradle`, not the public cradle-app repo.
+- Collect changes from this `cradle-app` repository's `origin/main` branch.
 - Focus on user-facing changes. Skip internal refactors, CI tweaks, and trivial fixes.
 - The body is free-form Markdown (GFM). Images, links, code blocks all work.
 - If no changelog file exists for a version, the release still works — just no "What's New" is shown.
@@ -96,12 +96,12 @@ INCREMENT=$(( ${LAST:-0} + 1 ))
 VERSION="dev-${DATE}.${INCREMENT}"
 ```
 
-### 2. Find the last release commit
-
-The last release tag on the public repo points to the commit that was released. Use it to find the corresponding commit in the private Cradle repo.
+### 2. Find the last release tag
 
 ```bash
 cd /Users/wibus/dev/cradle-app
+
+git fetch origin main --tags
 
 # Find the latest release tag (dev or release)
 LATEST_TAG=$(
@@ -109,47 +109,30 @@ LATEST_TAG=$(
     grep -E '^(dev-[0-9]{8}\.[0-9]+|v[0-9])' |
     head -1
 )
-
-# Get the public repo commit that was tagged
-PUBLIC_SHA=$(git rev-parse "$LATEST_TAG")
-
-# The private Cradle repo's main branch at that point in time
-# Use the private repo's git log directly — diff against origin/main
-cd /Users/wibus/dev/Cradle
-git fetch origin main --tags
 ```
 
-### 3. Collect changes from Cradle repo
+### 3. Collect changes from the release range
 
 ```bash
-cd /Users/wibus/dev/Cradle
-
-# Get the latest release version from the public repo
 cd /Users/wibus/dev/cradle-app
-LATEST_TAG=$(git tag -l 'dev-*' 'v*' --sort=-version:refname | grep -E '^(dev-[0-9]{8}\.[0-9]+|v[0-9])' | head -1)
-LATEST_DATE=$(echo "$LATEST_TAG" | sed -E 's/^dev-([0-9]{4})([0-9]{2})([0-9]{2})\..*/\1-\2-\3/')
-# For release tags like v1.0.0, get the date from git log
-if [[ "$LATEST_TAG" == v* ]]; then
-  LATEST_DATE=$(git log -1 --format=%ai "$LATEST_TAG" | cut -d' ' -f1)
-fi
 
-cd /Users/wibus/dev/Cradle
-# Get commits since the last release date
-git log --oneline --since="$LATEST_DATE" origin/main --no-merges | head -50
+LATEST_TAG=$(git tag -l 'dev-*' 'v*' --sort=-version:refname | grep -E '^(dev-[0-9]{8}\.[0-9]+|v[0-9])' | head -1)
+
+# Get commits introduced after the last release.
+git log --oneline "$LATEST_TAG..origin/main" --no-merges | head -50
 ```
 
 Also check recent PRs for context:
 
 ```bash
-cd /Users/wibus/dev/Cradle
 # Recent conventional commit messages (feat/fix/etc)
-git log --oneline --since="$LATEST_DATE" origin/main --no-merges \
+git log --oneline "$LATEST_TAG..origin/main" --no-merges \
   | grep -E '^\w+ (feat|fix|add|refactor|perf|chore)' | head -30
 ```
 
 ### 4. Write the changelog (both languages)
 
-Analyze the collected commits and write **two files** in the public repo:
+Analyze the collected commits and write **two files** in this repository:
 
 1. `apps/landing/changelog/<version>.zh.md` — Chinese version
 2. `apps/landing/changelog/<version>.en.md` — English version
