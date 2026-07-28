@@ -30,6 +30,7 @@ const DEFAULT_FEATURE_FLAGS = {
   codexCliCompatibleIdentity: false,
   nativeProviderSkillProjection: false,
   turnCheckpoints: false,
+  threadHandoffs: false,
 }
 
 export type WorkspaceRecognition = {

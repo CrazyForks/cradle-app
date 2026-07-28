@@ -22,11 +22,15 @@ const sessionMock = vi.hoisted(() => ({
   create: vi.fn(),
   remove: vi.fn(),
 }))
+const preferencesMock = vi.hoisted(() => ({
+  assertAppFeatureFlagEnabled: vi.fn(),
+}))
 
 vi.mock('../chat-runtime/es/commands', () => ({
   recordImportedSessionMessages: importedMessagesMock,
 }))
 vi.mock('../provider-targets/service', () => providerTargetsMock)
+vi.mock('../preferences/service', () => preferencesMock)
 vi.mock('../session/service', () => sessionMock)
 
 const previousDataDir = process.env.CRADLE_DATA_DIR
@@ -86,6 +90,21 @@ describe('thread handoff service', () => {
     else {
       process.env.CRADLE_DATA_DIR = previousDataDir
     }
+  })
+
+  it('rejects handoffs while the feature flag is disabled', async () => {
+    preferencesMock.assertAppFeatureFlagEnabled.mockImplementationOnce(() => {
+      throw new Error('Thread handoffs are disabled')
+    })
+
+    await expect(ThreadHandoff.create({
+      requestId: 'request-disabled',
+      sourceSessionId: 'source-session',
+      destinationRuntimeKind: 'codex',
+      destinationProviderTargetId: 'destination-target',
+    })).rejects.toThrow('Thread handoffs are disabled')
+
+    expect(sessionMock.get).not.toHaveBeenCalled()
   })
 
   it('removes the destination session when transcript import fails', async () => {

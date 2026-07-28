@@ -20,6 +20,7 @@ import { IsolationMissingDialog } from '~/features/session/isolation-missing-dia
 import {
   useSessionIsolationState,
 } from '~/features/session/use-session-isolation'
+import { useFeatureFlag } from '~/features/settings/use-app-preferences'
 import { readWorkspaceFileDragText } from '~/lib/workspace-drag-data'
 import { useSurfaceActive } from '~/navigation/surface-activity-context'
 import { useChatStore } from '~/store/chat'
@@ -100,6 +101,7 @@ export function ChatView({
 }: ChatViewProps) {
   const queryClient = useQueryClient()
   const { t } = useTranslation('chat')
+  const threadHandoffsEnabled = useFeatureFlag('threadHandoffs')
   const surfaceActive = useSurfaceActive()
   const chatActive = active && surfaceActive
   const remoteConnection = useRemoteHostConnection(remoteHostId)
@@ -719,7 +721,7 @@ export function ChatView({
   const headerActions = useMemo(
     () => (
       <div className="flex items-center gap-0.5">
-        {sessionId && (
+        {threadHandoffsEnabled && sessionId && (
           <ThreadHandoffMenu
             sessionId={sessionId}
             providerTargetId={sessionMetaQuery.data?.providerTargetId ?? null}
@@ -735,6 +737,7 @@ export function ChatView({
       sessionMetaQuery.data?.providerTargetId,
       sessionMetaQuery.data?.runtimeKind,
       status,
+      threadHandoffsEnabled,
       workspaceId,
     ],
   )

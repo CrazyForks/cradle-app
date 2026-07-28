@@ -11,6 +11,7 @@ import type { MessageRecordedFact } from '../chat-runtime/es/events'
 import { messagePayloadJoinCondition } from '../chat-runtime/message-payload-store'
 import { runRegistry } from '../chat-runtime/run-registry'
 import type { ChatThinkingEffort } from '../chat-runtime/runtime-provider-types'
+import { assertAppFeatureFlagEnabled } from '../preferences/service'
 import { runtimeSkipsProviderTarget } from '../provider-contracts/runtime-compatibility'
 import type { RuntimeKind } from '../provider-contracts/types'
 import * as ProviderTargets from '../provider-targets/service'
@@ -26,6 +27,12 @@ export async function create(input: {
   modelId?: string | null
   thinkingEffort?: ChatThinkingEffort | null
 }): Promise<{ handoff: ThreadHandoffView, session: Session.SessionView }> {
+  assertAppFeatureFlagEnabled('threadHandoffs', {
+    code: 'thread_handoffs_disabled',
+    status: 403,
+    message: 'Thread handoffs are disabled. Enable them in Cradle settings first.',
+  })
+
   const previous = db().select().from(threadHandoffs).where(eq(threadHandoffs.requestId, input.requestId)).get()
   if (previous) {
     const session = Session.get(previous.destinationSessionId)

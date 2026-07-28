@@ -265,6 +265,8 @@
   "features.nativeProviderSkillProjection.label": "让 Agent 使用 Cradle 的全部能力",
   "features.turnCheckpoints.description": "在聊天回合前后创建基于 Git 的快照。此实验功能会向工作区仓库写入内部 refs。",
   "features.turnCheckpoints.label": "回合检查点",
+  "features.threadHandoffs.description": "允许将已完成的对话记录复制到使用另一 runtime 或 provider 连接的新会话。",
+  "features.threadHandoffs.label": "会话交接",
   "features.page.description": "在 Cradle 功能进入工作区流程之前，对其进行灰度开关。",
   "features.page.title": "功能开关",
   "hostEnrollments.action.add": "添加配对",

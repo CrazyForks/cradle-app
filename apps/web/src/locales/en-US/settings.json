@@ -244,6 +244,8 @@
   "features.page.title": "Features",
   "features.turnCheckpoints.description": "Capture Git-backed snapshots before and after chat turns. This experimental feature writes internal refs into the workspace repository.",
   "features.turnCheckpoints.label": "Turn checkpoints",
+  "features.threadHandoffs.description": "Allow a completed chat transcript to be copied into a new session for a different runtime or provider connection.",
+  "features.threadHandoffs.label": "Thread handoffs",
   "githubApp.actions.cancel": "Cancel",
   "githubApp.actions.confirmDisconnect": "Disconnect GitHub",
   "githubApp.actions.connect": "Connect GitHub",

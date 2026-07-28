@@ -13,6 +13,7 @@ export interface AppPreferences {
     codexCliCompatibleIdentity: boolean
     nativeProviderSkillProjection: boolean
     turnCheckpoints: boolean
+    threadHandoffs: boolean
   }
   worktreeCleanup: {
     maxWorktrees: number
@@ -31,6 +32,7 @@ const AppPreferencesSchema = z.object({
     codexCliCompatibleIdentity: z.boolean().default(false),
     nativeProviderSkillProjection: z.boolean().default(false),
     turnCheckpoints: z.boolean().default(false),
+    threadHandoffs: z.boolean().default(false),
   }).default({
     multiWorkspacePoc: false,
     localAuthForDangerousActions: false,
@@ -39,6 +41,7 @@ const AppPreferencesSchema = z.object({
     codexCliCompatibleIdentity: false,
     nativeProviderSkillProjection: false,
     turnCheckpoints: false,
+    threadHandoffs: false,
   }),
   worktreeCleanup: z.object({
     maxWorktrees: z.number().min(0).default(25),

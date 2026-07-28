@@ -3,9 +3,10 @@ import { describe, expect, it } from 'vitest'
 import { AppPreferencesJsonSchema, KeybindingsPreferencesJsonSchema } from './model'
 
 describe('appPreferencesJsonSchema', () => {
-  it('keeps experimental turn checkpoints disabled by default', () => {
+  it('keeps experimental features disabled by default', () => {
     expect(AppPreferencesJsonSchema.parse(undefined).featureFlags.turnCheckpoints).toBe(false)
     expect(AppPreferencesJsonSchema.parse(undefined).featureFlags.codexCliCompatibleIdentity).toBe(false)
+    expect(AppPreferencesJsonSchema.parse(undefined).featureFlags.threadHandoffs).toBe(false)
   })
 })
 

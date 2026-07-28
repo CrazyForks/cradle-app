@@ -14,7 +14,8 @@ export const zPutPreferencesAppBody = z.object({
         blockCodexAppServerLogInserts: z.boolean().optional().default(false),
         codexCliCompatibleIdentity: z.boolean().optional().default(false),
         nativeProviderSkillProjection: z.boolean().optional().default(false),
-        turnCheckpoints: z.boolean().optional().default(false)
+        turnCheckpoints: z.boolean().optional().default(false),
+        threadHandoffs: z.boolean().optional().default(false)
     }),
     worktreeCleanup: z.object({
         maxWorktrees: z.number().gte(0).default(25),

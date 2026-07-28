@@ -55,6 +55,7 @@ export const PreferencesModel = {
           codexCliCompatibleIdentity: t.Optional(t.Boolean({ default: false })),
           nativeProviderSkillProjection: t.Optional(t.Boolean({ default: false })),
           turnCheckpoints: t.Optional(t.Boolean({ default: false })),
+          threadHandoffs: t.Optional(t.Boolean({ default: false })),
         },
         { additionalProperties: false },
       ),
@@ -238,6 +239,7 @@ export const AppPreferencesJsonSchema = z
             codexCliCompatibleIdentity: z.boolean().default(false),
             nativeProviderSkillProjection: z.boolean().default(false),
             turnCheckpoints: z.boolean().default(false),
+            threadHandoffs: z.boolean().default(false),
           })
           .default({
             multiWorkspacePoc: false,
@@ -247,6 +249,7 @@ export const AppPreferencesJsonSchema = z
             codexCliCompatibleIdentity: false,
             nativeProviderSkillProjection: false,
             turnCheckpoints: false,
+            threadHandoffs: false,
           }),
         worktreeCleanup: z
           .object({
@@ -267,6 +270,7 @@ export const AppPreferencesJsonSchema = z
           codexCliCompatibleIdentity: false,
           nativeProviderSkillProjection: false,
           turnCheckpoints: false,
+          threadHandoffs: false,
         },
         worktreeCleanup: {
           maxWorktrees: 25,

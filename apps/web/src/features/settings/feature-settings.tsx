@@ -78,6 +78,18 @@ export function FeatureSettings() {
               />
             </SettingsRow>
             <SettingsRow
+              label={t('features.threadHandoffs.label' as SettingsKey)}
+              description={t('features.threadHandoffs.description' as SettingsKey)}
+            >
+              <Switch
+                size="sm"
+                checked={prefs.featureFlags.threadHandoffs}
+                disabled={isSaving}
+                onCheckedChange={checked => saveFeatureFlags({ threadHandoffs: checked })}
+                aria-label={t('features.threadHandoffs.label' as SettingsKey)}
+              />
+            </SettingsRow>
+            <SettingsRow
               label={t('features.continueBlockedCodexGoals.label' as SettingsKey)}
               description={t('features.continueBlockedCodexGoals.description' as SettingsKey)}
             >

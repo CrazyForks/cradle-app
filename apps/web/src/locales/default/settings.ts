@@ -276,6 +276,8 @@ export default {
   'features.nativeProviderSkillProjection.label': 'Let agents use all Cradle capabilities',
   'features.turnCheckpoints.description': 'Capture Git-backed snapshots before and after chat turns. This experimental feature writes internal refs into the workspace repository.',
   'features.turnCheckpoints.label': 'Turn checkpoints',
+  'features.threadHandoffs.description': 'Allow a completed chat transcript to be copied into a new session for a different runtime or provider connection.',
+  'features.threadHandoffs.label': 'Thread handoffs',
   'features.page.description': 'Gate unfinished Cradle capabilities before they appear in workspace flows.',
   'features.page.title': 'Features',
   'serverEndpoint.action.reset': 'Use default',
