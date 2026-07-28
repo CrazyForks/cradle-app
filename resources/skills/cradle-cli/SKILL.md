@@ -302,6 +302,12 @@ cradle chronicle activity-pipeline tick --format json
 cradle chronicle privacy redact --text "Sensitive text to preview"
 ```
 
+## Recall Evidence Retrieval
+
+Use the session-bound `recall_query` MCP tool to retrieve citable evidence from prior Cradle execution when the user asks about an earlier decision, conversation, failure, run, or file change. Use `recall_attune` only after the user explicitly asks to save, update, or forget a durable, evidence-backed memory; its proposal still requires user approval.
+
+Read [the Recall reference](references/recall.md) before writing Recall CodeAct or explaining its scope and approval behavior. Do not inject Recall automatically as pre-turn context.
+
 ## Automation, Usage, And Diagnostics
 
 ```bash

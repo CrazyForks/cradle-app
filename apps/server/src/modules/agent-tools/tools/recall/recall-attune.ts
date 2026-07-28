@@ -15,7 +15,7 @@ function registerRecallAttuneTool(server: McpServer): void {
     RECALL_ATTUNE_TOOL_NAME,
     {
       title: 'Recall Attune',
-      description: 'Propose one evidence-anchored Recall memory action. The action is never executed until the user approves it.',
+      description: 'Propose one durable Recall memory action anchored to evidence from the current workspace. Use after the user explicitly asks to save, remember, update, or forget a verified decision, preference, lesson, or conclusion from this conversation or recalled evidence. Typical requests include "remember this", "use this approach going forward", "save this decision", "update the memory", and "forget that preference". The proposal is never applied until the user approves it.',
       inputSchema: { code: z.string().min(1).describe('JavaScript CodeAct that calls exactly one remember(content, evidenceIds) or forget(id).') },
     },
     async ({ code }) => {

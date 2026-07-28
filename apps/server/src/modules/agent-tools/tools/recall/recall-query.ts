@@ -61,7 +61,7 @@ function registerRecallQueryTool(server: McpServer): void {
     {
       title: 'Recall Query',
       description:
-        'Explicitly retrieve citable execution evidence from the current Cradle workspace. Code may call overview, search, context, thread, failures, fileHistory, and runs. search, failures, fileHistory, and runs may narrow to a sessionId, but cannot broaden beyond the bound workspace. Results are read-only and scope is bound by the active runtime session.',
+        'Search prior Cradle execution evidence and memories, returning citable JSON from the current workspace. Use when the user asks what happened before, how a decision or bug was handled, what a prior chat concluded, or to find related failures, runs, messages, or file history. Typical requests include "how did we handle this before", "did we discuss this earlier", "why did this fail", "find the earlier decision", and "what changed in this file". Read-only: helper filters may narrow the runtime-bound workspace scope but cannot broaden it.',
       inputSchema: {
         code: z
           .string()
