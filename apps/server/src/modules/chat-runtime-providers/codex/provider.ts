@@ -101,6 +101,7 @@ import type { ThreadTurnsListResponse } from './app-server-protocol/v2/ThreadTur
 import type { Turn } from './app-server-protocol/v2/Turn'
 import type { UserInput } from './app-server-protocol/v2/UserInput'
 import {
+  bindCodexCradleMcpInvocation,
   buildCodexCollaborationMode,
   buildCodexConfig,
   codexConfigRequiresApiKey,
@@ -1686,11 +1687,17 @@ export class CodexProvider implements ChatRuntime {
     chatgptAuth: CodexChatgptAuthCredential | null
     pinned?: boolean
   }): Promise<CodexAppServerHostLease> {
+    const options = {
+      ...input.options,
+      ...(input.options.config
+        ? { config: bindCodexCradleMcpInvocation(input.options.config, input.options.env ?? {}) }
+        : {}),
+    } satisfies CodexAppServerClientOptions
     return await acquireCodexAppServerHostLease({
       runtimeKind: this.runtimeKind,
       providerTargetId: input.providerTargetId,
       scopeId: input.scopeId,
-      options: input.options,
+      options,
       chatgptAuth: input.chatgptAuth,
       pinned: input.pinned ?? false,
       deps: {

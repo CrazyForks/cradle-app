@@ -1,5 +1,6 @@
 import type { RegisteredMcpServer } from '../../../../plugins/mcp-registry'
 import { getRegisteredMcpServers } from '../../../../plugins/mcp-registry'
+import { AGENT_TOOLS_MCP_SERVER_NAME } from '../../../agent-tools/server'
 import type {
   ChatThinkingEffort,
   RuntimeSettings,
@@ -220,10 +221,53 @@ export type CodexMcpServerConfig
   = | { command: string, args: string[], env?: Record<string, string> }
     | { url: string, env_http_headers?: Record<string, string> }
 
-export function buildCodexMcpServersConfig(): Record<string, CodexMcpServerConfig> {
+export function buildCodexMcpServersConfig(
+  cradleMcpEnvironment?: Record<string, string>,
+): Record<string, CodexMcpServerConfig> {
   return Object.fromEntries(
-    Object.entries(getRegisteredMcpServers()).map(([name, config]) => [name, projectCodexMcpServer(name, config)]),
+    Object.entries(getRegisteredMcpServers()).map(([name, config]) => [
+      name,
+      projectCodexMcpServer(
+        name,
+        config,
+        name === AGENT_TOOLS_MCP_SERVER_NAME ? cradleMcpEnvironment : undefined,
+      ),
+    ]),
   )
+}
+
+const CRADLE_MCP_INVOCATION_ENV_NAMES = [
+  'CRADLE_CHAT_SESSION_ID',
+  'CRADLE_WORKSPACE_ID',
+  'CRADLE_WORKSPACE_PATH',
+  'CRADLE_AGENT_ID',
+  'CRADLE_AGENT_HOME',
+] as const
+
+/**
+ * Codex starts stdio MCP servers with their configured environment. The
+ * built-in Cradle MCP therefore needs an explicit projection of the active
+ * runtime invocation; forwarding the complete app-server environment would
+ * disclose provider credentials to that child process.
+ */
+export function bindCodexCradleMcpInvocation(
+  config: NonNullable<ThreadForkParams['config']>,
+  appServerEnvironment: Record<string, string | undefined>,
+): NonNullable<ThreadForkParams['config']> {
+  if (!config.mcp_servers) {
+    return config
+  }
+  return {
+    ...config,
+    mcp_servers: buildCodexMcpServersConfig(
+      Object.fromEntries(
+        CRADLE_MCP_INVOCATION_ENV_NAMES.flatMap((name) => {
+          const value = appServerEnvironment[name]
+          return value ? [[name, value]] : []
+        }),
+      ),
+    ),
+  }
 }
 
 export function buildCodexMcpServersEnvironment(): Record<string, string> {
@@ -239,14 +283,19 @@ export function buildCodexMcpServersEnvironment(): Record<string, string> {
   return env
 }
 
-function projectCodexMcpServer(name: string, config: RegisteredMcpServer): CodexMcpServerConfig {
+function projectCodexMcpServer(
+  name: string,
+  config: RegisteredMcpServer,
+  runtimeEnvironment?: Record<string, string>,
+): CodexMcpServerConfig {
   if (config.transport === 'stdio') {
     const server: CodexMcpServerConfig = {
       command: config.command,
       args: config.args,
     }
-    if (config.env && Object.keys(config.env).length > 0) {
-      server.env = config.env
+    const env = { ...config.env, ...runtimeEnvironment }
+    if (Object.keys(env).length > 0) {
+      server.env = env
     }
     return server
   }

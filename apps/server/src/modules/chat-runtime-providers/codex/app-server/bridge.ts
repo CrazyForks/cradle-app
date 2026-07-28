@@ -3,6 +3,7 @@ import type { CodexConfig } from '../../../provider-contracts/provider-base'
 import { readTrustedCodexConfig } from '../../../provider-contracts/provider-base'
 import type { SecretValueWithMetadata } from '../../../secrets/service'
 import {
+  bindCodexCradleMcpInvocation,
   buildCodexBedrockModelProviderConfig,
   buildCodexExternalModelProviderConfig,
   buildCodexMcpServersConfig,
@@ -242,16 +243,20 @@ export class CodexAppServerBridge {
       = options.serverRequestHandler
       ? request => options.serverRequestHandler!(request, chatgptAuth)
       : undefined
+    const appServerEnvironment = buildCodexAppServerEnv({
+      chatSessionId: context.runtimeSession.chatSessionId,
+      workspaceId: context.workspaceId,
+      workspacePath: context.workspacePath,
+      agentId: context.agentId,
+      agentHome: runtimeContext.agentHome,
+    }, auth)
     const clientOptions: CodexAppServerClientOptions = {
       apiKey: readCodexApiKeyAuth(auth) ?? undefined,
-      config: buildBridgeCodexConfig(config, context.workspacePath, this.deps.resolveSkillPaths, context.modelId, auth),
-      env: buildCodexAppServerEnv({
-        chatSessionId: context.runtimeSession.chatSessionId,
-        workspaceId: context.workspaceId,
-        workspacePath: context.workspacePath,
-        agentId: context.agentId,
-        agentHome: runtimeContext.agentHome,
-      }, auth),
+      config: bindCodexCradleMcpInvocation(
+        buildBridgeCodexConfig(config, context.workspacePath, this.deps.resolveSkillPaths, context.modelId, auth),
+        appServerEnvironment,
+      ),
+      env: appServerEnvironment,
       serverRequestHandler: requestHandler,
     }
     const hostLease = await acquireCodexAppServerHostLease({
