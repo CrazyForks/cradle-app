@@ -16,6 +16,7 @@ import { cn } from '~/lib/cn'
 
 import { CreateIssueDialog } from './create-issue-dialog'
 import { IssueDetail } from './issue-detail'
+import type { KanbanDropResult } from './kanban-board'
 import { KanbanBoardSurface } from './kanban-board'
 import type { KanbanContextIssue } from './kanban-context'
 import {
@@ -39,7 +40,6 @@ import {
   useMoveExternalIssue,
   useReorderIssues,
   useStatuses,
-  useUpdateIssue,
 } from './use-kanban'
 import { useKanbanKeyboard } from './use-kanban-keyboard'
 
@@ -128,8 +128,6 @@ export function KanbanView({
   const { data: allIssues = [] } = useBoardIssues({ workspaceId })
   const reorderIssues = useReorderIssues()
   const moveExternalIssue = useMoveExternalIssue()
-  const updateIssue = useUpdateIssue()
-
   const detailOpen = Boolean(selectedIssueId)
 
   // A milestone deep-link seeds the filter once; it must not fight later edits.
@@ -479,7 +477,7 @@ export function KanbanView({
           detailOpen && 'pointer-events-none invisible absolute inset-0',
         )}
         aria-hidden={detailOpen}
-        inert={detailOpen ? '' : undefined}
+        inert={detailOpen}
       >
         <BetaNotice title={t('beta.title')} description={t('beta.description')} />
 

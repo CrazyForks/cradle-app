@@ -8,6 +8,7 @@ import { jsonrepair } from 'jsonrepair'
 import type { ManagedChildProcess } from '../../../../infra/managed-process'
 import { spawnManagedProcess } from '../../../../infra/managed-process'
 import type { ClientInfo } from '../app-server-protocol/ClientInfo'
+import type { ThreadForkParams } from '../app-server-protocol/v2/ThreadForkParams'
 import { syncCodexAppServerLogInsertBlockerFromFeatureFlag } from './log-insert-blocker'
 import { looksLikeJsonNdjsonLine, NdjsonLineSplitter } from './ndjson-lines'
 import { prepareCodexAppServerHome } from './runtime-home'
@@ -40,7 +41,7 @@ export interface CodexAppServerClientOptions {
   appServerPath?: string
   codexCliPath?: string
   apiKey?: string
-  config?: Record<string, unknown>
+  config?: NonNullable<ThreadForkParams['config']>
   env?: Record<string, string | undefined>
   userAgentMode?: CodexUserAgentMode
   cliCompatibleIdentity?: boolean

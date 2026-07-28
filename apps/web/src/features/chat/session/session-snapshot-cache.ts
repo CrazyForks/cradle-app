@@ -1,5 +1,5 @@
-import type { InfiniteData } from '@tanstack/react-query'
 import type { ChatSessionTailMessageSnapshot } from '@cradle/chat-runtime-contracts'
+import type { InfiniteData } from '@tanstack/react-query'
 
 import type { GetChatSessionsBySessionIdMessagesResponse } from '~/api-gen/types.gen'
 

@@ -1,4 +1,5 @@
 // This file is kept for backwards compatibility — all code lives in ./chat/
+export type { ChatDisplayRow, MessagePartsProjection } from './chat/expand-messages-for-display'
 export { chatSelectors, createChatStore, getChatStoreTelemetrySnapshot, useChatStore } from './chat/store'
 export type {
   AssistantDisplaySplit,

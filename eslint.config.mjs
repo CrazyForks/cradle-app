@@ -23,7 +23,7 @@ export default defineConfig(
       '**/out/**',
       '**/coverage/**',
       '**/*.tsbuildinfo',
-      '**/*.md',
+      '**/*.{md,mdx,json,jsonc,json5,yaml,yml}',
       'packages/cli/**',
       'packages/db/drizzle/**',
     ],

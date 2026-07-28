@@ -1,5 +1,6 @@
 import type { ModelDescriptor } from '../../../provider-contracts/types'
 import type { ModelListResponse } from '../app-server-protocol/v2/ModelListResponse'
+import type { ThreadForkParams } from '../app-server-protocol/v2/ThreadForkParams'
 import type { CodexAppServerClientLike } from '../types'
 import type { CodexChatgptAuthCredential } from './chatgpt-auth'
 import {
@@ -15,7 +16,7 @@ let createClientForTests: ((options?: CodexAppServerClientOptions) => CodexAppSe
 
 export async function listCodexChatgptModels(input: {
   credential: CodexChatgptAuthCredential
-  config?: Record<string, unknown>
+  config?: NonNullable<ThreadForkParams['config']>
   readSecret: (credentialRef: string) => string
   updateSecretValue?: (credentialRef: string, secret: string) => void
 }): Promise<ModelDescriptor[]> {
@@ -48,7 +49,7 @@ function missingCredentialLifecycleStore(): never {
 
 export async function listCodexApiKeyModels(input: {
   apiKey: string
-  config?: Record<string, unknown>
+  config?: NonNullable<ThreadForkParams['config']>
 }): Promise<ModelDescriptor[]> {
   const clientOptions = {
     ...(input.config ? { config: input.config } : {}),

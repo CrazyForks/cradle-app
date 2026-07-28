@@ -13,7 +13,6 @@ import type { ChatRenderItem } from '../../rendering/chat-render-plan'
 import { groupMessageParts, splitExecutionPhase } from '../../rendering/chat-render-plan'
 import { toolNameFromPart } from '../../rendering/chat-tool-entities'
 import {
-  ExecutionPhaseFold,
   GoalMessageLabel,
   SteerMessageLabel,
   ThinkingPlaceholder,
@@ -78,7 +77,6 @@ function useTextStreamIdle(enabled: boolean, textLength: number): boolean {
 export function MessageBubbleView({
   message,
   isStreaming,
-  executionDetailsDefaultOpen = false,
   presentation = 'thread',
   onToolApprovalResponse,
   onCopy,

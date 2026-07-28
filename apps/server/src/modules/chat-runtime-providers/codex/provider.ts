@@ -1713,12 +1713,12 @@ export class CodexProvider implements ChatRuntime {
 
   private resolveCodexThreadTitleGenerationConfig(input: {
     currentAuth: CodexAppServerAuthResolution
-    currentCodexConfig: Record<string, unknown>
+    currentCodexConfig: NonNullable<ThreadForkParams['config']>
     workspacePath: string
     fallbackModel: string | null
   }): {
       auth: CodexAppServerAuthResolution
-      codexConfig: Record<string, unknown>
+      codexConfig: NonNullable<ThreadForkParams['config']>
       model: string | null
       fallbackModel: string | null
       thinkingEffort: CodexTitleGenerationThinkingEffort
@@ -1766,7 +1766,7 @@ export class CodexProvider implements ChatRuntime {
     providerTargetId: string
     apiKey: string | null
     chatgptAuth: CodexChatgptAuthCredential | null
-    codexConfig: Record<string, unknown>
+    codexConfig: NonNullable<ThreadForkParams['config']>
     codexEnv: Record<string, string>
     mainClient: CodexAppServerClientLike
     mainThreadId: string

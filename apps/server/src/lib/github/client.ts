@@ -91,13 +91,12 @@ function createOctokitFetch(): typeof fetch {
     // Test mocks and some edge proxies omit / mis-label Content-Type; Octokit
     // then returns a raw string / fails to unwrap GraphQL `data`. Normalize.
     const text = await response.text()
+    const headers = new Headers(response.headers)
+    headers.set('content-type', 'application/json; charset=utf-8')
     return new Response(text, {
       status: response.status,
       statusText: response.statusText,
-      headers: {
-        ...Object.fromEntries(response.headers.entries()),
-        'content-type': 'application/json; charset=utf-8',
-      },
+      headers,
     })
   }
 }

@@ -38,7 +38,7 @@ interface RelationKindDef {
   type: KanbanIssueRelation['type']
   /** Whether the current issue is the source of the underlying edge. */
   outgoing: boolean
-  labelKey: `relation.${string}`
+  labelKey: 'relation.blocks' | 'relation.blockedBy' | 'relation.duplicates' | 'relation.duplicatedBy' | 'relation.relatesTo'
   icon: typeof ForbidIcon
 }
 
@@ -65,7 +65,7 @@ function kindForRelation(relation: KanbanIssueRelation): RelationKindDef {
       ? relation.direction === 'outgoing'
       : relation.direction === 'incoming'
   })
-  return match ?? relationKinds[relationKinds.length - 1]
+  return match ?? relationKinds.at(-1)!
 }
 
 /**

@@ -44,7 +44,6 @@ const displayProperties: ViewConfig['displayProperties'] = {
   priority: true,
   labels: true,
   assignee: true,
-  subIssueProgress: true,
   agentIndicator: true,
   milestone: true,
   dueDate: true,

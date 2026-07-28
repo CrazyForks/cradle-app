@@ -21,8 +21,8 @@ import { LabelChip } from './shared/label-chip'
 import { ParentIssueLink } from './shared/parent-issue-link'
 import type { ParentIssueRef } from './shared/parent-issue-ref'
 import { PriorityIcon } from './shared/priority-icon'
-import { StatusCategorySchema, StatusIcon } from './shared/status-icon'
 import { SelectionToggle } from './shared/selection-toggle'
+import { StatusCategorySchema, StatusIcon } from './shared/status-icon'
 import type { StatusCategory, ViewConfig } from './use-board-view'
 
 export interface KanbanCardRuntimeData {

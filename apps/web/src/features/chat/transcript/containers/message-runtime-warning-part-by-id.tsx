@@ -14,8 +14,8 @@ export function MessageRuntimeWarningPartById({ sessionId, messageId, partIndex 
     }
     return readRuntimeWarningPartFromState(state, sessionId, messageId, partIndex)
   })
-  const part = displayPart !== undefined
+  const part = displayPart != null
     ? (isRuntimeWarningMessagePart(displayPart) ? displayPart : null)
-    : storePart
+    : storePart ?? undefined
   return part ? <RuntimeWarningBlock warning={part.data} /> : null
 }

@@ -17,7 +17,6 @@ export const kanbanDisplayProperties: ViewConfig['displayProperties'] = {
   status: true,
   labels: true,
   assignee: true,
-  subIssueProgress: false,
   agentIndicator: true,
   milestone: false,
   dueDate: false,

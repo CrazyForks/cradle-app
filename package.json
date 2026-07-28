@@ -17,7 +17,7 @@
     "typecheck:apps-web": "pnpm --filter @cradle/web typecheck",
     "typecheck:desktop": "pnpm --filter @cradle/desktop typecheck",
     "typecheck:model-api-simulator": "pnpm --filter @cradle/model-api-simulator typecheck",
-    "typecheck": "npm run typecheck:node && npm run typecheck:server && npm run typecheck:apps-web && npm run typecheck:desktop && npm run typecheck:model-api-simulator",
+    "typecheck": "pnpm run typecheck:node && pnpm run typecheck:server && pnpm run typecheck:apps-web && pnpm run typecheck:desktop && pnpm run typecheck:model-api-simulator",
     "test": "pnpm --filter @cradle/plugin-sdk build && pnpm --filter \"./plugins/*\" build && vitest run",
     "test:watch": "vitest",
     "dev:web": "pnpm --filter @cradle/web dev",

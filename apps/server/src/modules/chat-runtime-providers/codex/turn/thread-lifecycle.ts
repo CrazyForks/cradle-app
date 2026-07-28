@@ -12,6 +12,7 @@ import type {
 } from '../../../chat-runtime/runtime-provider-types'
 import type { CodexConfig } from '../../../provider-contracts/provider-base'
 import { isCodexAppServerUnknownMethodError } from '../app-server/client'
+import type { ThreadForkParams } from '../app-server-protocol/v2/ThreadForkParams'
 import type { ThreadInjectItemsParams } from '../app-server-protocol/v2/ThreadInjectItemsParams'
 import type { ThreadTurnsListResponse } from '../app-server-protocol/v2/ThreadTurnsListResponse'
 import type { Turn } from '../app-server-protocol/v2/Turn'
@@ -125,7 +126,7 @@ export async function startOrResumeThread(
     runtimeWorkspaceRoots: string[]
     approvalPolicy: CodexConfig['approvalPolicy']
     sandbox: CodexConfig['sandboxMode']
-    config: Record<string, unknown>
+    config: NonNullable<ThreadForkParams['config']>
     developerInstructions?: string | null
     requestTimeoutMs?: number
   },

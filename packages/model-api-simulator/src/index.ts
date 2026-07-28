@@ -12,8 +12,8 @@ export async function startModelApiSimulator(
 ): Promise<ModelApiSimulator> {
   const runtime = createSimulatorRuntime()
   const app = createSimulatorApp(runtime, {
-    strictRequestValidation: options.strictRequestValidation,
-    autoRespond: options.autoRespond,
+    ...(options.strictRequestValidation === undefined ? {} : { strictRequestValidation: options.strictRequestValidation }),
+    ...(options.autoRespond === undefined ? {} : { autoRespond: options.autoRespond }),
   })
   const server = await startListener(app.fetch, options.port ?? 0)
   if (!server.url) { throw new Error('srvx did not expose a URL after ready()') }

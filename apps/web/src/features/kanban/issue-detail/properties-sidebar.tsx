@@ -48,9 +48,9 @@ import {
 } from '../shared/label-metadata'
 import { PriorityIcon } from '../shared/priority-icon'
 import { StatusIcon } from '../shared/status-icon'
+import type { StatusCategory } from '../use-board-view'
 import type { IssuePriority } from '../use-kanban'
 import { useDelegateIssue, useIssueAgentSessions, useIssueLinkedSessions, useIssueSessionGroups, usePatchIssueLabels, useRerunIssueAgentSession, useUndelegateIssue } from '../use-kanban'
-import type { StatusCategory } from '../use-board-view'
 import { RelationManager } from './relation-manager'
 
 const priorityLabelKeys: Record<

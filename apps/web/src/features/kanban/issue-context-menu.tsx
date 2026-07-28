@@ -52,9 +52,9 @@ import { formatIssueId } from './shared/format-issue-id'
 import { findDelegatedAgent } from './shared/issue-delegation'
 import { PriorityIcon } from './shared/priority-icon'
 import { StatusIcon } from './shared/status-icon'
+import type { StatusCategory } from './use-board-view'
 import type { IssuePriority } from './use-kanban'
 import { useDelegateIssue, useDeleteIssue, useUndelegateIssue, useUpdateIssue } from './use-kanban'
-import type { StatusCategory } from './use-board-view'
 
 interface IssueContextMenuProps {
   issue: KanbanIssue

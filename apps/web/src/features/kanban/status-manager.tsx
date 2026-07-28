@@ -11,8 +11,8 @@ import { Input } from '~/components/ui/input'
 import { cn } from '~/lib/cn'
 
 import { StatusIcon } from './shared/status-icon'
-import { useCreateStatus, useDeleteStatus, useReorderStatuses, useStatuses, useUpdateStatus } from './use-kanban'
 import type { StatusCategory } from './use-board-view'
+import { useCreateStatus, useDeleteStatus, useReorderStatuses, useStatuses, useUpdateStatus } from './use-kanban'
 
 interface StatusManagerProps {
   workspaceId: string

@@ -22,6 +22,7 @@ const baseAwait = {
   fireAt: null,
   lastCheckedAt: 1_784_833_540,
   lastErrorText: null,
+  lastObservationJson: null,
   consecutiveErrorCount: 0,
 } satisfies Omit<SessionAwait, 'id' | 'source' | 'status'>
 

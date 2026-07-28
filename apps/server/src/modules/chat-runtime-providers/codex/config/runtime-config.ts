@@ -67,7 +67,7 @@ export function codexAuthHasApiKey(auth: CodexAppServerAuthResolution): boolean 
 export function buildCodexExternalModelProviderConfig(
   baseUrl: string,
   authMode: CodexAuthMode,
-): Record<string, unknown> {
+): NonNullable<ThreadForkParams['config']> {
   return {
     model_provider: CRADLE_CODEX_MODEL_PROVIDER,
     model_providers: {
@@ -82,7 +82,7 @@ export function buildCodexExternalModelProviderConfig(
   }
 }
 
-export function buildCodexBedrockModelProviderConfig(region: string): Record<string, unknown> {
+export function buildCodexBedrockModelProviderConfig(region: string): NonNullable<ThreadForkParams['config']> {
   return {
     model_provider: CODEX_AMAZON_BEDROCK_MODEL_PROVIDER,
     model_providers: {

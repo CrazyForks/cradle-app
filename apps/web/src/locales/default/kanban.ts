@@ -131,6 +131,7 @@ export default {
   'property.labels': 'Labels',
   'property.milestone': 'Milestone',
   'property.workspace': 'Workspace',
+  'table.title': 'Title',
   'filter.label': 'Filter',
   'filter.delegatedOnly': 'Delegated to Agent',
   'filter.notDelegated': 'Not delegated',

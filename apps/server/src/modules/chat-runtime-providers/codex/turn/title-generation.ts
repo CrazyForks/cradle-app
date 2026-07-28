@@ -1,6 +1,7 @@
 import type { RuntimeSession } from '../../../chat-runtime/runtime-provider-types'
 import { createBoundedTextCollector } from '../../bounded-text-collector'
 import type { CodexAppServerMessage } from '../app-server/client'
+import type { ThreadForkParams } from '../app-server-protocol/v2/ThreadForkParams'
 import type { UserInput } from '../app-server-protocol/v2/UserInput'
 import { toSandboxPolicy } from '../config/sandbox-policy'
 import {
@@ -77,7 +78,7 @@ export async function generateAndSetCodexThreadTitle(
     modelId: string | null
     fallbackModel: string | null
     thinkingEffort: CodexTitleGenerationThinkingEffort
-    config: Record<string, unknown>
+    config: NonNullable<ThreadForkParams['config']>
     signal: AbortSignal
   },
 ): Promise<string | null> {
@@ -100,7 +101,7 @@ export async function generateAndSetCodexThreadTitleOrThrow(
     modelId: string | null
     fallbackModel: string | null
     thinkingEffort: CodexTitleGenerationThinkingEffort
-    config: Record<string, unknown>
+    config: NonNullable<ThreadForkParams['config']>
     signal: AbortSignal
   },
 ): Promise<string> {
@@ -148,7 +149,7 @@ async function generateCodexThreadTitle(
     modelId: string | null
     fallbackModel: string | null
     thinkingEffort: CodexTitleGenerationThinkingEffort
-    config: Record<string, unknown>
+    config: NonNullable<ThreadForkParams['config']>
     signal: AbortSignal
   },
 ): Promise<string | null> {
@@ -203,7 +204,10 @@ async function generateCodexThreadTitle(
   }
 }
 
-export function buildCodexTitleConfig(config: Record<string, unknown>, model: string | null): Record<string, unknown> {
+export function buildCodexTitleConfig(
+  config: NonNullable<ThreadForkParams['config']>,
+  model: string | null,
+): NonNullable<ThreadForkParams['config']> {
   const titleConfig = { ...config }
   delete titleConfig.instructions_paths
   titleConfig.disable_response_storage = true

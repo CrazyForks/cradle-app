@@ -15,9 +15,9 @@ import { cn } from '~/lib/utils'
 import { priorityOptions } from '../shared/issue-metadata'
 import { PriorityIcon } from '../shared/priority-icon'
 import { StatusIcon } from '../shared/status-icon'
+import type { StatusCategory } from '../use-board-view'
 import type { IssuePriority } from '../use-kanban'
 import { useCreateIssue, useIssues } from '../use-kanban'
-import type { StatusCategory } from '../use-board-view'
 
 const priorityLabelKeys: Record<
   IssuePriority,

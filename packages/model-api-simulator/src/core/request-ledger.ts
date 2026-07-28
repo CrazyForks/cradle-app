@@ -3,9 +3,10 @@ import type { JsonValue, ObservedRequest } from '../contract'
 export async function observeRequest(
   request: Request,
 ): Promise<Omit<ObservedRequest, 'index'>> {
-  const headers = Object.fromEntries(
-    Array.from(request.headers.entries(), ([name, value]) => [name.toLowerCase(), value]),
-  )
+  const headers: Record<string, string> = {}
+  request.headers.forEach((value, name) => {
+    headers[name.toLowerCase()] = value
+  })
   let body: JsonValue | undefined
   if (request.body) {
     const text = await request.text()

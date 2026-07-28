@@ -3,8 +3,8 @@ import {
   CircleDashLine as CircleDashedIcon,
   CloseLine as XIcon,
   DeleteLine as TrashIcon,
-  Flag2Line as FlagIcon,
   Flag1Line as MilestoneIcon,
+  Flag2Line as FlagIcon,
 } from '@mingcute/react'
 import { AnimatePresence, m } from 'motion/react'
 import { useTranslation } from 'react-i18next'
@@ -23,9 +23,9 @@ import { isExternalKanbanIssue } from '~/features/kanban/types'
 import { UNGROUPED_ID } from './kanban-grouping'
 import { PriorityIcon } from './shared/priority-icon'
 import { StatusIcon } from './shared/status-icon'
+import type { StatusCategory } from './use-board-view'
 import type { IssuePriority } from './use-kanban'
 import { useBulkUpdateIssues, useDeleteIssue, useMoveExternalIssue } from './use-kanban'
-import type { StatusCategory } from './use-board-view'
 
 interface KanbanSelectionBarProps {
   issues: KanbanBoardIssue[]

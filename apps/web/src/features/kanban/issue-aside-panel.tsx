@@ -26,9 +26,9 @@ import { formatIssueId } from './shared/format-issue-id'
 import { LabelChip } from './shared/label-chip'
 import { PriorityIcon } from './shared/priority-icon'
 import { StatusIcon } from './shared/status-icon'
+import type { StatusCategory } from './use-board-view'
 import type { IssuePriority } from './use-kanban'
 import { useBoards, useComments, useIssue, useIssues, useLinkedIssue, useLinkIssue, useStatuses, useUnlinkIssue } from './use-kanban'
-import type { StatusCategory } from './use-board-view'
 
 interface IssueAsidePanelProps {
   sessionId: string

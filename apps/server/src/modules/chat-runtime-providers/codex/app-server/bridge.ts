@@ -4,19 +4,15 @@ import { readTrustedCodexConfig } from '../../../provider-contracts/provider-bas
 import type { SecretValueWithMetadata } from '../../../secrets/service'
 import {
   bindCodexCradleMcpInvocation,
-  buildCodexBedrockModelProviderConfig,
-  buildCodexExternalModelProviderConfig,
-  buildCodexMcpServersConfig,
+  buildCodexConfig,
   codexConfigRequiresApiKey,
-  resolveCodexAuthMode,
-  resolveCodexExternalModelProviderBaseUrl,
 } from '../config/runtime-config'
 import { resolveCodexRuntimeContext } from '../config/runtime-context'
 import { buildCodexServerRequestToolInput, buildCodexServerRequestToolOutput } from '../tools/mapper'
 import type { CodexAppServerClientLike } from '../types'
 import type { CodexAppServerCapabilityManifest, CodexAppServerMethodCapability } from './capabilities'
 import { CODEX_APP_SERVER_CAPABILITIES, CODEX_APP_SERVER_CLIENT_METHOD_SET, readCodexAppServerMethodCapability } from './capabilities'
-import type { CodexAppServerAuthResolution, CodexChatgptAuthCredential } from './chatgpt-auth'
+import type { CodexChatgptAuthCredential } from './chatgpt-auth'
 import {
   readCodexApiKeyAuth,
   readCodexChatgptAuth,
@@ -253,7 +249,7 @@ export class CodexAppServerBridge {
     const clientOptions: CodexAppServerClientOptions = {
       apiKey: readCodexApiKeyAuth(auth) ?? undefined,
       config: bindCodexCradleMcpInvocation(
-        buildBridgeCodexConfig(config, context.workspacePath, this.deps.resolveSkillPaths, context.modelId, auth),
+        buildCodexConfig(config, context.workspacePath, this.deps.resolveSkillPaths, context.modelId, auth),
         appServerEnvironment,
       ),
       env: appServerEnvironment,
@@ -301,33 +297,6 @@ function requireCodexAppServerMethod(method: string): CodexAppServerMethodCapabi
 
 function normalizeParams(capability: CodexAppServerMethodCapability, params: unknown): unknown {
   return capability.paramsType === null ? undefined : params ?? {}
-}
-
-function buildBridgeCodexConfig(
-  config: CodexConfig,
-  _workspacePath: string,
-  _resolveSkillPaths: (workspacePath: string) => string[],
-  effectiveModel: string | null | undefined,
-  auth: CodexAppServerAuthResolution,
-): Record<string, unknown> {
-  const mcpServers = buildCodexMcpServersConfig()
-  const authMode = resolveCodexAuthMode(config, auth)
-  const externalBaseUrl = resolveCodexExternalModelProviderBaseUrl(config)
-  return {
-    approval_policy: config.approvalPolicy,
-    sandbox_mode: config.sandboxMode,
-    network_access: 'enabled',
-    show_raw_agent_reasoning: true,
-    disable_response_storage: true,
-    ...(Object.keys(mcpServers).length > 0 ? { mcp_servers: mcpServers } : {}),
-    ...(externalBaseUrl
-      ? buildCodexExternalModelProviderConfig(externalBaseUrl, authMode)
-      : {}),
-    ...(auth.kind === 'bedrockApiKey'
-      ? buildCodexBedrockModelProviderConfig(auth.region)
-      : {}),
-    ...(effectiveModel ?? config.model ? { model: effectiveModel ?? config.model } : {}),
-  }
 }
 
 function defaultCloseMethodsFor(method: string): string[] {

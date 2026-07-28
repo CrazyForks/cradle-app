@@ -659,7 +659,7 @@ function DisplayMenu({
                 id={`kanban-display-${property.key}`}
                 checked={config.displayProperties[property.key]}
                 onCheckedChange={checked =>
-                  setConfig({ displayProperties: { [property.key]: checked === true } })}
+                  setConfig({ displayProperties: { ...config.displayProperties, [property.key]: checked === true } })}
               />
               {property.label}
             </label>
