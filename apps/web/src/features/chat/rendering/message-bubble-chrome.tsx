@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { cn } from '~/lib/cn'
+import { formatShortDurationMs } from '~/lib/number-format'
 
 export function SteerMessageLabel() {
   const { t } = useTranslation('chat')
@@ -69,7 +70,7 @@ export function ExecutionPhaseFold({
 }) {
   const [expanded, setExpanded] = useState(defaultOpen)
   const workedLabel = durationMs != null && durationMs >= 1000
-    ? `for ${Math.round(durationMs / 1000)}s`
+    ? `for ${formatShortDurationMs(durationMs)}`
     : null
 
   return (

@@ -1,3 +1,5 @@
+import { formatShortDurationMs } from '~/lib/number-format'
+
 import { FEED_ENTRY_COUNT_LABELS } from '../../rendering/tool-block-constants'
 import { basename, readFirstLine } from '../../rendering/tool-block-utils'
 import type { RenderableToolPart, ToolUiKind } from '../../rendering/tool-ui-classifier'
@@ -112,7 +114,7 @@ export function readReasoningLabel(entry: ActivityFeedReasoningEntry): FeedLabel
   if (entry.durationMs !== undefined && entry.durationMs >= 1000) {
     return {
       verb: 'Thought',
-      object: `for ${Math.round(entry.durationMs / 1000)}s`,
+      object: `for ${formatShortDurationMs(entry.durationMs)}`,
       stats: null,
     }
   }
