@@ -410,7 +410,7 @@ export function ChatComposerSection({
         className="relative z-20 mb-2"
       />
       <div className="relative">
-        <div className="pointer-events-auto absolute inset-x-0 bottom-full z-10 -mb-px">
+        <div className="pointer-events-auto relative z-10 -mb-px">
           <ComposerSlotStates
             sessionId={sessionId}
             slots={composerRuntime.uiSlots}
