@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { ActiveRun } from '../run-registry'
 import { runRegistry } from '../run-registry'
-import { createActiveRunChunkLog } from '../stream/run-chunk-log'
+import { createRunChunkSequencer } from '../stream/run-chunk-sequencer'
 import { createFinalMessageProjectionState } from './final-message-projection'
 
 const startRun = vi.fn()
@@ -36,7 +36,7 @@ function parentRun(): ActiveRun {
       providerStateSnapshot: null,
     },
     modelId: 'model-1',
-    runChunkLog: createActiveRunChunkLog('parent-run'),
+    runChunkSequencer: createRunChunkSequencer('parent-run'),
     pendingDeltaChunk: null,
     pendingDeltaFlushTimer: null,
     snapshotTimer: null,

@@ -246,7 +246,7 @@ export function createActiveRunStreamController(
     if (!terminal) {
       projectFinalMessageChunk(activeRun, chunk)
     }
-    activeRun.runChunkLog.append(chunk, terminal)
+    activeRun.runChunkSequencer.publish(chunk, terminal)
     runSubscribers.publish(activeRun.runId, chunk, terminal)
   }
 

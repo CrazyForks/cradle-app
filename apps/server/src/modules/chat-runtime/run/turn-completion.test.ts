@@ -2,7 +2,7 @@ import type { UIMessageChunk } from 'ai'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { ActiveRun } from '../run-registry'
-import { createActiveRunChunkLog } from '../stream/run-chunk-log'
+import { createRunChunkSequencer } from '../stream/run-chunk-sequencer'
 import { createFinalMessageProjectionState } from './final-message-projection'
 import { createActiveTurnCompletionController } from './turn-completion'
 
@@ -24,7 +24,7 @@ function activeRun(): ActiveRun {
       providerStateSnapshot: null,
     },
     modelId: null,
-    runChunkLog: createActiveRunChunkLog('run-1'),
+    runChunkSequencer: createRunChunkSequencer('run-1'),
     pendingDeltaChunk: null,
     pendingDeltaFlushTimer: null,
     snapshotTimer: null,
@@ -50,7 +50,8 @@ describe('active turn completion owner', () => {
       }),
       publishTerminalNotification: vi.fn(() => order.push('notification')),
       recoverTerminalPersistenceFailure: vi.fn(),
-      releaseActiveRun: vi.fn(() => order.push('release')),
+      releaseActiveRunClaim: vi.fn(() => order.push('release')),
+      disposeActiveRun: vi.fn(() => order.push('dispose')),
       performHandoff: vi.fn(() => order.push('handoff')),
       recordTerminalPersistenceIncident: vi.fn(),
       warn: vi.fn(),
@@ -73,6 +74,7 @@ describe('active turn completion owner', () => {
       'required',
       'release',
       'notification',
+      'dispose',
       'best-effort',
       'handoff',
     ])
@@ -92,7 +94,8 @@ describe('active turn completion owner', () => {
       }),
       publishTerminalNotification: vi.fn(() => order.push('notification')),
       recoverTerminalPersistenceFailure: vi.fn(),
-      releaseActiveRun: vi.fn(() => order.push('release')),
+      releaseActiveRunClaim: vi.fn(() => order.push('release')),
+      disposeActiveRun: vi.fn(() => order.push('dispose')),
       performHandoff: vi.fn(() => order.push('handoff')),
       recordTerminalPersistenceIncident: vi.fn(),
       warn: vi.fn(),
@@ -114,6 +117,7 @@ describe('active turn completion owner', () => {
         'durable-terminal',
         'release',
         'notification',
+        'dispose',
         'best-effort-started',
       ])
     })
@@ -124,6 +128,7 @@ describe('active turn completion owner', () => {
       'durable-terminal',
       'release',
       'notification',
+      'dispose',
       'best-effort-started',
       'best-effort-done',
       'handoff',
@@ -134,14 +139,16 @@ describe('active turn completion owner', () => {
     const terminalError = new Error('terminal write failed')
     const recoveryError = new Error('recovery write failed')
     const publishTerminalNotification = vi.fn()
-    const releaseActiveRun = vi.fn()
+    const releaseActiveRunClaim = vi.fn()
+    const disposeActiveRun = vi.fn()
     const performHandoff = vi.fn()
     const recordTerminalPersistenceIncident = vi.fn()
     const controller = createActiveTurnCompletionController({
       persistTerminalChunk: vi.fn().mockRejectedValue(terminalError),
       publishTerminalNotification,
       recoverTerminalPersistenceFailure: vi.fn().mockRejectedValue(recoveryError),
-      releaseActiveRun,
+      releaseActiveRunClaim,
+      disposeActiveRun,
       performHandoff,
       recordTerminalPersistenceIncident,
       warn: vi.fn(),
@@ -159,7 +166,8 @@ describe('active turn completion owner', () => {
 
     expect(publishTerminalNotification).not.toHaveBeenCalled()
     expect(performHandoff).not.toHaveBeenCalled()
-    expect(releaseActiveRun).toHaveBeenCalledTimes(1)
+    expect(releaseActiveRunClaim).toHaveBeenCalledTimes(1)
+    expect(disposeActiveRun).toHaveBeenCalledTimes(1)
     expect(recordTerminalPersistenceIncident).toHaveBeenCalledWith({
       activeRun: run,
       source: 'normal',
@@ -185,7 +193,8 @@ describe('active turn completion owner', () => {
         order.push('recovery')
         return { durableTerminal: true, notificationChunk: recoveredTerminal }
       }),
-      releaseActiveRun: vi.fn(() => order.push('release')),
+      releaseActiveRunClaim: vi.fn(() => order.push('release')),
+      disposeActiveRun: vi.fn(() => order.push('dispose')),
       performHandoff: vi.fn(() => order.push('handoff')),
       recordTerminalPersistenceIncident: vi.fn(),
       warn: vi.fn(),
@@ -206,14 +215,23 @@ describe('active turn completion owner', () => {
     })
 
     expect(result).toEqual({ durableTerminal: true, terminalChunk: recoveredTerminal })
-    expect(order).toEqual(['recovery', 'required', 'release', 'notification', 'best-effort', 'handoff'])
+    expect(order).toEqual([
+      'recovery',
+      'required',
+      'release',
+      'notification',
+      'dispose',
+      'best-effort',
+      'handoff',
+    ])
   })
 
   it('blocks notification and handoff when required bookkeeping fails', async () => {
     const terminalChunk: UIMessageChunk = { type: 'abort', reason: 'user' }
     const publishTerminalNotification = vi.fn()
     const performHandoff = vi.fn()
-    const releaseActiveRun = vi.fn()
+    const releaseActiveRunClaim = vi.fn()
+    const disposeActiveRun = vi.fn()
     const controller = createActiveTurnCompletionController({
       persistTerminalChunk: vi.fn(async () => ({
         durableTerminal: true,
@@ -221,7 +239,8 @@ describe('active turn completion owner', () => {
       })),
       publishTerminalNotification,
       recoverTerminalPersistenceFailure: vi.fn(),
-      releaseActiveRun,
+      releaseActiveRunClaim,
+      disposeActiveRun,
       performHandoff,
       recordTerminalPersistenceIncident: vi.fn(),
       warn: vi.fn(),
@@ -234,14 +253,16 @@ describe('active turn completion owner', () => {
     })).rejects.toThrow('required stage failed')
     expect(publishTerminalNotification).not.toHaveBeenCalled()
     expect(performHandoff).not.toHaveBeenCalled()
-    expect(releaseActiveRun).toHaveBeenCalledTimes(1)
+    expect(releaseActiveRunClaim).toHaveBeenCalledTimes(1)
+    expect(disposeActiveRun).toHaveBeenCalledTimes(1)
   })
 
   it('still notifies and handoffs when best-effort bookkeeping fails after durable terminal', async () => {
     const terminalChunk: UIMessageChunk = { type: 'finish', finishReason: 'stop' }
     const publishTerminalNotification = vi.fn()
     const performHandoff = vi.fn()
-    const releaseActiveRun = vi.fn()
+    const releaseActiveRunClaim = vi.fn()
+    const disposeActiveRun = vi.fn()
     const warn = vi.fn()
     const controller = createActiveTurnCompletionController({
       persistTerminalChunk: vi.fn(async () => ({
@@ -250,7 +271,8 @@ describe('active turn completion owner', () => {
       })),
       publishTerminalNotification,
       recoverTerminalPersistenceFailure: vi.fn(),
-      releaseActiveRun,
+      releaseActiveRunClaim,
+      disposeActiveRun,
       performHandoff,
       recordTerminalPersistenceIncident: vi.fn(),
       warn,
@@ -276,7 +298,8 @@ describe('active turn completion owner', () => {
       expect.objectContaining({ runId: 'run-1' }),
       terminalChunk,
     )
-    expect(releaseActiveRun).toHaveBeenCalledTimes(1)
+    expect(releaseActiveRunClaim).toHaveBeenCalledTimes(1)
+    expect(disposeActiveRun).toHaveBeenCalledTimes(1)
     expect(performHandoff).toHaveBeenCalledWith(
       expect.objectContaining({ runId: 'run-1' }),
       { kind: 'queue' },

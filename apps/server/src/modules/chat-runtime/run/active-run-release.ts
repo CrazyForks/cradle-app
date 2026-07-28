@@ -10,13 +10,14 @@ export interface ActiveRunReleaseDeps {
 }
 
 export interface ActiveRunReleaseController {
-  releaseActiveRun: (activeRun: ActiveRun) => void
+  releaseActiveRunClaim: (activeRun: ActiveRun) => void
+  disposeActiveRun: (activeRun: ActiveRun) => void
 }
 
 export function createActiveRunReleaseController(
   deps: ActiveRunReleaseDeps,
 ): ActiveRunReleaseController {
-  function releaseActiveRun(activeRun: ActiveRun): void {
+  function releaseActiveRunClaim(activeRun: ActiveRun): void {
     deps.stopSnapshotTimer(activeRun)
     deps.stopPendingRunDeltaFlush(activeRun)
     rejectPendingUserInputsForRun(
@@ -28,14 +29,17 @@ export function createActiveRunReleaseController(
       new Error('Chat run ended before pending tool approval was submitted'),
     )
     runRegistry.deleteActiveRun(activeRun.runId)
-    runSubscribers.delete(activeRun.runId)
     if (runRegistry.getActiveRunIdForSession(activeRun.sessionId) === activeRun.runId) {
       runRegistry.deleteActiveRunIdForSession(activeRun.sessionId)
     }
+  }
+
+  function disposeActiveRun(activeRun: ActiveRun): void {
+    runSubscribers.delete(activeRun.runId)
     activeRun.pendingDeltaChunk = null
     activeRun.pendingStreamingSnapshotMessageJson = null
     activeRun.lastStreamingSnapshotMessageJson = null
-    activeRun.runChunkLog.clear()
+    activeRun.runChunkSequencer.clear()
     activeRun.snapshotEventIdByCoalesceKey.clear()
     activeRun.finalMessage.parts = []
     activeRun.finalProjection.activeTextParts.clear()
@@ -44,6 +48,7 @@ export function createActiveRunReleaseController(
   }
 
   return {
-    releaseActiveRun,
+    releaseActiveRunClaim,
+    disposeActiveRun,
   }
 }

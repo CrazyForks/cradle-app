@@ -4,7 +4,7 @@ import { truncateSnapshotPayload } from '../message-snapshot-compaction'
 import type { ActiveRun } from '../run-registry'
 import { startRunSnapshot } from '../run-snapshot'
 import type { TokenUsage } from '../runtime-provider-types'
-import { getActiveRunReplayBufferSummary } from '../runtime-status-api'
+import { getActiveRunStreamPublicationSummary } from '../runtime-status-api'
 import type { TurnOutputDiagnostics } from './output-diagnostics'
 import type { ChatRuntimeProfile } from './profile'
 import {
@@ -75,7 +75,7 @@ export function finalizeActiveRunSnapshot(
   finalizeRunSnapshotEvent(activeRun, finalChunk, {
     ...input,
     diagnostics: toDiagnosticsSnapshot(input.diagnostics),
-    replayBuffer: toReplayBufferSnapshot(activeRun.runId),
+    streamPublications: toStreamPublicationSnapshot(activeRun.runId),
     truncatePayload: truncateSnapshotPayload,
   })
 }
@@ -92,15 +92,16 @@ function toDiagnosticsSnapshot(diagnostics: TurnOutputDiagnostics): Record<strin
   }
 }
 
-function toReplayBufferSnapshot(runId: string): Record<string, unknown> {
-  const summary = getActiveRunReplayBufferSummary(runId)
+function toStreamPublicationSnapshot(runId: string): Record<string, unknown> {
+  const summary = getActiveRunStreamPublicationSummary(runId)
   if (!summary) {
     return { runId, active: false }
   }
   return {
     runId: summary.runId,
     active: true,
-    chunkCount: summary.chunkCount,
+    latestCursor: summary.latestCursor,
+    publishedChunkCount: summary.publishedChunkCount,
     textDeltaCount: summary.textDeltaCount,
     reasoningDeltaCount: summary.reasoningDeltaCount,
     toolInputDeltaCount: summary.toolInputDeltaCount,

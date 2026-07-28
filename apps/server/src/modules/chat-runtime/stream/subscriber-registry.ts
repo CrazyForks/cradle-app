@@ -14,9 +14,9 @@ export type ChunkSubscriber = (chunk: UIMessageChunk, terminal: boolean) => void
  *  - publish fans out to every subscriber, drops subscribers that throw, and
  *    clears the key on terminal publish or once the set is empty.
  *
- * Replay buffering is owned by callers (the active-run buffer for run streams,
- * ProviderThreadStreamState for provider threads); this registry only owns the
- * subscriber fanout.
+ * Bootstrap state is owned by callers (the current snapshot for active runs,
+ * ProviderThreadStreamState replay for provider threads); this registry only
+ * owns subscriber fanout.
  */
 export interface SubscriberRegistry {
   subscribe: (key: string, subscriber: ChunkSubscriber) => () => void

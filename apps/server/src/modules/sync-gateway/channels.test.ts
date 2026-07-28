@@ -8,7 +8,7 @@ import {
 } from '../chat-runtime/run/final-message-projection'
 import type { ActiveRun } from '../chat-runtime/run-registry'
 import { runRegistry } from '../chat-runtime/run-registry'
-import { createRunChunkLog } from '../chat-runtime/stream/run-chunk-log'
+import { createRunChunkSequencer } from '../chat-runtime/stream/run-chunk-sequencer'
 import { attachSyncSubscription } from './channels'
 
 function createActiveRun(): ActiveRun {
@@ -29,7 +29,7 @@ function createActiveRun(): ActiveRun {
       providerStateSnapshot: null,
     },
     modelId: null,
-    runChunkLog: createRunChunkLog('run-1', 2),
+    runChunkSequencer: createRunChunkSequencer('run-1'),
     pendingDeltaChunk: null,
     pendingDeltaFlushTimer: null,
     snapshotTimer: null,
@@ -46,7 +46,7 @@ function createActiveRun(): ActiveRun {
 
 function publish(run: ActiveRun, chunk: UIMessageChunk): void {
   projectFinalMessageChunk(run, chunk)
-  run.runChunkLog.append(chunk, false)
+  run.runChunkSequencer.publish(chunk, false)
 }
 
 afterEach(() => {
@@ -54,7 +54,7 @@ afterEach(() => {
 })
 
 describe('run chunk sync recovery', () => {
-  it('recovers an evicted replay from a snapshot and continues with live chunks', () => {
+  it('bootstraps from a current snapshot and continues with live chunks', () => {
     const run = createActiveRun()
     publish(run, { type: 'start', messageId: run.messageId })
     publish(run, { type: 'text-start', id: 'text-1' })

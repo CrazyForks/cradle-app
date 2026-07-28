@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import type { ActiveRun } from '../run-registry'
-import { createActiveRunChunkLog } from '../stream/run-chunk-log'
+import { createRunChunkSequencer } from '../stream/run-chunk-sequencer'
 import { createFinalMessageProjectionState } from './final-message-projection'
 
 const { commitSessionEventsWithProjection, readRunWriteFence } = vi.hoisted(() => ({
@@ -39,7 +39,7 @@ function activeRun(): ActiveRun {
       providerStateSnapshot: null,
     },
     modelId: null,
-    runChunkLog: createActiveRunChunkLog('run-1'),
+    runChunkSequencer: createRunChunkSequencer('run-1'),
     pendingDeltaChunk: null,
     pendingDeltaFlushTimer: null,
     snapshotTimer: null,

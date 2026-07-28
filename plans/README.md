@@ -188,7 +188,7 @@ Ordered by leverage (security/correctness first, structural refactors last).
 | 068  | Split claude-agent provider.ts into an owner directory + declaration-extractor re-justification | P2 | L | 065, 066, 067 | DONE |
 | 069  | Demote the claude-agent state snapshot to a checkpoint; rebuild the UI activity feed from authoritative history | P2 | XL | 065, 066 (coordinate with 050, 061) | BLOCKED (SDK transcripts are pruned and omit provider activity facts; re-plan over Cradle `session_events`) |
 | 070  | Test the Claude Agent provider against the real wire via a shared model-api-simulator harness | P1 | L | 065, 066 | DONE |
-| 071  | Eliminate active-run replay retention and recover from snapshots | P0 | M | — (supersedes Plan 054 replay retention only) | TODO |
+| 071  | Eliminate active-run replay retention and recover from snapshots | P0 | M | — (supersedes Plan 054 replay retention only) | DONE |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED (one-line rationale).
 

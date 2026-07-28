@@ -604,7 +604,7 @@ function recordRunCompletion(
       providerTargetId: activeRun.providerTargetId,
       modelId: activeRun.modelId,
       terminalStatus: activeRun.terminalStatus,
-      replayChunkCount: activeRun.runChunkLog.readRetainedEntries().length,
+      publishedChunkCount: activeRun.runChunkSequencer.readPublicationSummary().publishedChunkCount,
       finalPartCount: activeRun.finalMessage.parts.length,
     },
     diagnostics,

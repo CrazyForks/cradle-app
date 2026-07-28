@@ -220,6 +220,10 @@ export function openBufferedChunkStream(input: BufferedChunkStreamInput): Readab
         scheduleFlush()
       }
 
+      if (!input.terminal && !input.shouldCloseWithoutSubscriber) {
+        unsubscribe = input.subscribe((chunk, terminal) => writeChunk(chunk, terminal))
+      }
+
       for (const chunk of input.replayChunks) {
         const terminal = isTerminalUIMessageChunk(chunk)
         writeChunk(chunk, terminal)
@@ -233,10 +237,7 @@ export function openBufferedChunkStream(input: BufferedChunkStreamInput): Readab
 
       if (input.terminal || input.shouldCloseWithoutSubscriber) {
         closeStream(true)
-        return
       }
-
-      unsubscribe = input.subscribe((chunk, terminal) => writeChunk(chunk, terminal))
     },
     cancel: () => {
       closed = true

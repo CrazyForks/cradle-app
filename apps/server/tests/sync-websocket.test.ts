@@ -12,10 +12,13 @@ import { createServerApp } from '../src/app'
 import { db, shutdownInfra } from '../src/infra'
 import { publishSessionTailEvents } from '../src/modules/chat-runtime/es/event-tail'
 import type { StoredChatSessionEvent } from '../src/modules/chat-runtime/es/events'
-import { createFinalMessageProjectionState } from '../src/modules/chat-runtime/run/final-message-projection'
+import {
+  createFinalMessageProjectionState,
+  projectFinalMessageChunk,
+} from '../src/modules/chat-runtime/run/final-message-projection'
 import type { ActiveRun } from '../src/modules/chat-runtime/run-registry'
 import { runRegistry } from '../src/modules/chat-runtime/run-registry'
-import { createRunChunkLog } from '../src/modules/chat-runtime/stream/run-chunk-log'
+import { createRunChunkSequencer } from '../src/modules/chat-runtime/stream/run-chunk-sequencer'
 
 type ElysiaApp = Awaited<ReturnType<typeof createServerApp>>
 
@@ -145,6 +148,44 @@ function waitForSyncFrame(socket: WebSocket, timeoutMs = 5000): Promise<z.infer<
   })
 }
 
+function waitForSyncFrames(
+  socket: WebSocket,
+  count: number,
+  timeoutMs = 5000,
+): Promise<z.infer<typeof SyncServerFrameSchema>[]> {
+  return new Promise((resolve, reject) => {
+    const frames: z.infer<typeof SyncServerFrameSchema>[] = []
+    const timer = setTimeout(() => {
+      cleanup()
+      reject(new Error(`Timed out waiting for ${count} sync frames`))
+    }, timeoutMs)
+
+    const onMessage = (data: WebSocket.RawData) => {
+      try {
+        const frame = SyncServerFrameSchema.parse(JSON.parse(String(data)))
+        if ('op' in frame && frame.op === 'pong') {
+          return
+        }
+        frames.push(frame)
+        if (frames.length === count) {
+          cleanup()
+          resolve(frames)
+        }
+      }
+      catch {
+        // ignore unrelated frames
+      }
+    }
+
+    const cleanup = () => {
+      clearTimeout(timer)
+      socket.off('message', onMessage)
+    }
+
+    socket.on('message', onMessage)
+  })
+}
+
 async function startTestServer(): Promise<{ app: ElysiaApp, baseUrl: string }> {
   const app = await createServerApp({ startBackgroundTasks: false })
   const port = await getAvailablePort()
@@ -179,7 +220,7 @@ function registerActiveRun(sessionId: string, runId: string): ActiveRun {
     runtime: {} as ActiveRun['runtime'],
     runtimeSession: { runtimeKind: 'standard', providerSessionId: null } as ActiveRun['runtimeSession'],
     modelId: null,
-    runChunkLog: createRunChunkLog(runId, 100),
+    runChunkSequencer: createRunChunkSequencer(runId),
     pendingDeltaChunk: null,
     pendingDeltaFlushTimer: null,
     snapshotTimer: null,
@@ -195,6 +236,17 @@ function registerActiveRun(sessionId: string, runId: string): ActiveRun {
   runRegistry.setActiveRun(runId, activeRun)
   runRegistry.setActiveRunIdForSession(sessionId, runId)
   return activeRun
+}
+
+function publishRunChunk(
+  activeRun: ActiveRun,
+  chunk: Parameters<typeof projectFinalMessageChunk>[1],
+  terminal = false,
+): void {
+  if (!terminal) {
+    projectFinalMessageChunk(activeRun, chunk)
+  }
+  activeRun.runChunkSequencer.publish(chunk, terminal)
 }
 
 describe('sync websocket', () => {
@@ -280,7 +332,7 @@ describe('sync websocket', () => {
       const runId = 'run-sync-1'
       seedSession(sessionId)
       const activeRun = registerActiveRun(sessionId, runId)
-      activeRun.runChunkLog.append({ type: 'start', messageId: activeRun.messageId }, false)
+      publishRunChunk(activeRun, { type: 'start', messageId: activeRun.messageId })
 
       const firstSocket = await openSyncSocket(toWebSocketUrl(baseUrl, '/sync'))
       const firstFrame = waitForSyncFrame(firstSocket)
@@ -298,11 +350,22 @@ describe('sync websocket', () => {
       })
       firstSocket.close()
 
-      activeRun.runChunkLog.append({
+      publishRunChunk(activeRun, {
+        type: 'tool-input-available',
+        toolCallId: 'tool-1',
+        toolName: 'search',
+        input: { query: 'memory' },
+      })
+      publishRunChunk(activeRun, {
+        type: 'tool-output-available',
+        toolCallId: 'tool-1',
+        output: 'old',
+      })
+      publishRunChunk(activeRun, {
         type: 'tool-output-available',
         toolCallId: 'tool-1',
         output: 'done',
-      }, false)
+      })
 
       const secondSocket = await openSyncSocket(toWebSocketUrl(baseUrl, '/sync'))
       const resumedFrame = waitForSyncFrame(secondSocket)
@@ -316,17 +379,32 @@ describe('sync websocket', () => {
       await expect(resumedFrame).resolves.toMatchObject({
         kind: 'chunk',
         runId,
-        cursor: 1,
-        chunk: { type: 'tool-output-available', toolCallId: 'tool-1' },
+        cursor: 3,
+        chunk: {
+          type: 'data-cradle-stream-snapshot',
+          data: {
+            cursor: 3,
+            snapshot: {
+              message: {
+                parts: [{
+                  type: 'tool-search',
+                  toolCallId: 'tool-1',
+                  state: 'output-available',
+                  output: 'done',
+                }],
+              },
+            },
+          },
+        },
         replay: true,
       })
 
       const terminalFrame = waitForSyncFrame(secondSocket)
-      activeRun.runChunkLog.append({ type: 'finish', finishReason: 'stop' }, true)
+      publishRunChunk(activeRun, { type: 'finish', finishReason: 'stop' }, true)
       await expect(terminalFrame).resolves.toMatchObject({
         kind: 'chunk',
         runId,
-        cursor: 2,
+        cursor: 4,
         terminal: true,
         replay: false,
       })
@@ -349,22 +427,31 @@ describe('sync websocket', () => {
       const activeRun = registerActiveRun(sessionId, runId)
 
       const socket = await openSyncSocket(toWebSocketUrl(baseUrl, '/sync'))
-      const ackFrame = waitForSyncFrame(socket)
+      const bootstrapFrames = waitForSyncFrames(socket, 2)
       socket.send(JSON.stringify({
         op: 'sub',
         subId: 'run-empty-sub',
         channel: 'run-chunks',
         sessionId,
       }))
-      await expect(ackFrame).resolves.toMatchObject({
-        kind: 'sub-ack',
-        channel: 'run-chunks',
-        runId,
-        cursor: -1,
-      })
+      await expect(bootstrapFrames).resolves.toMatchObject([
+        {
+          kind: 'chunk',
+          runId,
+          cursor: -1,
+          replay: true,
+          chunk: { type: 'data-cradle-stream-snapshot' },
+        },
+        {
+          kind: 'sub-ack',
+          channel: 'run-chunks',
+          runId,
+          cursor: -1,
+        },
+      ])
 
       const liveFrame = waitForSyncFrame(socket)
-      activeRun.runChunkLog.append({ type: 'start', messageId: activeRun.messageId }, false)
+      publishRunChunk(activeRun, { type: 'start', messageId: activeRun.messageId })
       await expect(liveFrame).resolves.toMatchObject({
         kind: 'chunk',
         runId,

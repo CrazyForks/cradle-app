@@ -10,7 +10,7 @@ import {
   subscribeChatGlobalSessionTail,
   subscribeChatSessionTail,
 } from '../chat-runtime/es/event-tail'
-import type { SequencedRunChunk } from '../chat-runtime/stream/run-chunk-log'
+import type { SequencedRunChunk } from '../chat-runtime/stream/run-chunk-sequencer'
 import {
   openSessionRunChunkSubscription,
 } from '../chat-runtime/stream/session-run-chunk-sync'
@@ -134,65 +134,27 @@ function attachRunChunks(
     sender.end('not-found')
     return () => {}
   }
-  if (subscription.kind === 'recovery') {
-    sender.send({
-      subId: frame.subId,
-      kind: 'chunk',
-      runId: subscription.runId,
-      cursor: subscription.cursor,
-      chunk: subscription.chunk,
-      terminal: false,
-      replay: true,
-    })
-    sender.send({
-      subId: frame.subId,
-      kind: 'sub-ack',
-      channel: 'run-chunks',
-      runId: subscription.runId,
-      cursor: subscription.cursor,
-    })
-    replaying = false
-    for (const item of queuedLiveItems) {
-      if (item.cursor > subscription.cursor) {
-        sendLiveItem(item)
-      }
-    }
-    return subscription.unsubscribe
-  }
-  const { replay } = subscription
-  for (const item of replay.items) {
-    sender.send({
-      subId: frame.subId,
-      kind: 'chunk',
-      runId: item.runId,
-      cursor: item.cursor,
-      chunk: item.chunk,
-      terminal: item.terminal,
-      replay: true,
-    })
-    if (item.terminal) {
-      sender.send({
-        subId: frame.subId,
-        kind: 'sub-ack',
-        channel: 'run-chunks',
-        runId: item.runId,
-        cursor: item.cursor,
-      })
-      sender.end('terminal')
-      subscription.unsubscribe()
-      return () => {}
-    }
-  }
+  sender.send({
+    subId: frame.subId,
+    kind: 'chunk',
+    runId: subscription.runId,
+    cursor: subscription.cursor,
+    chunk: subscription.chunk,
+    terminal: false,
+    replay: true,
+  })
   sender.send({
     subId: frame.subId,
     kind: 'sub-ack',
     channel: 'run-chunks',
-    runId: replay.runId,
-    cursor: replay.cursor,
+    runId: subscription.runId,
+    cursor: subscription.cursor,
   })
   replaying = false
   for (const item of queuedLiveItems) {
-    sendLiveItem(item)
+    if (item.cursor > subscription.cursor) {
+      sendLiveItem(item)
+    }
   }
   return subscription.unsubscribe
 }

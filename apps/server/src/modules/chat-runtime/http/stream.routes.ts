@@ -39,7 +39,7 @@ export const chatRuntimeStreamRoutes = new Elysia({
         responses: {
           200: {
             description:
-              'AI SDK UIMessageChunk SSE stream for the currently active chat run. The stream replays buffered protocol chunks before forwarding live chunks, so late subscribers can rebuild the active assistant message through the AI SDK stream reader.',
+              'AI SDK UIMessageChunk SSE stream for the currently active chat run. The stream sends one transient current-state snapshot before forwarding live chunks, so late subscribers can rebuild the active assistant message without retained chunk history.',
             content: {
               'text/event-stream': {
                 schema: {

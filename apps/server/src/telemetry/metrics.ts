@@ -16,10 +16,10 @@ export interface ServerProcessMetricSnapshot {
 
 export interface ChatRuntimeMetricSnapshot {
   activeRunsByRuntimeKind: Record<string, number>
-  replayBufferChunksByRuntimeKind: Record<string, number>
-  replayTextDeltasByRuntimeKind: Record<string, number>
-  replayReasoningDeltasByRuntimeKind: Record<string, number>
-  replayToolDeltasByRuntimeKind: Record<string, number>
+  publishedChunksByRuntimeKind: Record<string, number>
+  publishedTextDeltasByRuntimeKind: Record<string, number>
+  publishedReasoningDeltasByRuntimeKind: Record<string, number>
+  publishedToolDeltasByRuntimeKind: Record<string, number>
 }
 
 export interface ProviderRuntimeMetricSnapshot {
@@ -153,26 +153,26 @@ export function initializeCradleMetrics(): void {
     }
   })
 
-  const replayBufferGauge = meter.createObservableGauge('cradle_chat_replay_buffer_chunks', {
-    description: 'Current active chat replay buffer chunks grouped by runtime kind.',
+  const publishedChunksGauge = meter.createObservableGauge('cradle_chat_stream_published_chunks', {
+    description: 'Chunks published by current active chat runs grouped by runtime kind.',
   })
-  replayBufferGauge.addCallback((result) => {
-    for (const [runtimeKind, count] of Object.entries(chatRuntimeSnapshot?.replayBufferChunksByRuntimeKind ?? {})) {
+  publishedChunksGauge.addCallback((result) => {
+    for (const [runtimeKind, count] of Object.entries(chatRuntimeSnapshot?.publishedChunksByRuntimeKind ?? {})) {
       result.observe(count, { runtime_kind: runtimeKind })
     }
   })
 
-  const replayBufferDeltaGauge = meter.createObservableGauge('cradle_chat_replay_buffer_deltas', {
-    description: 'Current active chat replay buffer delta counts grouped by runtime kind and delta kind.',
+  const publishedDeltasGauge = meter.createObservableGauge('cradle_chat_stream_published_deltas', {
+    description: 'Deltas published by current active chat runs grouped by runtime kind and delta kind.',
   })
-  replayBufferDeltaGauge.addCallback((result) => {
-    for (const [runtimeKind, count] of Object.entries(chatRuntimeSnapshot?.replayTextDeltasByRuntimeKind ?? {})) {
+  publishedDeltasGauge.addCallback((result) => {
+    for (const [runtimeKind, count] of Object.entries(chatRuntimeSnapshot?.publishedTextDeltasByRuntimeKind ?? {})) {
       result.observe(count, { runtime_kind: runtimeKind, kind: 'text' })
     }
-    for (const [runtimeKind, count] of Object.entries(chatRuntimeSnapshot?.replayReasoningDeltasByRuntimeKind ?? {})) {
+    for (const [runtimeKind, count] of Object.entries(chatRuntimeSnapshot?.publishedReasoningDeltasByRuntimeKind ?? {})) {
       result.observe(count, { runtime_kind: runtimeKind, kind: 'reasoning' })
     }
-    for (const [runtimeKind, count] of Object.entries(chatRuntimeSnapshot?.replayToolDeltasByRuntimeKind ?? {})) {
+    for (const [runtimeKind, count] of Object.entries(chatRuntimeSnapshot?.publishedToolDeltasByRuntimeKind ?? {})) {
       result.observe(count, { runtime_kind: runtimeKind, kind: 'tool' })
     }
   })

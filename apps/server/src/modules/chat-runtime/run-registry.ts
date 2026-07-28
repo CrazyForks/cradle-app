@@ -3,7 +3,7 @@ import type { UIMessage, UIMessageChunk } from 'ai'
 import type { FinalMessageProjectionState } from './run/final-message-projection'
 import type { ChatMessageStatus } from './run/stream-chunks'
 import type { ChatRuntime, RuntimeSession, RuntimeSettings, TokenUsage } from './runtime-provider-types'
-import type { RunChunkLog } from './stream/run-chunk-log'
+import type { RunChunkSequencer } from './stream/run-chunk-sequencer'
 
 export type TerminalChatMessageStatus = Exclude<ChatMessageStatus, 'streaming'>
 
@@ -23,7 +23,7 @@ export interface ActiveRun {
   runtime: ChatRuntime
   runtimeSession: RuntimeSession
   modelId: string | null
-  runChunkLog: RunChunkLog
+  runChunkSequencer: RunChunkSequencer
   pendingDeltaChunk: UIMessageChunk | null
   pendingDeltaFlushTimer: ReturnType<typeof setTimeout> | null
   snapshotTimer: ReturnType<typeof setInterval> | null
@@ -44,7 +44,7 @@ export interface ActiveRun {
   runSnapshotId?: string | null
   runSnapshotSeq: number
   /**
-   * Coalesce key (mirrors {@link readReplayCoalesceKey}) -> durable snapshot
+   * Coalesce key (mirrors {@link readSnapshotEventCoalesceKey}) -> durable snapshot
    * event id + how many times it has been coalesced. Lets repeated chunks for
    * the same logical event (e.g. a tool output pushed thousands of times by a
    * misbehaving provider) update one row instead of appending a new row per push.

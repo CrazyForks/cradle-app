@@ -9,7 +9,7 @@ import {
   updateRunSnapshotEventPayload,
 } from '../run-snapshot'
 import type { TerminalChatMessageStatus } from './stream-chunks'
-import { readReplayCoalesceKey, readTerminalStatus } from './stream-chunks'
+import { readSnapshotEventCoalesceKey, readTerminalStatus } from './stream-chunks'
 
 const SNAPSHOT_EVENTS_TRUNCATED_PHASE = 'snapshot_events_truncated'
 /** Phases that must always be recorded even after the per-run event cap is hit. */
@@ -113,10 +113,9 @@ export function recordActiveRunSnapshotEvent(
   const chunk = input.chunk
   const payload = input.payload ?? (chunk ? summarizeSnapshotChunk(chunk, input.truncatePayload) : {})
 
-  // Coalesce repeated chunks for the same logical event (e.g. a tool output
-  // re-pushed by the runtime) onto one row, mirroring the replay buffer's
-  // `readReplayCoalesceKey` semantics instead of appending a row per push.
-  const coalesceKey = chunk ? readReplayCoalesceKey(chunk) : null
+  // Coalesce repeated chunks for the same logical durable snapshot event
+  // instead of appending a row per provider push.
+  const coalesceKey = chunk ? readSnapshotEventCoalesceKey(chunk) : null
   const existingCoalesce = coalesceKey ? activeRun.snapshotEventIdByCoalesceKey.get(coalesceKey) : undefined
   if (existingCoalesce) {
     existingCoalesce.coalescedCount += 1
@@ -217,7 +216,7 @@ export function finalizeActiveRunSnapshot(
     modelId: string | null
     diagnostics: Record<string, unknown>
     profile: RuntimeProfileSummaryInput
-    replayBuffer: Record<string, unknown>
+    streamPublications: Record<string, unknown>
     truncatePayload: (value: unknown) => unknown
   },
 ): void {
@@ -244,7 +243,7 @@ export function finalizeActiveRunSnapshot(
     payload: {
       status,
       terminalChunk: summarizeSnapshotChunk(finalChunk, input.truncatePayload),
-      replayBuffer: input.replayBuffer,
+      streamPublications: input.streamPublications,
       diagnostics: input.diagnostics,
       profile: profileSummary,
     },
@@ -260,7 +259,7 @@ export function finalizeActiveRunSnapshot(
     summary: {
       diagnostics: input.diagnostics,
       profile: profileSummary,
-      replayBuffer: input.replayBuffer,
+      streamPublications: input.streamPublications,
     },
   })
 }

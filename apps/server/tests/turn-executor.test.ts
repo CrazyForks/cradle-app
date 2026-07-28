@@ -14,7 +14,7 @@ import type { TurnExecutorDeps } from '../src/modules/chat-runtime/run/turn-exec
 import { executeRun } from '../src/modules/chat-runtime/run/turn-executor'
 import type { ActiveRun } from '../src/modules/chat-runtime/run-registry'
 import type { ChatRuntime } from '../src/modules/chat-runtime/runtime-provider-types'
-import { createRunChunkLog } from '../src/modules/chat-runtime/stream/run-chunk-log'
+import { createRunChunkSequencer } from '../src/modules/chat-runtime/stream/run-chunk-sequencer'
 import { insertMessageFixtures } from './helpers/message-fixture'
 
 async function withTempDataDir<T>(callback: () => Promise<T> | T): Promise<T> {
@@ -58,7 +58,7 @@ function createActiveRun(input: {
       providerStateSnapshot: null,
     } as ActiveRun['runtimeSession'],
     modelId: 'gpt-4o-mini',
-    runChunkLog: createRunChunkLog(input.runId, 100),
+    runChunkSequencer: createRunChunkSequencer(input.runId),
     pendingDeltaChunk: null,
     pendingDeltaFlushTimer: null,
     snapshotTimer: null,

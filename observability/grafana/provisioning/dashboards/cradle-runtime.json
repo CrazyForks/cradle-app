@@ -1165,13 +1165,13 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (runtime_kind) (cradle_chat_replay_buffer_chunks{job=~\"$job\", instance=~\"$instance\", runtime_kind=~\"$runtime_kind\"})",
+          "expr": "sum by (runtime_kind) (cradle_chat_stream_published_chunks{job=~\"$job\", instance=~\"$instance\", runtime_kind=~\"$runtime_kind\"})",
           "legendFormat": "{{runtime_kind}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Replay Buffer Chunks",
+      "title": "Published Stream Chunks",
       "type": "timeseries"
     },
     {
@@ -1226,13 +1226,13 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (runtime_kind, kind) (cradle_chat_replay_buffer_deltas{job=~\"$job\", instance=~\"$instance\", runtime_kind=~\"$runtime_kind\"})",
+          "expr": "sum by (runtime_kind, kind) (cradle_chat_stream_published_deltas{job=~\"$job\", instance=~\"$instance\", runtime_kind=~\"$runtime_kind\"})",
           "legendFormat": "{{runtime_kind}} {{kind}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Replay Deltas",
+      "title": "Published Stream Deltas",
       "type": "timeseries"
     },
     {

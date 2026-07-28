@@ -55,24 +55,19 @@ export function openRunEventStream(runId: string): ReadableStream<Uint8Array> {
   }
   const active = runRegistry.getActiveRun(runId)
   const orphanedWhileStreaming = run.status === 'streaming' && !active
-  const replay = active?.runChunkLog.replayAfter()
-  const replayUnavailable = replay?.kind === 'snapshot-required'
-  const recoveryChunk = active && replayUnavailable
+  const recoveryChunk = active
     ? createUIMessageStreamSnapshotChunk({
         runId,
-        cursor: active.runChunkLog.readLatestCursor(),
+        cursor: active.runChunkSequencer.readLatestCursor(),
         target: { message: active.finalMessage, state: active.finalProjection },
       })
     : null
-  const replayChunks = replay?.kind === 'ready'
-    ? replay.items.map(item => item.chunk)
-    : []
   return openBufferedChunkStream({
     replayChunks: orphanedWhileStreaming
       ? [createRunInterruptedChunk()]
       : recoveryChunk
         ? [recoveryChunk]
-        : replayChunks,
+        : [],
     terminal: run.status !== 'streaming' || !active,
     coalesceMaxChars: readPositiveIntegerEnv(
       'CRADLE_CHAT_RUN_DELTA_FLUSH_CHARS',

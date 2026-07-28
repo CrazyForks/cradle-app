@@ -14,6 +14,11 @@ import {
   sessions,
   workspaces,
 } from '@cradle/db'
+import {
+  applyUIMessageChunk,
+  createUIMessageStreamState,
+  isUIMessageStreamSnapshotChunk,
+} from '@cradleapp/ai-sdk'
 import type { UIMessage, UIMessageChunk } from 'ai'
 import { eq, sql } from 'drizzle-orm'
 import { describe, expect, it, vi } from 'vitest'
@@ -37,7 +42,7 @@ import {
 } from '../src/modules/chat-runtime/message-payload-store'
 import {
   flushAllActiveRunSnapshots,
-  getActiveRunReplayBufferSummary,
+  getActiveRunStreamPublicationSummary,
   getActiveSessionRun,
   recoverPersistedRunProjections,
   reportRuntimeSessionTitle,
@@ -5067,7 +5072,10 @@ describe('chat runtime capability', () => {
           'finish',
         ]),
       )
-      expect(chunks[0]).toEqual(expect.objectContaining({ type: 'start' }))
+      expect(chunks[0]).toEqual(expect.objectContaining({
+        type: 'data-cradle-stream-snapshot',
+        transient: true,
+      }))
       expect(chunks.at(-1)).toEqual(
         expect.objectContaining({ type: 'finish', finishReason: 'stop' }),
       )
@@ -5357,11 +5365,27 @@ describe('chat runtime capability', () => {
       runtime.finishSyntheticTurn()
       await runtime.syntheticSettled
       const syntheticChunks = await syntheticChunksPromise
-      expect(syntheticChunks).toEqual(expect.arrayContaining([
-        expect.objectContaining({ type: 'start' }),
-        expect.objectContaining({ type: 'text-delta', delta: 'Background agent report' }),
+      expect(syntheticChunks[0]).toEqual(expect.objectContaining({
+        type: 'data-cradle-stream-snapshot',
+        transient: true,
+      }))
+      const syntheticTarget = {
+        message: { id: 'synthetic-message', role: 'assistant', parts: [] } satisfies UIMessage,
+        state: createUIMessageStreamState(),
+      }
+      for (const chunk of syntheticChunks) {
+        applyUIMessageChunk(syntheticTarget, chunk)
+      }
+      expect(
+        syntheticTarget.message.parts
+          .filter((part): part is Extract<UIMessage['parts'][number], { type: 'text' }> =>
+            part.type === 'text')
+          .map(part => part.text)
+          .join(''),
+      ).toBe('Background agent report')
+      expect(syntheticChunks.at(-1)).toEqual(
         expect.objectContaining({ type: 'finish', finishReason: 'stop' }),
-      ]))
+      )
 
       await waitForCondition(async () => {
         const messageRows = await getChatMessages(app!, 'session-chat-main-synthetic-turn')
@@ -5401,7 +5425,7 @@ describe('chat runtime capability', () => {
     }
   })
 
-  it('replays buffered AI SDK chunks when joining an active session stream', async () => {
+  it('bootstraps an active session stream from a snapshot and continues live', async () => {
     const dataDir = makeTempDir('cradle-data-')
     const workspaceRoot = makeTempDir('cradle-workspace-')
     const previousDataDir = process.env.CRADLE_DATA_DIR
@@ -5465,15 +5489,26 @@ describe('chat runtime capability', () => {
       expect(joinRes.status).toBe(200)
 
       const chunks = await collectSseChunks(joinRes)
-      const textDeltas = chunks
-        .filter(
-          (chunk): chunk is UIMessageChunk & { type: 'text-delta', delta: string } =>
-            chunk.type === 'text-delta',
-        )
-        .map(chunk => chunk.delta)
+      expect(chunks[0]).toEqual(expect.objectContaining({
+        type: 'data-cradle-stream-snapshot',
+        transient: true,
+      }))
+      expect(isUIMessageStreamSnapshotChunk(chunks[0]!)).toBe(true)
 
-      expect(chunks[0]).toEqual(expect.objectContaining({ type: 'start' }))
-      expect(textDeltas.join('')).toBe('Hello joined stream')
+      const target = {
+        message: { id: 'joined-message', role: 'assistant', parts: [] } satisfies UIMessage,
+        state: createUIMessageStreamState(),
+      }
+      for (const chunk of chunks) {
+        applyUIMessageChunk(target, chunk)
+      }
+      expect(
+        target.message.parts
+          .filter((part): part is Extract<UIMessage['parts'][number], { type: 'text' }> =>
+            part.type === 'text')
+          .map(part => part.text)
+          .join(''),
+      ).toBe('Hello joined stream')
       expect(chunks.at(-1)).toEqual(expect.objectContaining({ type: 'finish' }))
 
       await runChunksPromise
@@ -5545,7 +5580,7 @@ describe('chat runtime capability', () => {
       const run = await waitForBackendRunStatus('session-chat-active-snapshot', 'streaming')
 
       await waitForCondition(() => {
-        const summary = getActiveRunReplayBufferSummary(run.id)
+        const summary = getActiveRunStreamPublicationSummary(run.id)
         expect(summary?.textDeltaCount).toBe(1)
         return summary
       }, 'active snapshot replay text delta')
@@ -6782,7 +6817,7 @@ describe('chat runtime capability', () => {
     }
   })
 
-  it('coalesces high-frequency replay deltas for active session stream joins', async () => {
+  it('coalesces high-frequency runtime deltas before live publication', async () => {
     const dataDir = makeTempDir('cradle-data-')
     const workspaceRoot = makeTempDir('cradle-workspace-')
     const previousDataDir = process.env.CRADLE_DATA_DIR
@@ -6835,7 +6870,7 @@ describe('chat runtime capability', () => {
         new Request('http://localhost/chat/sessions/session-chat-coalesced-replay/response', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ text: 'Replay many deltas', modelId: 'gpt-4o-mini' }),
+          body: JSON.stringify({ text: 'Publish many deltas', modelId: 'gpt-4o-mini' }),
         }),
       )
       expect(runRes.status).toBe(200)
@@ -6852,12 +6887,12 @@ describe('chat runtime capability', () => {
           .from(backendRuns)
           .where(eq(backendRuns.chatSessionId, 'session-chat-coalesced-replay'))
           .get()
-        const summary = run ? getActiveRunReplayBufferSummary(run.id) : null
+        const summary = run ? getActiveRunStreamPublicationSummary(run.id) : null
         expect(summary?.textDeltaCount).toBe(1)
         return summary
-      }, 'coalesced replay buffer')
+      }, 'coalesced stream publications')
 
-      expect(activeRun?.chunkCount).toBeLessThan(10)
+      expect(activeRun?.publishedChunkCount).toBeLessThan(10)
       expect(activeRun?.textDeltaCount).toBe(1)
 
       releaseCompletion()
@@ -6898,7 +6933,7 @@ describe('chat runtime capability', () => {
     }
   })
 
-  it('segments replay delta coalescing before strings grow too large', async () => {
+  it('segments live delta coalescing before strings grow too large', async () => {
     const dataDir = makeTempDir('cradle-data-')
     const workspaceRoot = makeTempDir('cradle-workspace-')
     const previousDataDir = process.env.CRADLE_DATA_DIR
@@ -6951,7 +6986,7 @@ describe('chat runtime capability', () => {
         new Request('http://localhost/chat/sessions/session-chat-segmented-replay/response', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ text: 'Segment replay deltas', modelId: 'gpt-4o-mini' }),
+          body: JSON.stringify({ text: 'Segment live deltas', modelId: 'gpt-4o-mini' }),
         }),
       )
       expect(runRes.status).toBe(200)
@@ -6968,11 +7003,11 @@ describe('chat runtime capability', () => {
           .from(backendRuns)
           .where(eq(backendRuns.chatSessionId, 'session-chat-segmented-replay'))
           .get()
-        const summary = run ? getActiveRunReplayBufferSummary(run.id) : null
+        const summary = run ? getActiveRunStreamPublicationSummary(run.id) : null
         expect(summary?.textDeltaCount).toBeGreaterThan(1)
         expect(summary?.maxDeltaChars).toBeLessThanOrEqual(16)
         return summary
-      }, 'segmented replay buffer')
+      }, 'segmented stream publications')
 
       expect(activeRun?.textDeltaCount).toBeLessThanOrEqual(80)
       expect(activeRun?.maxDeltaChars).toBeLessThanOrEqual(16)
@@ -7006,7 +7041,7 @@ describe('chat runtime capability', () => {
     }
   })
 
-  it('keeps replay buffers bounded across concurrent active session streams', async () => {
+  it('reports scalar publications across concurrent active session streams', async () => {
     const dataDir = makeTempDir('cradle-data-')
     const workspaceRoot = makeTempDir('cradle-workspace-')
     const previousDataDir = process.env.CRADLE_DATA_DIR
@@ -7068,7 +7103,7 @@ describe('chat runtime capability', () => {
             new Request(`http://localhost/chat/sessions/${sessionId}/response`, {
               method: 'POST',
               headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ text: 'Concurrent replay pressure', modelId: 'gpt-4o-mini' }),
+              body: JSON.stringify({ text: 'Concurrent stream publications', modelId: 'gpt-4o-mini' }),
             }),
           )),
       )
@@ -7082,11 +7117,11 @@ describe('chat runtime capability', () => {
         expect(runs.filter(run => sessionIds.includes(run.chatSessionId)).length).toBe(3)
 
         for (const run of runs.filter(run => sessionIds.includes(run.chatSessionId))) {
-          const summary = getActiveRunReplayBufferSummary(run.id)
+          const summary = getActiveRunStreamPublicationSummary(run.id)
           expect(summary?.textDeltaCount).toBe(1)
-          expect(summary?.chunkCount).toBeLessThan(10)
+          expect(summary?.publishedChunkCount).toBeLessThan(10)
         }
-      }, 'bounded concurrent replay buffers')
+      }, 'concurrent stream publications')
       expect(releaseCompletions).toHaveLength(3)
 
       for (const releaseCompletion of releaseCompletions) {

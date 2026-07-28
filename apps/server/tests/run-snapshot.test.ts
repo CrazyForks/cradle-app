@@ -31,7 +31,7 @@ import {
   getRunSnapshots,
   maintainRunSnapshots,
 } from '../src/modules/chat-runtime/run-snapshot'
-import { createRunChunkLog } from '../src/modules/chat-runtime/stream/run-chunk-log'
+import { createRunChunkSequencer } from '../src/modules/chat-runtime/stream/run-chunk-sequencer'
 
 function restoreEnv(name: string, previousValue: string | undefined): void {
   if (previousValue === undefined) {
@@ -133,7 +133,7 @@ function createActiveRun(input: { runId: string, sessionId: string }): ActiveRun
     runtime: {} as ActiveRun['runtime'],
     runtimeSession: { runtimeKind: 'standard', providerSessionId: null } as ActiveRun['runtimeSession'],
     modelId: 'gpt-4o-mini',
-    runChunkLog: createRunChunkLog(input.runId, 100),
+    runChunkSequencer: createRunChunkSequencer(input.runId),
     pendingDeltaChunk: null,
     pendingDeltaFlushTimer: null,
     snapshotTimer: null,

@@ -241,7 +241,7 @@ export function appendRunSnapshotEvent(
 /**
  * Update an existing snapshot event row in place instead of appending a new
  * row. Used to coalesce repeated chunks for the same logical event (see
- * `readReplayCoalesceKey`) so a misbehaving runtime that re-pushes the same
+ * `readSnapshotEventCoalesceKey`) so a misbehaving runtime that re-pushes the same
  * tool output thousands of times produces one durable row, not thousands.
  */
 export function updateRunSnapshotEventPayload(input: UpdateRunSnapshotEventPayloadInput): void {

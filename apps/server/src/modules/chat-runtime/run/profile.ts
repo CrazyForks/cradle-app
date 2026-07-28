@@ -23,7 +23,7 @@ export interface ChatRuntimeProfileRunSummary {
   providerTargetId: string | null
   modelId: string | null
   terminalStatus: string | undefined
-  replayChunkCount: number
+  publishedChunkCount: number
   finalPartCount: number
 }
 
@@ -85,7 +85,7 @@ export function recordChatRuntimeProfile(input: {
       deltaRss: memoryStarted ? memoryFinished.rss - memoryStarted.rss : null,
     },
     activeRun: {
-      replayChunks: run.replayChunkCount,
+      publishedChunks: run.publishedChunkCount,
       finalParts: run.finalPartCount,
       finalMessageJsonBytes: profile.finalMessageJsonBytes,
     },

@@ -55,7 +55,8 @@ export interface ActiveTurnCompletionDeps {
   ) => Promise<PersistedTerminalChunk>
   publishTerminalNotification: (activeRun: ActiveRun, chunk: UIMessageChunk) => void
   recoverTerminalPersistenceFailure: (activeRun: ActiveRun) => Promise<PersistedTerminalChunk | null>
-  releaseActiveRun: (activeRun: ActiveRun) => void
+  releaseActiveRunClaim: (activeRun: ActiveRun) => void
+  disposeActiveRun: (activeRun: ActiveRun) => void
   performHandoff: (activeRun: ActiveRun, handoff: ActiveTurnHandoff) => void
   recordTerminalPersistenceIncident: (input: {
     activeRun: ActiveRun
@@ -101,7 +102,8 @@ async function performCompletion(
   deps: ActiveTurnCompletionDeps,
 ): Promise<ActiveTurnCompletionResult> {
   let handoffAllowed = false
-  let released = false
+  let claimReleased = false
+  let disposed = false
   try {
     let persistedTerminal: PersistedTerminalChunk
     try {
@@ -146,11 +148,17 @@ async function performCompletion(
 
     // Release the product active-run claim before best-effort work (interrupt, snapshots).
     // Cancel must not keep the session admission lock while waiting on provider control acks.
-    deps.releaseActiveRun(activeRun)
-    released = true
+    deps.releaseActiveRunClaim(activeRun)
+    claimReleased = true
 
     // Notify after release so Stop/UI abort is not gated on interrupt settling.
-    deps.publishTerminalNotification(activeRun, persistedTerminal.notificationChunk)
+    try {
+      deps.publishTerminalNotification(activeRun, persistedTerminal.notificationChunk)
+    }
+    finally {
+      deps.disposeActiveRun(activeRun)
+      disposed = true
+    }
     handoffAllowed = true
 
     try {
@@ -168,8 +176,11 @@ async function performCompletion(
     return { durableTerminal: true, terminalChunk: persistedTerminal.notificationChunk }
   }
   finally {
-    if (!released) {
-      deps.releaseActiveRun(activeRun)
+    if (!claimReleased) {
+      deps.releaseActiveRunClaim(activeRun)
+    }
+    if (!disposed) {
+      deps.disposeActiveRun(activeRun)
     }
     if (handoffAllowed) {
       deps.performHandoff(activeRun, outcome.resolveHandoff?.() ?? { kind: 'queue' })

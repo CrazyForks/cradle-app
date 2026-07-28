@@ -292,16 +292,16 @@ function summarizeBrowserPanelDrilldowns(latestDesktopSample: Record<string, unk
   }
 }
 
-function summarizeReplayDrilldowns(
+function summarizeRunStreamDrilldowns(
   activeRuns: ChatRuntime.ActiveRunSummary[],
-  replayBuffers: ChatRuntime.ActiveRunReplayBufferSummary[],
+  runStreams: ChatRuntime.ActiveRunStreamPublicationSummary[],
 ) {
   const runById = new Map(activeRuns.map(run => [run.runId, run]))
-  return replayBuffers
-    .map((buffer) => {
-      const run = runById.get(buffer.runId)
+  return runStreams
+    .map((stream) => {
+      const run = runById.get(stream.runId)
       return {
-        ...buffer,
+        ...stream,
         sessionId: run?.sessionId ?? null,
         messageId: run?.messageId ?? null,
         providerTargetKind: run?.providerTargetKind ?? null,
@@ -309,7 +309,11 @@ function summarizeReplayDrilldowns(
         modelId: run?.modelId ?? null,
       }
     })
-    .sort((a, b) => b.chunkCount - a.chunkCount || b.maxDeltaChars - a.maxDeltaChars)
+    .sort(
+      (a, b) =>
+        b.publishedChunkCount - a.publishedChunkCount
+        || b.maxDeltaChars - a.maxDeltaChars,
+    )
     .slice(0, TOP_DRILLDOWN_LIMIT)
 }
 
@@ -337,8 +341,8 @@ export async function getRuntimeSnapshot() {
   const health = Health.check()
   const memory = process.memoryUsage()
   const activeRuns = ChatRuntime.listActiveRunSummaries()
-  const replayBuffers = activeRuns
-    .map(run => ChatRuntime.getActiveRunReplayBufferSummary(run.runId))
+  const runStreams = activeRuns
+    .map(run => ChatRuntime.getActiveRunStreamPublicationSummary(run.runId))
     .filter(item => item !== null)
   const providerHosts = providerRuntimeHostManager.listHosts()
   const pty = await Pty.listResources()
@@ -352,22 +356,22 @@ export async function getRuntimeSnapshot() {
   }
 
   const activeRunsByRuntimeKind: Record<string, number> = {}
-  const replayBufferChunksByRuntimeKind: Record<string, number> = {}
-  const replayTextDeltasByRuntimeKind: Record<string, number> = {}
-  const replayReasoningDeltasByRuntimeKind: Record<string, number> = {}
-  const replayToolDeltasByRuntimeKind: Record<string, number> = {}
+  const publishedChunksByRuntimeKind: Record<string, number> = {}
+  const publishedTextDeltasByRuntimeKind: Record<string, number> = {}
+  const publishedReasoningDeltasByRuntimeKind: Record<string, number> = {}
+  const publishedToolDeltasByRuntimeKind: Record<string, number> = {}
   for (const run of activeRuns) {
     const runtimeKind = run.providerTargetKind ?? 'unknown'
     incrementBucket(activeRunsByRuntimeKind, runtimeKind)
-    const replay = replayBuffers.find(item => item.runId === run.runId)
-    if (replay) {
-      incrementBucket(replayBufferChunksByRuntimeKind, runtimeKind, replay.chunkCount)
-      incrementBucket(replayTextDeltasByRuntimeKind, runtimeKind, replay.textDeltaCount)
-      incrementBucket(replayReasoningDeltasByRuntimeKind, runtimeKind, replay.reasoningDeltaCount)
+    const stream = runStreams.find(item => item.runId === run.runId)
+    if (stream) {
+      incrementBucket(publishedChunksByRuntimeKind, runtimeKind, stream.publishedChunkCount)
+      incrementBucket(publishedTextDeltasByRuntimeKind, runtimeKind, stream.textDeltaCount)
+      incrementBucket(publishedReasoningDeltasByRuntimeKind, runtimeKind, stream.reasoningDeltaCount)
       incrementBucket(
-        replayToolDeltasByRuntimeKind,
+        publishedToolDeltasByRuntimeKind,
         runtimeKind,
-        replay.toolInputDeltaCount + replay.toolOutputCount,
+        stream.toolInputDeltaCount + stream.toolOutputCount,
       )
     }
   }
@@ -488,10 +492,10 @@ export async function getRuntimeSnapshot() {
   })
   updateChatRuntimeMetrics({
     activeRunsByRuntimeKind,
-    replayBufferChunksByRuntimeKind,
-    replayTextDeltasByRuntimeKind,
-    replayReasoningDeltasByRuntimeKind,
-    replayToolDeltasByRuntimeKind,
+    publishedChunksByRuntimeKind,
+    publishedTextDeltasByRuntimeKind,
+    publishedReasoningDeltasByRuntimeKind,
+    publishedToolDeltasByRuntimeKind,
   })
   updateProviderRuntimeMetrics({
     hostsByRuntimeKind,
@@ -547,8 +551,8 @@ export async function getRuntimeSnapshot() {
   const drilldowns = {
     renderer: summarizeRendererDrilldowns(latestDesktopSampleRecord),
     browserPanel: summarizeBrowserPanelDrilldowns(latestDesktopSampleRecord),
-    replay: {
-      topRuns: summarizeReplayDrilldowns(activeRuns, replayBuffers),
+    runStreams: {
+      topRuns: summarizeRunStreamDrilldowns(activeRuns, runStreams),
     },
     providerRuntime: {
       topHosts: summarizeProviderHostDrilldowns(providerHosts),
@@ -569,7 +573,7 @@ export async function getRuntimeSnapshot() {
     },
     chatRuntime: {
       activeRuns,
-      replayBuffers,
+      runStreams,
     },
     providerRuntime: {
       hosts: providerHosts,

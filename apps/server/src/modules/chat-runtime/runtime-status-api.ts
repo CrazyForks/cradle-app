@@ -16,7 +16,6 @@ import {
   hasContinuableRuntimeGoal,
 } from './run/runtime-goal-continuation'
 import type { ChatMessageStatus } from './run/stream-chunks'
-import { readDeltaChunkTextLength } from './run/stream-chunks'
 import type { ActiveRun } from './run-registry'
 import { runRegistry } from './run-registry'
 import type { RuntimeGoalContinuationOptions, RuntimeSettings } from './runtime-provider-types'
@@ -32,9 +31,10 @@ export interface ActiveRunSummary {
   modelId: string | null
 }
 
-export interface ActiveRunReplayBufferSummary {
+export interface ActiveRunStreamPublicationSummary {
   runId: string
-  chunkCount: number
+  latestCursor: number
+  publishedChunkCount: number
   textDeltaCount: number
   reasoningDeltaCount: number
   toolInputDeltaCount: number
@@ -108,27 +108,16 @@ export function listActiveRunSummaries(): ActiveRunSummary[] {
   return runRegistry.listActiveRuns().map(toActiveRunSummary)
 }
 
-export function getActiveRunReplayBufferSummary(
+export function getActiveRunStreamPublicationSummary(
   runId: string,
-): ActiveRunReplayBufferSummary | null {
+): ActiveRunStreamPublicationSummary | null {
   const run = runRegistry.getActiveRun(runId)
   if (!run) {
     return null
   }
-  const chunks = run.runChunkLog.readRetainedEntries().map(entry => entry.chunk)
   return {
     runId,
-    chunkCount: chunks.length,
-    textDeltaCount: chunks.filter(chunk => chunk.type === 'text-delta').length,
-    reasoningDeltaCount: chunks.filter(chunk => chunk.type === 'reasoning-delta').length,
-    toolInputDeltaCount: chunks.filter(chunk => chunk.type === 'tool-input-delta')
-      .length,
-    toolOutputCount: chunks.filter(chunk => chunk.type === 'tool-output-available')
-      .length,
-    maxDeltaChars: chunks.reduce(
-      (max, chunk) => Math.max(max, readDeltaChunkTextLength(chunk)),
-      0,
-    ),
+    ...run.runChunkSequencer.readPublicationSummary(),
   }
 }
 

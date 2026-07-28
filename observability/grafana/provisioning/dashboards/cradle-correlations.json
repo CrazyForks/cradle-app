@@ -162,8 +162,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(cradle_chat_replay_buffer_chunks{job=~\"$job\", instance=~\"$instance\", runtime_kind=~\"$runtime_kind\"}) > bool 0",
-          "legendFormat": "replay buffer retained",
+          "expr": "sum(cradle_chat_stream_published_chunks{job=~\"$job\", instance=~\"$instance\", runtime_kind=~\"$runtime_kind\"}) > bool 0",
+          "legendFormat": "stream publications active",
           "range": true,
           "refId": "D"
         },
@@ -181,7 +181,7 @@
       ],
       "title": "Pressure Timeline",
       "type": "state-timeline",
-      "description": "布尔压力时间线。active 表示该时间点跨过阈值：renderer heap > 512 MiB、Tab working set > 1 GiB、chat payload > 5M chars、replay buffer retained、observability queue backlog。它用于定位同一时间段有哪些候选原因同时出现。"
+      "description": "布尔压力时间线。active 表示该时间点跨过阈值：renderer heap > 512 MiB、Tab working set > 1 GiB、chat payload > 5M chars、stream publications active、observability queue backlog。它用于定位同一时间段有哪些候选原因同时出现。"
     },
     {
       "datasource": {
@@ -367,7 +367,7 @@
       "panels": [],
       "title": "Flow Correlation",
       "type": "row",
-      "description": "运行流状态关联。这里看 run、stream、replay、provider host 是否按生命周期同步下降。"
+      "description": "运行流状态关联。这里看 run、stream publications、provider host 是否按生命周期同步下降。"
     },
     {
       "datasource": {
@@ -434,8 +434,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(cradle_chat_replay_buffer_chunks{job=~\"$job\", instance=~\"$instance\", runtime_kind=~\"$runtime_kind\"})",
-          "legendFormat": "replay chunks",
+          "expr": "sum(cradle_chat_stream_published_chunks{job=~\"$job\", instance=~\"$instance\", runtime_kind=~\"$runtime_kind\"})",
+          "legendFormat": "published chunks",
           "range": true,
           "refId": "B"
         },
@@ -445,8 +445,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (kind) (cradle_chat_replay_buffer_deltas{job=~\"$job\", instance=~\"$instance\", runtime_kind=~\"$runtime_kind\"})",
-          "legendFormat": "replay {{kind}} deltas",
+          "expr": "sum by (kind) (cradle_chat_stream_published_deltas{job=~\"$job\", instance=~\"$instance\", runtime_kind=~\"$runtime_kind\"})",
+          "legendFormat": "published {{kind}} deltas",
           "range": true,
           "refId": "C"
         },
@@ -462,9 +462,9 @@
           "refId": "D"
         }
       ],
-      "title": "Runs, Streams, Replay",
+      "title": "Runs and Stream Publications",
       "type": "timeseries",
-      "description": "把 server active runs、replay buffer、replay delta 类型和 renderer streaming 状态放在一起。任务结束后仍长期非零，通常意味着 stream/replay 状态未释放或前端仍保留可恢复流状态。"
+      "description": "把 server active runs、stream publication 类型和 renderer streaming 状态放在一起。任务结束后仍长期非零，通常意味着 active run 未释放或前端仍保留可恢复流状态。"
     },
     {
       "datasource": {

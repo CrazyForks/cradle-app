@@ -237,9 +237,10 @@ export const ObservabilityModel = {
         providerTargetId: t.Nullable(t.String()),
         modelId: t.Nullable(t.String()),
       })),
-      replayBuffers: t.Array(t.Object({
+      runStreams: t.Array(t.Object({
         runId: t.String(),
-        chunkCount: t.Number(),
+        latestCursor: t.Number(),
+        publishedChunkCount: t.Number(),
         textDeltaCount: t.Number(),
         reasoningDeltaCount: t.Number(),
         toolInputDeltaCount: t.Number(),
@@ -335,7 +336,7 @@ export const ObservabilityModel = {
         liveTabs: t.Array(t.Record(t.String(), t.Unknown())),
         runtimes: t.Array(t.Record(t.String(), t.Unknown())),
       }),
-      replay: t.Object({
+      runStreams: t.Object({
         topRuns: t.Array(t.Record(t.String(), t.Unknown())),
       }),
       providerRuntime: t.Object({

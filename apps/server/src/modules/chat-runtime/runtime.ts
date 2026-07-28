@@ -145,7 +145,7 @@ export type {
   UpdateSessionQueueItemInput,
 } from './queue/session-queue'
 export type {
-  ActiveRunReplayBufferSummary,
+  ActiveRunStreamPublicationSummary,
   ActiveRunSummary,
   ChatRuntimeSessionStatusDto,
   PendingRuntimeUserInputDto,
@@ -153,7 +153,7 @@ export type {
   RuntimeSessionStatusKind,
 } from './runtime-status-api'
 export {
-  getActiveRunReplayBufferSummary,
+  getActiveRunStreamPublicationSummary,
   getActiveSessionRun,
   listActiveRunSummaries,
   listPendingRuntimeUserInputs,
@@ -217,7 +217,9 @@ const activeTurnCompletionController = createActiveTurnCompletionController({
       notificationChunk: terminalChunkForFence(fence),
     }
   },
-  releaseActiveRun: activeRun => activeRunReleaseController.releaseActiveRun(activeRun),
+  releaseActiveRunClaim: activeRun =>
+    activeRunReleaseController.releaseActiveRunClaim(activeRun),
+  disposeActiveRun: activeRun => activeRunReleaseController.disposeActiveRun(activeRun),
   performHandoff: (activeRun, handoff) => {
     if (handoff.kind === 'none') {
       return

@@ -77,7 +77,7 @@ export function readDeltaChunkTextLength(chunk: UIMessageChunk): number {
   }
 }
 
-export function readReplayCoalesceKey(chunk: UIMessageChunk): string | null {
+export function readSnapshotEventCoalesceKey(chunk: UIMessageChunk): string | null {
   switch (chunk.type) {
     case 'text-delta':
       return `text-delta:${chunk.id}`
