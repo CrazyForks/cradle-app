@@ -145,6 +145,40 @@ describe('chat streaming handler store boundary', () => {
     expect(useChatStore.getState().errorMap.has('assistant-recovered')).toBe(false)
   })
 
+  it('publishes a recovery snapshot without waiting for a live chunk or stream close', async () => {
+    const target = {
+      message: { id: 'assistant-recovered', role: 'assistant', parts: [] } satisfies import('ai').UIMessage,
+      state: createUIMessageStreamState(),
+    }
+    applyUIMessageChunk(target, { type: 'text-start', id: 'text-recovered' })
+    applyUIMessageChunk(target, { type: 'text-delta', id: 'text-recovered', delta: 'Latest output' })
+    const snapshot = createUIMessageStreamSnapshotChunk({ runId: 'run-recovered', cursor: 40, target })
+    let streamController!: ReadableStreamDefaultController<ChatStreamChunk>
+    const stream = new ReadableStream<ChatStreamChunk>({
+      start(controller) {
+        streamController = controller
+      },
+    })
+    const handler = new ChatStreamingHandler('session-1', 'assistant-recovered', 0, { mode: 'passive' })
+
+    handler.start(new AbortController())
+    const consumePromise = handler.consume(stream)
+    streamController.enqueue(replayChatStreamChunk(snapshot))
+
+    await vi.waitFor(() => {
+      expect(chatSelectors.messages('session-1')(useChatStore.getState())).toMatchObject([
+        {
+          id: 'assistant-recovered',
+          parts: [{ type: 'text', text: 'Latest output', state: 'streaming' }],
+        },
+      ])
+    })
+
+    streamController.close()
+    await consumePromise
+    handler.finish()
+  })
+
   it('emits settled events for the default main chat store path', () => {
     const settledEvents: unknown[] = []
     const unsubscribe = onChatRunSettled(event => settledEvents.push(event))

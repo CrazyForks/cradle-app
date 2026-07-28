@@ -97,6 +97,7 @@ export type GetPreferencesAppResponses = {
             codexCliCompatibleIdentity?: boolean;
             nativeProviderSkillProjection?: boolean;
             turnCheckpoints?: boolean;
+            threadHandoffs?: boolean;
         };
         worktreeCleanup?: {
             maxWorktrees: number;
@@ -117,6 +118,7 @@ export type PutPreferencesAppData = {
             codexCliCompatibleIdentity?: boolean;
             nativeProviderSkillProjection?: boolean;
             turnCheckpoints?: boolean;
+            threadHandoffs?: boolean;
         };
         worktreeCleanup?: {
             maxWorktrees: number;
@@ -23551,7 +23553,7 @@ export type GetChatSessionsBySessionIdStreamData = {
 
 export type GetChatSessionsBySessionIdStreamResponses = {
     /**
-     * AI SDK UIMessageChunk SSE stream for the currently active chat run. The stream replays buffered protocol chunks before forwarding live chunks, so late subscribers can rebuild the active assistant message through the AI SDK stream reader.
+     * AI SDK UIMessageChunk SSE stream for the currently active chat run. The stream sends one transient current-state snapshot before forwarding live chunks, so late subscribers can rebuild the active assistant message without retained chunk history.
      */
     200: string;
 };
@@ -28318,9 +28320,10 @@ export type GetObservabilityRuntimeSnapshotResponses = {
                 providerTargetId: string | null;
                 modelId: string | null;
             }>;
-            replayBuffers: Array<{
+            runStreams: Array<{
                 runId: string;
-                chunkCount: number;
+                latestCursor: number;
+                publishedChunkCount: number;
                 textDeltaCount: number;
                 reasoningDeltaCount: number;
                 toolInputDeltaCount: number;
@@ -28442,7 +28445,7 @@ export type GetObservabilityRuntimeSnapshotResponses = {
                     [key: string]: unknown;
                 }>;
             };
-            replay: {
+            runStreams: {
                 topRuns: Array<{
                     [key: string]: unknown;
                 }>;

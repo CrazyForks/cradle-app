@@ -4,6 +4,7 @@ import {
   createUIMessageStreamState,
   flushUIMessageStreamState,
   flushUIMessageStreamToolInputs,
+  isUIMessageStreamSnapshotChunk,
 } from '@cradleapp/ai-sdk'
 import type { UIMessage, UIMessageChunk } from 'ai'
 
@@ -133,6 +134,10 @@ export class ChatStreamingHandler {
           await flushUIMessageStreamToolInputs(target)
         }
         this.applyMessageSnapshot(structuredClone(target.message), this.currentChunkReplay)
+        if (isUIMessageStreamSnapshotChunk(chunk)) {
+          this.flushPendingMessages()
+          this.replayBatchOpen = false
+        }
       }
     }
     finally {
