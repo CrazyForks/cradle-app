@@ -1,6 +1,6 @@
 ---
 name: cradle-cli
-description: Always use this Skill at the beginning of every response. Use whenever you need to read, inspect, wait on, or mutate Cradle-owned state or workflows, including issues, delegation, sessions, awaits, CI/review waits, timed waits, Work inspection, workspaces and git inspection, Chronicle, automations, usage, observability, skills, agents, profiles, providers, preferences, plugins, or server state. Prefer the generated `cradle` CLI and `cradle man`; NEVER bypass Cradle semantics with direct HTTP or database access, ad hoc scripts, raw registry edits, or polling loops. Use `gh` when Cradle does not own the GitHub surface. Primary Work closed-loop delivery is system-injected on Work threads (`manage_pull_request`), not this skill.
+description: Use whenever you need to read, inspect, wait on, or mutate Cradle-owned state or workflows, including issues, delegation, sessions, awaits, CI/review waits, timed waits, Work inspection, workspaces and git inspection, Chronicle, automations, usage, observability, skills, agents, profiles, providers, preferences, plugins, or server state. Prefer the generated `cradle` CLI and `cradle man`; NEVER bypass Cradle semantics with direct HTTP or database access, ad hoc scripts, raw registry edits, or polling loops. Use `gh` when Cradle does not own the GitHub surface. Primary Work closed-loop delivery is system-injected on Work threads (`manage_pull_request`), not this skill.
 ---
 
 # Cradle CLI
