@@ -36,12 +36,19 @@ try {
 
   const normalizedOpenapi = normalizeKimiOpenApiDocument(openapi)
   const normalizedAsyncapi = normalizeKimiAsyncApiDocument(asyncapi)
-  const manifest = createKimiProtocolManifest({
+  const generatedManifest = createKimiProtocolManifest({
     runtimeVersion,
     openapi: normalizedOpenapi,
     asyncapi: normalizedAsyncapi,
     generatedDate: new Date().toISOString().slice(0, 10),
   })
+  const existingManifest = await readExistingManifest()
+  const manifest = existingManifest !== null
+    && existingManifest.runtimeVersion === generatedManifest.runtimeVersion
+    && existingManifest.openapiSha256 === generatedManifest.openapiSha256
+    && existingManifest.asyncapiSha256 === generatedManifest.asyncapiSha256
+    ? { ...generatedManifest, generatedDate: existingManifest.generatedDate }
+    : generatedManifest
 
   await mkdir(protocolRoot, { recursive: true })
   await writeFile(join(protocolRoot, 'openapi.json'), stringifyKimiJson(normalizedOpenapi), 'utf8')
@@ -56,6 +63,17 @@ try {
 finally {
   await stopKimiWeb().catch(() => undefined)
   await rm(kimiHome, { force: true, recursive: true })
+}
+
+async function readExistingManifest(): Promise<ReturnType<typeof createKimiProtocolManifest> | null> {
+  try {
+    return JSON.parse(await readFile(join(protocolRoot, 'MANIFEST.json'), 'utf8')) as ReturnType<
+      typeof createKimiProtocolManifest
+    >
+  }
+  catch {
+    return null
+  }
 }
 
 function readKimiVersion(): Promise<string> {
