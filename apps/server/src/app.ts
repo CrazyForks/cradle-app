@@ -34,6 +34,7 @@ import {
 } from './modules/chat-runtime/http/events.routes'
 import { linkedChatSessionProxyPlugin } from './modules/chat-runtime/http/linked-session-proxy'
 import { registerMessageBlobBackfillMaintenance } from './modules/chat-runtime/message-blob-backfill'
+import { registerMessageSteerSplitBackfillMaintenance } from './modules/chat-runtime/message-steer-split-backfill'
 import { runRegistry } from './modules/chat-runtime/run-registry'
 import { registerTurnCheckpointHooks } from './modules/chat-runtime/turn-checkpoint-hooks'
 import { ClaudeUsageReconciliationScheduler } from './modules/chat-runtime-providers/claude-agent/usage-reconciliation-scheduler'
@@ -386,6 +387,7 @@ export async function createServerApp(options: CreateServerAppOptions = {}) {
     TurnCheckpoint.registerTurnCheckpointMaintenance()
     registerBlobStoreMaintenance()
     registerMessageBlobBackfillMaintenance()
+    registerMessageSteerSplitBackfillMaintenance()
     Maintenance.registerTask({
       ownerNamespace: 'logging',
       key: 'rotate-server-log',

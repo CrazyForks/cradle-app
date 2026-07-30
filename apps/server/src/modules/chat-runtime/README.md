@@ -93,6 +93,7 @@ The backfill sweep converts historical rows under a terminating id-ascending cur
 - `message-durable-payload.ts`: the single durable serialization seam; externalizes oversized bytes and returns the `message_json` string every persist site writes.
 - `message-blob-externalization.ts`: moves inline attachment bytes, oversized tool payloads, and prose overflow into the blob store, leaving recoverable references behind.
 - `message-blob-backfill.ts`: background maintenance sweep that externalizes historical rows under a terminating id cursor and shrinks legacy truncation markers.
+- `message-steer-split-backfill.ts`: terminating background sweep that compacts legacy steer `metadata.cradle.continuation.splitParts` rows (full tool/file copies → stream-boundary shape only).
 - `message-snapshot-compaction.ts`: lossy payload bounding for disposable AI observation records only; not reachable from durable writes or recoverable stream checkpoints.
 - `stream-trace.ts`: dev-mode JSONL trace writer/reader for the provider raw event, mapper output, runtime chunk, SSE emit, and run terminal chain.
 - `pending-user-input.ts`: in-memory pending user input registry keyed by session and provider request id; owns request creation, duplicate/stale validation, run-scoped rejection, answer resolution, summary projection for live status/desktop notifications, and synthetic resolved tool-output publication for active run streams.
