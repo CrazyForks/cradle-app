@@ -1,6 +1,7 @@
-import { Streamdown } from '@cradle/streamdown'
+import type { MarkdownComponents } from '@cradle/streamdown'
+import { remarkCodeComment, Streamdown } from '@cradle/streamdown'
 import type { UIMessage } from 'ai'
-import type { ReactNode } from 'react'
+import type { ComponentPropsWithoutRef, ComponentType, ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 
 import { cn } from '~/lib/cn'
@@ -12,6 +13,10 @@ import { RuntimeWarningBlock } from '../../rendering/blocks/runtime-warning-bloc
 import type { ChatRenderItem } from '../../rendering/chat-render-plan'
 import { groupMessageParts, splitExecutionPhase } from '../../rendering/chat-render-plan'
 import { toolNameFromPart } from '../../rendering/chat-tool-entities'
+import type { CodeCommentData } from '../../rendering/code-comment-block-view'
+import {
+  CodeCommentBlockView,
+} from '../../rendering/code-comment-block-view'
 import {
   GoalMessageLabel,
   SteerMessageLabel,
@@ -46,6 +51,41 @@ const DEFAULT_STREAMDOWN_OPTIONS = {
   animateMode: 'char',
   showCursor: false,
 } as const
+
+const CODE_COMMENT_REMARK_PLUGINS = [remarkCodeComment]
+
+type CodeCommentMarkdownProps = ComponentPropsWithoutRef<'div'> & CodeCommentData
+
+type MessageMarkdownComponents = MarkdownComponents & {
+  'code-comment': ComponentType<CodeCommentMarkdownProps>
+}
+
+function readCodeCommentLineRange(start?: string, end?: string): string | null {
+  if (!start) {
+    return null
+  }
+  return end && end !== start ? `${start}–${end}` : start
+}
+
+function readCodeCommentFileName(file: string): string {
+  return file.split('/').filter(Boolean).at(-1) ?? file
+}
+
+const MESSAGE_MARKDOWN_COMPONENTS: MessageMarkdownComponents = {
+  'a': props => <MarkdownFileLinkView {...readMarkdownAnchorProps(props)} />,
+  'code-comment': ({ title, body, file, start, end, priority }) => {
+    const lineRange = readCodeCommentLineRange(start, end)
+    const fileLink = file
+      ? (
+          <MarkdownFileLinkView href={start ? `${file}:${start}` : file} className="font-mono" title={file}>
+            {readCodeCommentFileName(file)}
+            {lineRange ? `:${lineRange}` : ''}
+          </MarkdownFileLinkView>
+        )
+      : undefined
+    return <CodeCommentBlockView title={title} body={body} file={file} start={start} end={end} priority={priority} fileLink={fileLink} />
+  },
+}
 
 export interface MessageBubbleViewProps {
   message: UIMessage
@@ -120,7 +160,8 @@ export function MessageBubbleView({
                 animateMode={DEFAULT_STREAMDOWN_OPTIONS.animateMode}
                 showCursor={DEFAULT_STREAMDOWN_OPTIONS.showCursor}
                 animated={item.text.length <= MESSAGE_STREAMING_ANIMATION_MAX_CHARS}
-                components={{ a: props => <MarkdownFileLinkView {...readMarkdownAnchorProps(props)} /> }}
+                components={MESSAGE_MARKDOWN_COMPONENTS}
+                remarkPlugins={CODE_COMMENT_REMARK_PLUGINS}
               />
             )
       case 'activity-feed':

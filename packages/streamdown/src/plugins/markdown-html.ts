@@ -5,6 +5,7 @@ import type { PluggableList } from 'unified'
 
 const tagNames = [
   ...(defaultSchema.tagNames ?? []),
+  'code-comment',
   'kbd',
   'colgroup',
   'col',
@@ -29,6 +30,7 @@ export const markdownHtmlSchema: RehypeSanitizeOptions = {
   attributes: {
     ...defaultSchema.attributes,
     '*': sharedAttributes,
+    'code-comment': ['body', 'end', 'file', 'priority', 'start', 'title'],
     'table': [
       ...((defaultSchema.attributes?.table ?? []) as string[]),
       'align',
