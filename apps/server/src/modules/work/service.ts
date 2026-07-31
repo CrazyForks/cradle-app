@@ -6,6 +6,7 @@ import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm'
 
 import { AppError } from '../../errors/app-error'
 import { db } from '../../infra'
+import { createChildLogger } from '../../logging/logger'
 import { hasPendingRuntimeToolApproval } from '../chat-runtime/pending-tool-approval'
 import { listPendingRuntimeUserInputSummaries } from '../chat-runtime/pending-user-input'
 import type { CreateRunResult } from '../chat-runtime/run/run-coordinator'
@@ -15,6 +16,8 @@ import * as Session from '../session/service'
 import * as SessionAwait from '../session-await/service'
 import type { SessionAwaitSource } from '../session-await/types'
 import * as Worktree from '../worktree/service'
+
+const logger = createChildLogger({ module: 'work' })
 
 export type WorkActivity = 'idle' | 'running' | 'waiting' | 'blocked'
 export type WorkSummary = Work & {
@@ -93,6 +96,11 @@ function requirePrimaryThread(workId: string): Session.SessionView {
     })
   }
   return session
+}
+
+function readPrimaryThread(workId: string): Session.SessionView | null {
+  const sessionId = getPrimarySessionId(workId)
+  return sessionId ? Session.get(sessionId) : null
 }
 
 async function archiveWorkForPrimarySession(sessionId: string): Promise<void> {
@@ -194,8 +202,17 @@ export async function list(input: {
   const query = db().select().from(works).orderBy(desc(works.updatedAt), desc(works.createdAt))
   const rows = where ? query.where(where).all() : query.all()
 
+  // List must stay available even when a Work row is orphaned (primary Session
+  // deleted/missing). Throwing on one bad row blanked the whole sidebar Work
+  // decoration map and hid every origin=work Session.
   const visibleWorks = rows.flatMap((work) => {
-    const primaryThread = requirePrimaryThread(work.id)
+    const primaryThread = readPrimaryThread(work.id)
+    if (!primaryThread) {
+      logger.warn('skipping Work with missing primary Session during list', {
+        workId: work.id,
+      })
+      return []
+    }
     if (input.workspaceId && primaryThread.workspaceId !== input.workspaceId) {
       return []
     }
