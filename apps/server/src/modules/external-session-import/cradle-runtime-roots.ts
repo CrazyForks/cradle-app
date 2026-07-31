@@ -13,11 +13,11 @@ export interface CodexImportRootSet {
   history: string
 }
 
-function userCodexHome(): string {
-  return join(homedir(), '.codex')
+function userCodexHome(homeDir?: string): string {
+  return join(homeDir ?? homedir(), '.codex')
 }
 
-function codexImportRootSet(home: string): CodexImportRootSet {
+export function codexImportRootSet(home: string): CodexImportRootSet {
   return {
     roots: {
       current: join(home, 'sessions'),
@@ -33,9 +33,10 @@ export function defaultCodexImportRootSets(input: {
   env?: NodeJS.ProcessEnv
   homeDir?: string
 } = {}): CodexImportRootSet[] {
-  const sets = [codexImportRootSet(userCodexHome())]
+  const homeDir = input.homeDir
+  const sets = [codexImportRootSet(userCodexHome(homeDir))]
   const cradleHome = resolveCodexAppServerHome(input)
-  if (cradleHome !== userCodexHome()) {
+  if (cradleHome !== userCodexHome(homeDir)) {
     sets.push(codexImportRootSet(cradleHome))
   }
   return sets
@@ -46,7 +47,8 @@ export function defaultClaudeImportRoots(input: {
   env?: NodeJS.ProcessEnv
   homeDir?: string
 } = {}): string[] {
-  const userRoot = join(homedir(), '.claude', 'projects')
+  const homeDir = input.homeDir
+  const userRoot = join(homeDir ?? homedir(), '.claude', 'projects')
   const cradleRoot = join(resolveClaudeAgentSdkConfigDir(input), 'projects')
   if (cradleRoot === userRoot) {
     return [userRoot]
