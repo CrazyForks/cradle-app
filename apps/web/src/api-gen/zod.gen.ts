@@ -3688,7 +3688,16 @@ export const zPostChatSessionsBySessionIdResponseBody = z.object({
         z.string(),
         z.number(),
         z.boolean()
-    ]).nullable()).optional()
+    ]).nullable()).optional(),
+    reviewTarget: z.union([
+        z.object({
+            type: z.enum(['uncommittedChanges'])
+        }),
+        z.object({
+            type: z.enum(['baseBranch']),
+            branch: z.string().min(1)
+        })
+    ]).optional()
 });
 
 export const zPostChatSessionsBySessionIdResponsePath = z.object({
@@ -3783,7 +3792,16 @@ export const zPostChatSideConversationsBySideConversationIdResponseBody = z.obje
         z.string(),
         z.number(),
         z.boolean()
-    ]).nullable()).optional()
+    ]).nullable()).optional(),
+    reviewTarget: z.union([
+        z.object({
+            type: z.enum(['uncommittedChanges'])
+        }),
+        z.object({
+            type: z.enum(['baseBranch']),
+            branch: z.string().min(1)
+        })
+    ]).optional()
 });
 
 export const zPostChatSideConversationsBySideConversationIdResponsePath = z.object({

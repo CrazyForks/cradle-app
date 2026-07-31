@@ -23397,6 +23397,12 @@ export type PostChatSessionsBySessionIdResponseData = {
         runtimeSettings?: {
             [key: string]: string | number | boolean | null;
         };
+        reviewTarget?: {
+            type: 'uncommittedChanges';
+        } | {
+            type: 'baseBranch';
+            branch: string;
+        };
     };
     path: {
         sessionId: string;
@@ -23476,6 +23482,12 @@ export type PostChatSideConversationsBySideConversationIdResponseData = {
         thinkingEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
         runtimeSettings?: {
             [key: string]: string | number | boolean | null;
+        };
+        reviewTarget?: {
+            type: 'uncommittedChanges';
+        } | {
+            type: 'baseBranch';
+            branch: string;
         };
     };
     path: {

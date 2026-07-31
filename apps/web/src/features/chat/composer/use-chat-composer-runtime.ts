@@ -1,3 +1,4 @@
+import type { RuntimeReviewTarget } from '@cradle/chat-runtime-contracts'
 import { useQuery } from '@tanstack/react-query'
 import type { FileUIPart } from 'ai'
 import { useCallback, useMemo } from 'react'
@@ -53,6 +54,7 @@ export interface ChatComposerRuntime {
     options?: {
       invertContinuationMode?: boolean
       runtimeSettings?: SendMessageOptions['runtimeSettings']
+      reviewTarget?: RuntimeReviewTarget
     },
   ) => SendMessageResult | Promise<SendMessageResult>
   stop: () => void
@@ -312,6 +314,7 @@ export function useChatComposerRuntime({
       options?: {
         invertContinuationMode?: boolean
         runtimeSettings?: SendMessageOptions['runtimeSettings']
+        reviewTarget?: RuntimeReviewTarget
       },
     ) => {
       if (!isReady || (!text.trim() && files.length === 0 && contextParts.length === 0)) {
@@ -334,6 +337,7 @@ export function useChatComposerRuntime({
           ...(options?.runtimeSettings
             ? { runtimeSettings: readRunRuntimeSettingsPatch(options.runtimeSettings) }
             : {}),
+          ...(options?.reviewTarget ? { reviewTarget: options.reviewTarget } : {}),
         },
         preparedFiles,
         contextParts,
