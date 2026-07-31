@@ -8,38 +8,76 @@ import {
 import { WorkspaceGroupDisclosureView } from './workspace-group-disclosure-view'
 import { WorkspaceProjectsSectionView } from './workspace-projects-section-view'
 import type {
-  WorkspaceSidebarProjectFilter,
+  WorkspaceSidebarListFilters,
   WorkspaceSidebarProjectSortDirection,
   WorkspaceSidebarProjectSortKey,
+  WorkspaceSidebarSourceFilter,
+  WorkspaceSidebarStatusFilter,
+  WorkspaceSidebarWorkPrFilter,
+} from './workspace-sidebar-ui-store'
+import {
+  DEFAULT_SESSION_PREVIEW_LIMIT,
+  DEFAULT_WORKSPACE_SIDEBAR_LIST_FILTERS,
 } from './workspace-sidebar-ui-store'
 
+function toggleInList<T extends string>(list: readonly T[], value: T): T[] {
+  return list.includes(value)
+    ? list.filter(entry => entry !== value)
+    : [...list, value]
+}
+
 function WorkspaceProjectsSectionCatalog() {
-  const [projectFilter, setProjectFilter]
-    = useState<WorkspaceSidebarProjectFilter>('all')
+  const [listFilters, setListFilters]
+    = useState<WorkspaceSidebarListFilters>(DEFAULT_WORKSPACE_SIDEBAR_LIST_FILTERS)
   const [projectSortKey, setProjectSortKey]
     = useState<WorkspaceSidebarProjectSortKey>('name')
   const [projectSortDirection, setProjectSortDirection]
     = useState<WorkspaceSidebarProjectSortDirection>('asc')
   const [projectPinnedFirst, setProjectPinnedFirst] = useState(true)
+  const [sessionPreviewLimit, setSessionPreviewLimit]
+    = useState(DEFAULT_SESSION_PREVIEW_LIMIT)
   const [localExpanded, setLocalExpanded] = useState(true)
-  const filteredEmpty = projectFilter === 'running'
+  const filteredEmpty = listFilters.statusFilters.includes('streaming')
+    && listFilters.projectScope === 'pinned'
 
   return (
     <WorkspaceProjectsSectionView
       hasWorkspaces
       filteredEmpty={filteredEmpty}
-      projectFilter={projectFilter}
+      listFilters={listFilters}
       projectSortKey={projectSortKey}
       projectSortDirection={projectSortDirection}
       projectPinnedFirst={projectPinnedFirst}
+      sessionPreviewLimit={sessionPreviewLimit}
       adding={false}
       multiWorkspaceEnabled
       hasUnreadWorkspaceSessions
       markingAllSessionsRead={false}
-      onProjectFilterChange={setProjectFilter}
+      onProjectScopeChange={projectScope =>
+        setListFilters(current => ({ ...current, projectScope }))}
+      onToggleStatusFilter={(filter: WorkspaceSidebarStatusFilter) =>
+        setListFilters(current => ({
+          ...current,
+          statusFilters: toggleInList(current.statusFilters, filter),
+        }))}
+      onToggleWorkPrFilter={(filter: WorkspaceSidebarWorkPrFilter) =>
+        setListFilters(current => ({
+          ...current,
+          workPrFilters: toggleInList(current.workPrFilters, filter),
+        }))}
+      onToggleSourceFilter={(filter: WorkspaceSidebarSourceFilter) =>
+        setListFilters(current => ({
+          ...current,
+          sourceFilters: toggleInList(current.sourceFilters, filter),
+        }))}
+      onShowArchivedChange={showArchived =>
+        setListFilters(current => ({ ...current, showArchived }))}
+      onClearListFilters={() => setListFilters(DEFAULT_WORKSPACE_SIDEBAR_LIST_FILTERS)}
       onProjectSortKeyChange={setProjectSortKey}
       onProjectSortDirectionChange={setProjectSortDirection}
       onProjectPinnedFirstChange={setProjectPinnedFirst}
+      onSessionPreviewLimitChange={setSessionPreviewLimit}
+      onCollapseAll={() => {}}
       onAddFromPicker={() => {}}
       onOpenMultiWorkspaceDialog={() => {}}
       onMarkAllAsRead={() => {}}
@@ -48,6 +86,7 @@ function WorkspaceProjectsSectionCatalog() {
         workspace={workspaceFixtures.local}
         workspacePinned
         workspaceActions={[]}
+        runningSessionCount={0}
         expanded={localExpanded}
         overlays={null}
         onToggleExpanded={() => setLocalExpanded(current => !current)}
@@ -61,6 +100,7 @@ function WorkspaceProjectsSectionCatalog() {
         workspace={workspaceFixtures.remote}
         workspacePinned={false}
         workspaceActions={[]}
+        runningSessionCount={2}
         expanded={false}
         overlays={null}
         onToggleExpanded={() => {}}
@@ -72,6 +112,7 @@ function WorkspaceProjectsSectionCatalog() {
         workspace={workspaceFixtures.missing}
         workspacePinned={false}
         workspaceActions={[]}
+        runningSessionCount={0}
         expanded={false}
         overlays={null}
         onToggleExpanded={() => {}}
@@ -98,19 +139,27 @@ const meta = {
   args: {
     hasWorkspaces: true,
     filteredEmpty: false,
-    projectFilter: 'all',
+    listFilters: DEFAULT_WORKSPACE_SIDEBAR_LIST_FILTERS,
     projectSortKey: 'name',
     projectSortDirection: 'asc',
     projectPinnedFirst: true,
+    sessionPreviewLimit: DEFAULT_SESSION_PREVIEW_LIMIT,
     adding: false,
     multiWorkspaceEnabled: true,
     hasUnreadWorkspaceSessions: true,
     markingAllSessionsRead: false,
     children: null,
-    onProjectFilterChange: fn(),
+    onProjectScopeChange: fn(),
+    onToggleStatusFilter: fn(),
+    onToggleWorkPrFilter: fn(),
+    onToggleSourceFilter: fn(),
+    onShowArchivedChange: fn(),
+    onClearListFilters: fn(),
     onProjectSortKeyChange: fn(),
     onProjectSortDirectionChange: fn(),
     onProjectPinnedFirstChange: fn(),
+    onSessionPreviewLimitChange: fn(),
+    onCollapseAll: fn(),
     onAddFromPicker: fn(),
     onOpenMultiWorkspaceDialog: fn(),
     onMarkAllAsRead: fn(),
@@ -137,7 +186,10 @@ export const Empty: Story = {
 export const FilteredEmpty: Story = {
   args: {
     filteredEmpty: true,
-    projectFilter: 'running',
+    listFilters: {
+      ...DEFAULT_WORKSPACE_SIDEBAR_LIST_FILTERS,
+      statusFilters: ['streaming'],
+    },
     hasUnreadWorkspaceSessions: false,
   },
 }

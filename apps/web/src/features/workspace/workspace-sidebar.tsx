@@ -49,11 +49,11 @@ import { GithubRequiredDialog } from '~/features/settings/github-required-dialog
 import { openGithubRequiredDialog } from '~/features/settings/github-required-dialog-store'
 import { useFeatureFlag } from '~/features/settings/use-app-preferences'
 import { useGithubAppConnected } from '~/features/settings/use-github-app-connected'
-import { useWorkspaceWorks } from '~/features/work/use-work'
+import type { WorkSummary } from '~/features/work/use-work'
+import { useWorks, useWorkspaceWorks } from '~/features/work/use-work'
 import { MigrateWorkspaceDialog } from '~/features/workspace/migrate-workspace-dialog'
 import type { Workspace } from '~/features/workspace/types'
 import { getLocalWorkspacePath, getWorkspaceLocationLabel } from '~/features/workspace/types'
-import { useNow } from '~/hooks/use-now'
 import { cn } from '~/lib/cn'
 import { authorizeDangerousAction, isElectron, nativeIpc } from '~/lib/electron'
 import { useIsActiveSurfaceId } from '~/navigation/active-surface'
@@ -118,9 +118,13 @@ import type {
 import type { WorkspaceRuntimeIconByKind } from './workspace-session-list-section'
 import { WorkspaceSessionListSection } from './workspace-session-list-section'
 import { isWorkspaceSessionRunning } from './workspace-session-status'
+import {
+  projectMatchesListFilters,
+  sessionMatchesListFilters,
+} from './workspace-sidebar-list-filters'
 import { WorkspaceSidebarNavigationView } from './workspace-sidebar-navigation-view'
 import type {
-  WorkspaceSidebarProjectFilter,
+  WorkspaceSidebarListFilters,
   WorkspaceSidebarProjectSortKey,
 } from './workspace-sidebar-ui-store'
 import { useWorkspaceSidebarUiStore } from './workspace-sidebar-ui-store'
@@ -128,11 +132,14 @@ import {
   WorkspaceTextInputDialogView,
 } from './workspace-text-input-dialog-view'
 
-const RECENT_SESSION_WINDOW_SECONDS = 60 * 60
 const DEFAULT_WORKSPACE_FILE_NAME = 'untitled'
 const DEFAULT_WORKSPACE_FOLDER_NAME = 'untitled-folder'
 const EMPTY_WORKSPACE_SESSIONS: WorkspaceSession[] = []
 const EMPTY_SESSION_ID_SET = new Set<string>()
+const EMPTY_WORK_BY_PRIMARY_SESSION_ID = new Map<string, WorkSummary>()
+
+type SessionAttentionKind = WorkspaceSessionAttentionKind
+const EMPTY_ATTENTION_BY_SESSION_ID = new Map<string, SessionAttentionKind>()
 
 function formatToastError(error: unknown): string {
   if (error instanceof Error) {
@@ -146,8 +153,6 @@ function formatToastError(error: unknown): string {
   }
   return JSON.stringify(error)
 }
-
-type SessionAttentionKind = WorkspaceSessionAttentionKind
 
 function useSessionAttentionBySessionId(
   sessions: readonly WorkspaceSession[],
@@ -187,10 +192,6 @@ function useSessionAttentionBySessionId(
   }, [activeSessionIds, statusQueries])
 }
 
-function isSessionRecent(session: WorkspaceSession, currentUnixTimestamp: number): boolean {
-  return session.listActivityAt >= currentUnixTimestamp - RECENT_SESSION_WINDOW_SECONDS
-}
-
 type RuntimeIconByKind = WorkspaceRuntimeIconByKind
 
 type SessionMenuRequest = WorkspaceSessionItemMenuRequest
@@ -199,14 +200,16 @@ const WorkspaceGroup = memo(
   ({
     workspace,
     sessions,
-    projectFilter,
+    listFilters,
+    workByPrimarySessionId,
     runtimeIconByKind,
     onDelete,
     onTogglePin,
   }: {
     workspace: Workspace
     sessions: WorkspaceSession[]
-    projectFilter: WorkspaceSidebarProjectFilter
+    listFilters: WorkspaceSidebarListFilters
+    workByPrimarySessionId: ReadonlyMap<string, WorkSummary>
     runtimeIconByKind: RuntimeIconByKind
     onDelete: (id: string) => void
     onTogglePin: (id: string, pinned: boolean) => void
@@ -256,6 +259,12 @@ const WorkspaceGroup = memo(
       sessions,
       locallyStreamingSessionIds,
     )
+    const runningSessionCount = useMemo(
+      () =>
+        sessions.filter(session =>
+          isWorkspaceSessionRunning(session, locallyStreamingSessionIds)).length,
+      [locallyStreamingSessionIds, sessions],
+    )
     const locallyErroredSessionIds = useChatStore(
       useCallback(
         (state) => {
@@ -271,17 +280,31 @@ const WorkspaceGroup = memo(
       ),
       shallow,
     )
-    const now = useNow()
-    const currentUnixTimestamp = Math.floor(now / 1000)
+    const { data: workspaceWorks = [] } = useWorkspaceWorks(workspace.id)
+    const resolvedWorkByPrimarySessionId = useMemo(() => {
+      if (workByPrimarySessionId.size > 0) {
+        return workByPrimarySessionId
+      }
+      return new Map(workspaceWorks.map(work => [work.primarySessionId, work]))
+    }, [workByPrimarySessionId, workspaceWorks])
     const filteredSessions = useMemo(() => {
       return sessions.filter(session =>
-        sessionMatchesProjectFilter(
+        sessionMatchesListFilters(
           session,
-          projectFilter,
+          resolvedWorkByPrimarySessionId.get(session.id) ?? null,
+          listFilters,
           locallyStreamingSessionIds,
-          currentUnixTimestamp,
+          locallyErroredSessionIds,
+          sessionAttentionBySessionId,
         ))
-    }, [currentUnixTimestamp, locallyStreamingSessionIds, projectFilter, sessions])
+    }, [
+      listFilters,
+      locallyErroredSessionIds,
+      locallyStreamingSessionIds,
+      resolvedWorkByPrimarySessionId,
+      sessionAttentionBySessionId,
+      sessions,
+    ])
     const { mutateAsync: renameWorkspace } = useMutation({
       ...patchWorkspacesByWorkspaceIdMutation(),
       onSuccess: () => {
@@ -319,18 +342,13 @@ const WorkspaceGroup = memo(
         return 0
       })
     }, [filteredSessions, locallyStreamingSessionIds])
-    const { data: workspaceWorks = [] } = useWorkspaceWorks(workspace.id)
     const activeMenuWork = sessionMenuState.workId
       ? (workspaceWorks.find(work => work.id === sessionMenuState.workId) ?? null)
       : null
-    const workByPrimarySessionId = useMemo(
-      () => new Map(workspaceWorks.map(work => [work.primarySessionId, work])),
-      [workspaceWorks],
-    )
     const sidebarSessions = useMemo(
       () => sortedSessions.filter(session =>
-        session.origin !== 'work' || workByPrimarySessionId.has(session.id)),
-      [sortedSessions, workByPrimarySessionId],
+        session.origin !== 'work' || resolvedWorkByPrimarySessionId.has(session.id)),
+      [resolvedWorkByPrimarySessionId, sortedSessions],
     )
     const { data: sessionGroups = [] } = useSessionGroups(workspace.id)
     const createSessionGroup = useCreateSessionGroup(workspace.id)
@@ -840,6 +858,7 @@ const WorkspaceGroup = memo(
         workspace={workspace}
         workspacePinned={workspacePinned}
         workspaceActions={workspaceActions}
+        runningSessionCount={runningSessionCount}
         overlays={(
           <>
             <WorkspaceTextInputDialogView
@@ -929,7 +948,7 @@ const WorkspaceGroup = memo(
               <WorkspaceSessionListSection
                 workspaceId={workspace.id}
                 sortedSessions={sortSessionsForList(groupSessions)}
-                workByPrimarySessionId={workByPrimarySessionId}
+                workByPrimarySessionId={resolvedWorkByPrimarySessionId}
                 renamingSessionId={renamingSessionId}
                 retainedSessionIds={retainedSessionIds}
                 locallyStreamingSessionIds={locallyStreamingSessionIds}
@@ -948,7 +967,7 @@ const WorkspaceGroup = memo(
             <WorkspaceSessionListSection
               workspaceId={workspace.id}
               sortedSessions={sortSessionsForList(ungroupedSessions)}
-              workByPrimarySessionId={workByPrimarySessionId}
+              workByPrimarySessionId={resolvedWorkByPrimarySessionId}
               renamingSessionId={renamingSessionId}
               retainedSessionIds={retainedSessionIds}
               locallyStreamingSessionIds={locallyStreamingSessionIds}
@@ -968,68 +987,6 @@ const WorkspaceGroup = memo(
   },
 )
 WorkspaceGroup.displayName = 'WorkspaceGroup'
-
-function workspaceHasUnreadSession(sessions: readonly WorkspaceSession[]): boolean {
-  return sessions.some(session => session.unread)
-}
-
-function workspaceHasRunningSession(
-  sessions: readonly WorkspaceSession[],
-  locallyStreamingSessionIds: Set<string>,
-): boolean {
-  return sessions.some(session =>
-    isWorkspaceSessionRunning(session, locallyStreamingSessionIds))
-}
-
-function workspaceHasRecentSession(
-  sessions: readonly WorkspaceSession[],
-  currentUnixTimestamp: number,
-): boolean {
-  return sessions.some(session => isSessionRecent(session, currentUnixTimestamp))
-}
-
-function sessionMatchesProjectFilter(
-  session: WorkspaceSession,
-  filter: WorkspaceSidebarProjectFilter,
-  locallyStreamingSessionIds: Set<string>,
-  currentUnixTimestamp: number,
-): boolean {
-  switch (filter) {
-    case 'unread':
-      return session.unread
-    case 'running':
-      return isWorkspaceSessionRunning(session, locallyStreamingSessionIds)
-    case 'recent':
-      return isSessionRecent(session, currentUnixTimestamp)
-    case 'pinned':
-    case 'unpinned':
-    case 'all':
-      return true
-  }
-}
-
-function projectMatchesFilter(
-  workspace: Workspace,
-  sessions: readonly WorkspaceSession[],
-  filter: WorkspaceSidebarProjectFilter,
-  locallyStreamingSessionIds: Set<string>,
-  currentUnixTimestamp: number,
-): boolean {
-  switch (filter) {
-    case 'pinned':
-      return Boolean(workspace.pinned)
-    case 'unpinned':
-      return !workspace.pinned
-    case 'unread':
-      return workspaceHasUnreadSession(sessions)
-    case 'running':
-      return workspaceHasRunningSession(sessions, locallyStreamingSessionIds)
-    case 'recent':
-      return workspaceHasRecentSession(sessions, currentUnixTimestamp)
-    case 'all':
-      return true
-  }
-}
 
 function compareProjectBySortKey(
   left: Workspace,
@@ -1052,6 +1009,7 @@ interface WorkspaceSidebarBodyProps {
   workspaces: Workspace[]
   workspacesReady: boolean
   sessionsByWorkspaceId: Map<string, WorkspaceSession[]>
+  workByPrimarySessionId: ReadonlyMap<string, WorkSummary>
   runtimeIconByKind: RuntimeIconByKind
   adding: boolean
   multiWorkspaceEnabled: boolean
@@ -1069,6 +1027,7 @@ const WorkspaceSidebarBody = memo(
     workspaces,
     workspacesReady,
     sessionsByWorkspaceId,
+    workByPrimarySessionId,
     runtimeIconByKind,
     adding,
     multiWorkspaceEnabled,
@@ -1083,26 +1042,49 @@ const WorkspaceSidebarBody = memo(
     const pruneWorkspaceSidebarState = useWorkspaceSidebarUiStore(
       state => state.pruneWorkspaceSidebarState,
     )
-    const projectFilter = useWorkspaceSidebarUiStore(state => state.projectFilter)
+    const projectScope = useWorkspaceSidebarUiStore(state => state.projectScope)
+    const statusFilters = useWorkspaceSidebarUiStore(state => state.statusFilters)
+    const workPrFilters = useWorkspaceSidebarUiStore(state => state.workPrFilters)
+    const sourceFilters = useWorkspaceSidebarUiStore(state => state.sourceFilters)
+    const showArchived = useWorkspaceSidebarUiStore(state => state.showArchived)
     const projectSortKey = useWorkspaceSidebarUiStore(state => state.projectSortKey)
     const projectSortDirection = useWorkspaceSidebarUiStore(state => state.projectSortDirection)
     const projectPinnedFirst = useWorkspaceSidebarUiStore(state => state.projectPinnedFirst)
-    const setProjectFilter = useWorkspaceSidebarUiStore(state => state.setProjectFilter)
+    const sessionPreviewLimit = useWorkspaceSidebarUiStore(state => state.sessionPreviewLimit)
+    const setProjectScope = useWorkspaceSidebarUiStore(state => state.setProjectScope)
+    const toggleStatusFilter = useWorkspaceSidebarUiStore(state => state.toggleStatusFilter)
+    const toggleWorkPrFilter = useWorkspaceSidebarUiStore(state => state.toggleWorkPrFilter)
+    const toggleSourceFilter = useWorkspaceSidebarUiStore(state => state.toggleSourceFilter)
+    const setShowArchived = useWorkspaceSidebarUiStore(state => state.setShowArchived)
+    const clearListFilters = useWorkspaceSidebarUiStore(state => state.clearListFilters)
     const setProjectSortKey = useWorkspaceSidebarUiStore(state => state.setProjectSortKey)
     const setProjectSortDirection = useWorkspaceSidebarUiStore(
       state => state.setProjectSortDirection,
     )
     const setProjectPinnedFirst = useWorkspaceSidebarUiStore(state => state.setProjectPinnedFirst)
+    const setSessionPreviewLimit = useWorkspaceSidebarUiStore(state => state.setSessionPreviewLimit)
+    const collapseAllWorkspaces = useWorkspaceSidebarUiStore(state => state.collapseAllWorkspaces)
+
+    const listFilters = useMemo<WorkspaceSidebarListFilters>(() => ({
+      projectScope,
+      statusFilters,
+      workPrFilters,
+      sourceFilters,
+      showArchived,
+    }), [projectScope, showArchived, sourceFilters, statusFilters, workPrFilters])
+
     const workspaceIds = useMemo(() => workspaces.map(workspace => workspace.id), [workspaces])
-    const sessionIds = useMemo(() => {
-      const ids: string[] = []
-      for (const sessions of sessionsByWorkspaceId.values()) {
-        for (const session of sessions) {
-          ids.push(session.id)
-        }
+    const allSessions = useMemo(() => {
+      const sessions: WorkspaceSession[] = []
+      for (const workspaceSessions of sessionsByWorkspaceId.values()) {
+        sessions.push(...workspaceSessions)
       }
-      return ids
+      return sessions
     }, [sessionsByWorkspaceId])
+    const sessionIds = useMemo(
+      () => allSessions.map(session => session.id),
+      [allSessions],
+    )
     const locallyStreamingSessionIds = useChatStore(
       useCallback(
         state =>
@@ -1113,17 +1095,40 @@ const WorkspaceSidebarBody = memo(
       ),
       shallow,
     )
-    const now = useNow()
-    const currentUnixTimestamp = Math.floor(now / 1000)
+    const locallyErroredSessionIds = useChatStore(
+      useCallback(
+        (state) => {
+          if (state.errorMap.size === 0) {
+            return EMPTY_SESSION_ID_SET
+          }
+          return new Set(
+            sessionIds.filter(sessionId =>
+              Boolean(chatSelectors.latestError(sessionId)(state))),
+          )
+        },
+        [sessionIds],
+      ),
+      shallow,
+    )
+    const attentionBySessionId = useSessionAttentionBySessionId(
+      listFilters.statusFilters.includes('needsYou') ? allSessions : EMPTY_WORKSPACE_SESSIONS,
+      locallyStreamingSessionIds,
+    )
+    const resolvedAttentionBySessionId = listFilters.statusFilters.includes('needsYou')
+      ? attentionBySessionId
+      : EMPTY_ATTENTION_BY_SESSION_ID
+
     const visibleWorkspaces = useMemo(() => {
       return workspaces
         .filter(workspace =>
-          projectMatchesFilter(
-            workspace,
+          projectMatchesListFilters(
+            Boolean(workspace.pinned),
             sessionsByWorkspaceId.get(workspace.id) ?? [],
-            projectFilter,
+            workByPrimarySessionId,
+            listFilters,
             locallyStreamingSessionIds,
-            currentUnixTimestamp,
+            locallyErroredSessionIds,
+            resolvedAttentionBySessionId,
           ))
         .toSorted((left, right) => {
           if (projectPinnedFirst) {
@@ -1142,13 +1147,15 @@ const WorkspaceSidebarBody = memo(
           return left.name.localeCompare(right.name)
         })
     }, [
-      currentUnixTimestamp,
+      listFilters,
+      locallyErroredSessionIds,
       locallyStreamingSessionIds,
-      projectFilter,
       projectPinnedFirst,
       projectSortDirection,
       projectSortKey,
+      resolvedAttentionBySessionId,
       sessionsByWorkspaceId,
+      workByPrimarySessionId,
       workspaces,
     ])
     const filteredEmpty = workspaces.length > 0 && visibleWorkspaces.length === 0
@@ -1171,33 +1178,42 @@ const WorkspaceSidebarBody = memo(
         <WorkspaceProjectsSectionView
           hasWorkspaces={workspaces.length > 0}
           filteredEmpty={filteredEmpty}
-          projectFilter={projectFilter}
+          listFilters={listFilters}
           projectSortKey={projectSortKey}
           projectSortDirection={projectSortDirection}
           projectPinnedFirst={projectPinnedFirst}
+          sessionPreviewLimit={sessionPreviewLimit}
           adding={adding}
           multiWorkspaceEnabled={multiWorkspaceEnabled}
           hasUnreadWorkspaceSessions={hasUnreadWorkspaceSessions}
           markingAllSessionsRead={markingAllSessionsRead}
-          onProjectFilterChange={setProjectFilter}
+          onProjectScopeChange={setProjectScope}
+          onToggleStatusFilter={toggleStatusFilter}
+          onToggleWorkPrFilter={toggleWorkPrFilter}
+          onToggleSourceFilter={toggleSourceFilter}
+          onShowArchivedChange={setShowArchived}
+          onClearListFilters={clearListFilters}
           onProjectSortKeyChange={setProjectSortKey}
           onProjectSortDirectionChange={setProjectSortDirection}
           onProjectPinnedFirstChange={setProjectPinnedFirst}
+          onSessionPreviewLimitChange={setSessionPreviewLimit}
+          onCollapseAll={() => collapseAllWorkspaces(workspaceIds)}
           onAddFromPicker={onAddFromPicker}
           onOpenMultiWorkspaceDialog={onOpenMultiWorkspaceDialog}
           onMarkAllAsRead={onMarkAllAsRead}
         >
           {visibleWorkspaces.map(workspace => (
-              <WorkspaceGroup
-                key={workspace.id}
-                workspace={workspace}
-                sessions={sessionsByWorkspaceId.get(workspace.id) ?? EMPTY_WORKSPACE_SESSIONS}
-                projectFilter={projectFilter}
-                runtimeIconByKind={runtimeIconByKind}
-                onDelete={onDelete}
-                onTogglePin={onTogglePin}
-              />
-            ))}
+            <WorkspaceGroup
+              key={workspace.id}
+              workspace={workspace}
+              sessions={sessionsByWorkspaceId.get(workspace.id) ?? EMPTY_WORKSPACE_SESSIONS}
+              listFilters={listFilters}
+              workByPrimarySessionId={workByPrimarySessionId}
+              runtimeIconByKind={runtimeIconByKind}
+              onDelete={onDelete}
+              onTogglePin={onTogglePin}
+            />
+          ))}
         </WorkspaceProjectsSectionView>
       </PreviewCardProvider>
     )
@@ -1212,7 +1228,41 @@ export const WorkspaceSidebar = memo(({ collapsed = false }: { collapsed?: boole
   const githubFeaturesDisabled = githubReady && !githubConnected
   const queryClient = useQueryClient()
   const { workspaces, ready: workspacesReady } = useWorkspaces()
-  const { sessions } = useAllSessions()
+  const showArchived = useWorkspaceSidebarUiStore(state => state.showArchived)
+  const { sessions: activeSessions } = useAllSessions()
+  const { sessions: archivedSessions } = useAllSessions(showArchived ? true : undefined)
+  const sessions = useMemo(() => {
+    if (!showArchived) {
+      return activeSessions
+    }
+    const byId = new Map<string, WorkspaceSession>()
+    for (const session of activeSessions) {
+      byId.set(session.id, session)
+    }
+    for (const session of archivedSessions) {
+      byId.set(session.id, session)
+    }
+    return [...byId.values()]
+  }, [activeSessions, archivedSessions, showArchived])
+  const { data: activeWorks = [] } = useWorks()
+  const { data: archivedWorks = [] } = useWorks({
+    archived: true,
+    enabled: showArchived,
+  })
+  const workByPrimarySessionId = useMemo(() => {
+    const byPrimarySessionId = new Map<string, WorkSummary>()
+    for (const work of activeWorks) {
+      byPrimarySessionId.set(work.primarySessionId, work)
+    }
+    if (showArchived) {
+      for (const work of archivedWorks) {
+        byPrimarySessionId.set(work.primarySessionId, work)
+      }
+    }
+    return byPrimarySessionId.size > 0
+      ? byPrimarySessionId
+      : EMPTY_WORK_BY_PRIMARY_SESSION_ID
+  }, [activeWorks, archivedWorks, showArchived])
   const { runtimes } = useRuntimeCatalog()
   const {
     addFromPicker,
@@ -1440,6 +1490,7 @@ export const WorkspaceSidebar = memo(({ collapsed = false }: { collapsed?: boole
             workspaces={workspaces}
             workspacesReady={workspacesReady}
             sessionsByWorkspaceId={sessionsByWorkspaceId}
+            workByPrimarySessionId={workByPrimarySessionId}
             runtimeIconByKind={runtimeIconByKind}
             adding={adding}
             multiWorkspaceEnabled={multiWorkspaceEnabled}
