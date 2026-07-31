@@ -239,6 +239,18 @@ export const ChatRuntimeModel = {
     command: t.String({ minLength: 1 }),
   }),
 
+  observationBody: t.Object({
+    text: t.String({ minLength: 1 }),
+    entity: t.Optional(t.String()),
+    entityType: t.Optional(t.String()),
+    durationMs: t.Optional(t.Number()),
+    endReason: t.Optional(t.String()),
+  }),
+
+  observationResponse: t.Object({
+    messageId: t.String(),
+  }),
+
   sideChatBody: t.Object({
     providerTargetId: t.Optional(t.String()),
     modelId: t.Optional(nullableModelIdSchema),

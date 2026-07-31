@@ -23535,6 +23535,32 @@ export type PostChatSessionsBySessionIdBangCommandResponses = {
 
 export type PostChatSessionsBySessionIdBangCommandResponse = PostChatSessionsBySessionIdBangCommandResponses[keyof PostChatSessionsBySessionIdBangCommandResponses];
 
+export type PostChatSessionsBySessionIdObservationsData = {
+    body: {
+        text: string;
+        entity?: string;
+        entityType?: string;
+        durationMs?: number;
+        endReason?: string;
+    };
+    path: {
+        sessionId: string;
+    };
+    query?: never;
+    url: '/chat/sessions/{sessionId}/observations';
+};
+
+export type PostChatSessionsBySessionIdObservationsResponses = {
+    /**
+     * Response for status 200
+     */
+    200: {
+        messageId: string;
+    };
+};
+
+export type PostChatSessionsBySessionIdObservationsResponse = PostChatSessionsBySessionIdObservationsResponses[keyof PostChatSessionsBySessionIdObservationsResponses];
+
 export type PostChatSessionsBySessionIdSideChatData = {
     body: {
         providerTargetId?: string;

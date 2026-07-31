@@ -3798,6 +3798,18 @@ export const zPostChatSessionsBySessionIdBangCommandPath = z.object({
     sessionId: z.string().min(1)
 });
 
+export const zPostChatSessionsBySessionIdObservationsBody = z.object({
+    text: z.string().min(1),
+    entity: z.string().optional(),
+    entityType: z.string().optional(),
+    durationMs: z.number().optional(),
+    endReason: z.string().optional()
+});
+
+export const zPostChatSessionsBySessionIdObservationsPath = z.object({
+    sessionId: z.string().min(1)
+});
+
 export const zPostChatSessionsBySessionIdSideChatBody = z.object({
     providerTargetId: z.string().optional(),
     modelId: z.string().nullish()

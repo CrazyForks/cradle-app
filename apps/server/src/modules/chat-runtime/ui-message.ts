@@ -445,6 +445,35 @@ export function annotateBangResultMessage(
   } as UIMessage
 }
 
+export interface UiActivityObservationMetadata {
+  kind: 'ui-activity'
+  entity?: string
+  entityType?: string
+  durationMs?: number
+  endReason?: string
+}
+
+export function annotateObservationMessage(
+  message: UIMessage,
+  observation: Omit<UiActivityObservationMetadata, 'kind'>,
+): UIMessage {
+  const metadata = readObjectRecord((message as { metadata?: unknown }).metadata)
+  const cradleMetadata = readObjectRecord(metadata.cradle)
+  return {
+    ...message,
+    metadata: {
+      ...metadata,
+      cradle: {
+        ...cradleMetadata,
+        observation: {
+          kind: 'ui-activity',
+          ...observation,
+        } satisfies UiActivityObservationMetadata,
+      },
+    },
+  } as UIMessage
+}
+
 export function readGoalMessageObjective(message: UIMessage): string | null {
   const metadata = readObjectRecord((message as { metadata?: unknown }).metadata)
   const cradleMetadata = readObjectRecord(metadata.cradle)

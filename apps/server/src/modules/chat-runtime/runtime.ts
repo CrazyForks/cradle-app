@@ -466,6 +466,18 @@ export async function executeBangCommand(input: ExecuteBangCommandInput) {
   return executeBangCommandFromInteraction(input)
 }
 
+export async function appendSessionObservation(input: {
+  sessionId: string
+  text: string
+  entity?: string
+  entityType?: string
+  durationMs?: number
+  endReason?: string
+}) {
+  const { appendSessionObservationMessage } = await import('./observation-message')
+  return appendSessionObservationMessage(input)
+}
+
 // ── public runtime API ──
 
 export async function rollbackLastTurn(

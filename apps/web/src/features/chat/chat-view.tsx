@@ -260,9 +260,9 @@ export function ChatView({
   const preparedBaseComposerRuntime = useMemo<ChatComposerRuntime>(() => {
     return {
       ...navigableComposerRuntime,
-      send: (text, files, contextParts, options) => {
+      send: async (text, files, contextParts, options) => {
         const prepared = prepareSend
-          ? prepareSend({ text, files, contextParts, options })
+          ? await Promise.resolve(prepareSend({ text, files, contextParts, options }))
           : { text, files, contextParts, options }
         return navigableComposerRuntime.send(
           prepared.text,
