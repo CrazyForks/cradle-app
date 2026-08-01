@@ -1144,15 +1144,12 @@ body {
   padding: 0;
 }
 
-/* Shiki dual-theme */
+/* Shiki dual-theme: shiki v3 colors light tokens inline and carries the dark
+   override in a `--shiki-dark` var on the same span. Don't override the light
+   color with a `--shiki-light` var (never emitted) — that flattens every token. */
 .streamdown-root .sd-code-body .shiki,
 [data-pre-mounted] .sd-code-body .shiki {
   background: transparent !important;
-}
-
-.streamdown-root .sd-code-body .shiki span,
-[data-pre-mounted] .sd-code-body .shiki span {
-  color: var(--shiki-light) !important;
 }
 
 .dark .streamdown-root .sd-code-body .shiki span,
@@ -1367,12 +1364,19 @@ body {
   tab-size: 2;
 }
 
-.tool-call-code-highlight .shiki span {
-  color: var(--shiki-light) !important;
-}
-
+/* shiki v3 dual-theme output colors light tokens inline (e.g. `color:#6F42C1`)
+   and carries the dark override in a `--shiki-dark` var on the same span, so the
+   light theme needs no override here — the `.dark` rule below swaps in the dark
+   color. (Don't reintroduce `color: var(--shiki-light)`: that var is never
+   emitted, so it flattens every token to the inherited text color.) */
 .dark .tool-call-code-highlight .shiki span {
   color: var(--shiki-dark) !important;
+}
+
+/* Terminal command snippet: the `$` prompt lives in its own non-selectable
+   span, so the highlighted command starts flush after it (no left padding). */
+.chat-terminal-command .tool-call-code-highlight .shiki {
+  padding-left: 0;
 }
 
 /* ═══ TABLES ═══ */

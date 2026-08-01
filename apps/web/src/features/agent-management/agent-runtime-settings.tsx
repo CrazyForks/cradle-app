@@ -9,10 +9,10 @@ import {
   RightSmallLine as ChevronRightIcon,
   SearchLine as SearchIcon,
   ServerLine as ServerIcon,
+  SparklesLine as SparklesIcon,
   SquareLine as SquareIcon,
 } from '@mingcute/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AnimatePresence, m } from 'motion/react'
 import { useDeferredValue, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -23,7 +23,7 @@ import {
   patchExternalProviderSourcesBySourceKeyRecordsByExternalRecordIdRuntimeTargetMutation,
   postExternalProviderSourcesRefreshMutation,
 } from '~/api-gen/@tanstack/react-query.gen'
-import { ProviderIconTile } from '~/components/common/provider-icons'
+import { ProviderIcon } from '~/components/common/provider-icons'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -57,13 +57,14 @@ import { AGENTS_QUERY_KEY } from '~/features/agent-runtime/use-agents'
 import { cn } from '~/lib/cn'
 
 import { SettingsMasterDetail } from '../settings/settings-container'
-import { AddProviderDialog } from './add-provider-dialog'
+import { DraftSetupPanel } from './draft-setup-panel'
 import { ExternalProviderRecordDetailPanel } from './external-provider-record-detail-panel'
 import { ImportProviderDialog } from './import-provider-dialog'
 import { ProfileDetailPanel } from './profile-detail-panel'
 import { ProviderTestStatusDot } from './provider-connection-test'
 import { collectProviderListGroups } from './provider-list-groups'
 import type {
+  DraftProvider,
   ExternalProviderRecordView,
   ExternalProviderSourceView,
   ProviderListEntry,
@@ -141,14 +142,6 @@ const ProviderRow = ({
     const externalBaseUrl = !manual && typeof entry.record.metadata.baseUrl === 'string'
       ? entry.record.metadata.baseUrl
       : null
-    const externalIconSlug = !manual && typeof entry.record.metadata.iconSlug === 'string'
-      ? entry.record.metadata.iconSlug
-      : null
-    const externalIconUrl = !manual && typeof entry.record.metadata.iconUrl === 'string'
-      ? entry.record.metadata.iconUrl
-      : !manual && typeof entry.record.metadata.avatarUrl === 'string'
-        ? entry.record.metadata.avatarUrl
-        : null
     const modelLabel = cfg?.model || externalModel
     const endpointHost = hostnameOf(cfg?.baseUrl || cfg?.openaiBaseUrl || externalBaseUrl)
     // The endpoint host is the most identifying detail in a list where every
@@ -195,11 +188,10 @@ const ProviderRow = ({
           className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden text-left outline-none"
           onClick={event => onOpenEntry(entry.id, event.shiftKey)}
         >
-          <ProviderIconTile
-            iconSlug={manual ? entry.profile.iconSlug : externalIconSlug}
-            iconUrl={manual ? null : externalIconUrl}
+          <ProviderIcon
+            iconSlug={manual ? entry.profile.iconSlug : null}
             presetId={preset?.id ?? null}
-            size="sm"
+            className="size-4 shrink-0 text-muted-foreground"
           />
           <div className="min-w-0 flex-1 overflow-hidden">
             <span
@@ -244,7 +236,8 @@ export function AgentRuntimeSettings() {
   } = useAgentProfiles()
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const selectionAnchorIdRef = useRef<string | null>(null)
-  const [addProviderOpen, setAddProviderOpen] = useState(false)
+  const [draft, setDraft] = useState<DraftProvider | null>(null)
+  const [onboardingPresetId, setOnboardingPresetId] = useState<string | null>(null)
   const [importOpen, setImportOpen] = useState(false)
   const [filter, setFilter] = useState('')
   const deferredFilter = useDeferredValue(filter)
@@ -353,7 +346,10 @@ export function AgentRuntimeSettings() {
     () => new Set(providerEntries.map(entry => entry.id)),
     [providerEntries],
   )
-  const prunedSelectedIds = pruneSelectedIds(selectedIds, availableEntryIds)
+  const draftSelected = !!(draft && selectedIds.has(draft.id))
+  const prunedSelectedIds = draftSelected
+    ? selectedIds
+    : pruneSelectedIds(selectedIds, availableEntryIds)
   if (prunedSelectedIds !== selectedIds) {
     setSelectedIds(prunedSelectedIds)
   }
@@ -382,6 +378,7 @@ export function AgentRuntimeSettings() {
   const toggleableSelectedExternalRecords = selectedExternalRecords.filter(externalRecordCanToggle)
   const removableSelectedProfiles = selectedProfiles
   const toggleableSelectedCount = toggleableSelectedProfiles.length + toggleableSelectedExternalRecords.length
+  const isDraftSelected = draftSelected
   const allVisibleSelected = visibleRecordsAreSelected(visibleEntries, currentSelectedIds)
   const hasFilter = deferredFilter.trim().length > 0
   const providerGroupLabel = (group: (typeof visibleProfileGroups)[number]) => {
@@ -396,9 +393,22 @@ export function AgentRuntimeSettings() {
     })
   }
 
-  const handleAddProviderComplete = (newProfileId?: string) => {
-      setAddProviderOpen(false)
+  const startDraft = () => {
+    const id = `draft-${Date.now()}`
+    setDraft({ id, presetId: null })
+    setSelectedIds(new Set([id]))
+    selectionAnchorIdRef.current = null
+  }
+
+  const cancelDraft = () => {
+    setDraft(null)
+    setSelectedIds(new Set())
+    selectionAnchorIdRef.current = null
+  }
+
+  const handleDraftComplete = (newProfileId?: string) => {
       void refetch().finally(() => {
+        setDraft(null)
         const nextId = newProfileId ? providerListEntryId('manual', newProfileId) : null
         setSelectedIds(nextId ? new Set([nextId]) : new Set())
         selectionAnchorIdRef.current = nextId
@@ -474,16 +484,19 @@ export function AgentRuntimeSettings() {
   }
 
   const selectVisibleProfiles = () => {
+    setDraft(null)
     setSelectedIds(prev => mergeVisibleSelection(prev, visibleEntries))
     selectionAnchorIdRef.current = visibleEntries.at(-1)?.id ?? null
   }
 
   const clearSelection = () => {
+    setDraft(null)
     setSelectedIds(new Set())
     selectionAnchorIdRef.current = null
   }
 
   const selectEntry = (entryId: string, selected: boolean, shiftKey: boolean) => {
+      setDraft(null)
       setSelectedIds((prev) => {
         if (shiftKey) {
           return applyVisibleRangeSelection(
@@ -496,6 +509,7 @@ export function AgentRuntimeSettings() {
         }
 
         const next = new Set(prev)
+        next.delete(draft?.id ?? '')
         if (selected) {
           next.add(entryId)
         }
@@ -515,6 +529,7 @@ export function AgentRuntimeSettings() {
 
       setSelectedIds(new Set([entryId]))
       selectionAnchorIdRef.current = entryId
+      setDraft(null)
     }
 
   const handleBatchToggle = async (enabled: boolean) => {
@@ -580,7 +595,7 @@ export function AgentRuntimeSettings() {
   const selectionShortcutScopeRef = useSettingsSelectionShortcuts({
     hasVisibleRecords: visibleEntries.length > 0,
     hasSelection: currentSelectedIds.size > 0,
-    hasDraft: false,
+    hasDraft: !!draft,
     canDeleteSelection: !batchBusy && removableSelectedProfiles.length > 0,
     onSelectVisible: selectVisibleProfiles,
     onClearSelection: clearSelection,
@@ -606,44 +621,44 @@ export function AgentRuntimeSettings() {
         <DownloadIcon />
         {t('runtime.action.import')}
       </Button>
-      <Button data-testid="add-provider-btn" size="sm" onClick={() => setAddProviderOpen(true)}>
+      <Button data-testid="add-provider-btn" size="sm" onClick={startDraft} disabled={!!draft}>
         <PlusIcon />
         {t('runtime.action.addProvider')}
       </Button>
     </div>
   )
 
-  const floatingToolbar = (
-    <AnimatePresence initial={false}>
-      {currentSelectedIds.size > 0 && (
-        <m.div
-          key="agent-runtime-selection-bar"
-          initial={{ opacity: 0, y: 12, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 8, scale: 0.98 }}
-          transition={{ type: 'spring', duration: 0.3, bounce: 0 }}
-          className="pointer-events-none absolute inset-x-0 bottom-3 z-30 flex justify-center px-4"
-        >
-          <div className="pointer-events-auto flex min-h-10 max-w-full flex-wrap items-center justify-center gap-1 rounded-full bg-popover px-2 py-1 text-popover-foreground shadow-lg ring-1 ring-foreground/10">
+  const toolbar = (
+    <>
+      {!isDraftSelected && currentSelectedIds.size > 0 && (
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2">
+          <div className="flex min-w-0 items-center gap-2 text-[12px] text-muted-foreground">
             <button
               type="button"
               onClick={toggleVisibleSelected}
-              className="inline-flex min-h-7 items-center gap-1.5 rounded-full px-2 text-[12px] font-medium tabular-nums text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 hover:bg-foreground/[0.035]"
             >
               {allVisibleSelected
 ? (
-                <SquareCheckIcon className="size-3.5 !text-primary" />
+                <SquareCheckIcon className="size-3.5" />
               )
 : (
                 <SquareIcon className="size-3.5" />
               )}
               <span>{t('runtime.selection.selected', { selectedCount: currentSelectedIds.size })}</span>
             </button>
-            <span className="mx-1 h-4 w-px bg-border" aria-hidden="true" />
+            <button
+              type="button"
+              onClick={clearSelection}
+              className="text-muted-foreground/70 hover:text-foreground"
+            >
+              {t('runtime.selection.clear')}
+            </button>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
             <Button
               size="xs"
-              variant="ghost"
-              className="rounded-full"
+              variant="outline"
               onClick={() => void handleBatchToggle(true)}
               disabled={batchBusy || toggleableSelectedCount === 0}
             >
@@ -651,8 +666,7 @@ export function AgentRuntimeSettings() {
             </Button>
             <Button
               size="xs"
-              variant="ghost"
-              className="rounded-full"
+              variant="outline"
               onClick={() => void handleBatchToggle(false)}
               disabled={batchBusy || toggleableSelectedCount === 0}
             >
@@ -661,28 +675,16 @@ export function AgentRuntimeSettings() {
             <Button
               size="xs"
               variant="destructive"
-              className="rounded-full"
               onClick={requestBatchRemove}
               disabled={batchBusy || removableSelectedProfiles.length === 0}
             >
               <Trash2Icon className="size-3" />
               {t('runtime.selection.delete')}
             </Button>
-            <span className="mx-1 h-4 w-px bg-border" aria-hidden="true" />
-            <Button
-              type="button"
-              size="icon-xs"
-              variant="ghost"
-              className="rounded-full"
-              aria-label={t('runtime.selection.clear')}
-              onClick={clearSelection}
-            >
-              <XIcon />
-            </Button>
           </div>
-        </m.div>
+        </div>
       )}
-    </AnimatePresence>
+    </>
   )
 
   const listPane = (
@@ -702,7 +704,45 @@ export function AgentRuntimeSettings() {
 
       <ScrollArea className="-mx-1 min-h-0 flex-1">
         <div className="flex min-w-0 flex-col gap-0.5 px-1">
-          {visibleEntries.length > 0 && (
+          {draft && (
+                <div
+                  className={cn(
+                    'group/sidebar-row relative flex w-full min-w-0 items-center gap-2.5 overflow-hidden rounded-lg px-2 py-1.5 text-left outline-none',
+                    'transition-[background-color] duration-150',
+                    isDraftSelected
+                      ? 'bg-foreground/[0.045] text-foreground'
+                      : 'opacity-90 hover:bg-foreground/[0.035]',
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setSelectedIds(new Set([draft.id]))}
+                    aria-pressed={isDraftSelected}
+                    className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden text-left outline-none"
+                  >
+                    <span className="flex size-5 items-center justify-center rounded-sm border border-dashed border-foreground/15 text-muted-foreground -ml-0.5">
+                      <SparklesIcon className="size-2.5" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[12.5px] leading-tight text-foreground/70">
+                        {t('runtime.draft.title')}
+                      </span>
+                      <span className="block truncate text-[10.5px] leading-tight text-muted-foreground/60">
+                        {t('runtime.draft.description')}
+                      </span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearSelection}
+                    className="shrink-0 rounded p-0.5 text-muted-foreground/40 hover:text-muted-foreground"
+                  >
+                    <XIcon className="size-3" />
+                  </button>
+                </div>
+              )}
+
+              {visibleEntries.length > 0 && (
                 <div className="mb-1 flex items-center justify-between gap-2 px-2 py-0.5 text-[10.5px] text-muted-foreground/60">
                   <span>{t('runtime.visible.count', { visibleCount: visibleEntries.length })}</span>
                   <button
@@ -759,7 +799,7 @@ export function AgentRuntimeSettings() {
                         <ProviderRow
                           key={entry.id}
                           entry={entry}
-                          active={selectedEntryId === entry.id}
+                          active={selectedEntryId === entry.id && !isDraftSelected}
                           selected={currentSelectedIds.has(entry.id)}
                           selectionActive={currentSelectedIds.size > 0}
                           onOpenEntry={openEntry}
@@ -771,7 +811,7 @@ export function AgentRuntimeSettings() {
                 )
               })}
 
-              {visibleEntries.length === 0 && (
+              {visibleEntries.length === 0 && !draft && (
                 <div className="px-2 py-6 text-center">
                   <p className="text-[11.5px] text-muted-foreground/70">
                     {filter ? t('runtime.empty.noMatches') : t('runtime.empty.noProviders')}
@@ -791,90 +831,98 @@ export function AgentRuntimeSettings() {
     </div>
   )
 
-  // The detail pane only ever shows a provider detail or an empty state now —
-  // adding a provider lives in AddProviderDialog. A single padded column and a
-  // keyed crossfade keep switches from visually jumping.
-  const detailKey = selectedEntries.length > 1
-    ? 'multi-selection'
-    : selectedEntryId ?? 'empty'
-
   const detailPane = (
-    <AnimatePresence mode="popLayout" initial={false}>
-      <m.div
-        key={detailKey}
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -6 }}
-        transition={{ duration: 0.14, ease: 'easeOut' }}
-        className="flex min-h-full min-w-0 flex-1 flex-col px-7 py-6"
-      >
-        {selectedEntries.length > 1
-          ? (
-              <div className="flex flex-1 items-center justify-center">
-                <Empty className="border-none">
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <ServerIcon />
-                    </EmptyMedia>
-                    <EmptyTitle>
-                      {t('runtime.multiSelected.title', { selectedCount: selectedEntries.length })}
-                    </EmptyTitle>
-                    <EmptyDescription>{t('runtime.multiSelected.description')}</EmptyDescription>
-                  </EmptyHeader>
-                  <EmptyContent>
-                    <Button size="sm" variant="outline" onClick={clearSelection}>
-                      <XIcon />
-                      {t('runtime.selection.clearSelection')}
-                    </Button>
-                  </EmptyContent>
-                </Empty>
-              </div>
-            )
-          : selectedEntry?.kind === 'manual'
-            ? (
-                <div className="min-w-0 flex-1">
-                  <ProfileDetailPanel
-                    profile={selectedEntry.profile}
-                    onRemove={() => void handleRemoveProfile(selectedEntry.profile.id)}
-                    onToggle={enabled => void handleToggleProfile(selectedEntry.profile, enabled)}
-                    onDuplicate={() => void handleDuplicateProfile(selectedEntry.profile)}
-                    onSaved={() => {
-                      void refetch()
-                    }}
-                  />
-                </div>
-              )
-            : selectedEntry?.kind === 'external'
-              ? (
-                  <div className="min-w-0 flex-1">
-                    <ExternalProviderRecordDetailPanel
-                      record={selectedEntry.record}
-                      source={sourceById.get(selectedEntry.record.sourceKey) ?? null}
-                      onUpdated={handleExternalProviderUpdated}
-                    />
-                  </div>
-                )
-              : (
-                  <div className="flex flex-1 items-center justify-center">
-                    <Empty className="border-none">
-                      <EmptyHeader>
-                        <EmptyMedia variant="icon">
-                          <ServerIcon />
-                        </EmptyMedia>
-                        <EmptyTitle>{t('runtime.noSelection.title')}</EmptyTitle>
-                        <EmptyDescription>{t('runtime.noSelection.description')}</EmptyDescription>
-                      </EmptyHeader>
-                      <EmptyContent>
-                        <Button size="sm" variant="outline" onClick={() => setAddProviderOpen(true)}>
-                          <PlusIcon />
-                          {t('runtime.noSelection.addProvider')}
-                        </Button>
-                      </EmptyContent>
-                    </Empty>
-                  </div>
-                )}
-      </m.div>
-    </AnimatePresence>
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col py-5 pl-6 pr-5">
+      {isDraftSelected && draft
+? (
+        <div className="min-w-0 flex-1">
+          <DraftSetupPanel
+            draft={draft}
+            onSelectPreset={presetId =>
+              setDraft(prev => (prev ? { ...prev, presetId } : prev))}
+            onComplete={handleDraftComplete}
+            onCancel={cancelDraft}
+          />
+        </div>
+      )
+: selectedEntries.length > 1
+? (
+        <div className="flex flex-1 items-center justify-center">
+          <Empty className="border-none">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <ServerIcon />
+              </EmptyMedia>
+              <EmptyTitle>
+                {t('runtime.multiSelected.title', { selectedCount: selectedEntries.length })}
+              </EmptyTitle>
+              <EmptyDescription>{t('runtime.multiSelected.description')}</EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button size="sm" variant="outline" onClick={clearSelection}>
+                <XIcon />
+                {t('runtime.selection.clearSelection')}
+              </Button>
+            </EmptyContent>
+          </Empty>
+        </div>
+      )
+: selectedEntry?.kind === 'manual'
+? (
+        <div key={selectedEntry.profile.id} className="min-w-0 flex-1">
+          <ProfileDetailPanel
+            profile={selectedEntry.profile}
+            onRemove={() => void handleRemoveProfile(selectedEntry.profile.id)}
+            onToggle={enabled => void handleToggleProfile(selectedEntry.profile, enabled)}
+            onDuplicate={() => void handleDuplicateProfile(selectedEntry.profile)}
+            onSaved={() => {
+              void refetch()
+            }}
+          />
+        </div>
+      )
+: selectedEntry?.kind === 'external'
+? (
+        <div key={selectedEntry.record.id} className="min-w-0 flex-1">
+          <ExternalProviderRecordDetailPanel
+            record={selectedEntry.record}
+            source={sourceById.get(selectedEntry.record.sourceKey) ?? null}
+            onUpdated={handleExternalProviderUpdated}
+          />
+        </div>
+      )
+: profiles.length === 0 && externalRecordViews.length === 0
+? (
+        <div className="min-w-0 flex-1">
+          {/* First-run journey: the empty screen IS the add form. */}
+          <DraftSetupPanel
+            draft={{ id: 'onboarding', presetId: onboardingPresetId }}
+            onSelectPreset={presetId => setOnboardingPresetId(presetId || null)}
+            onComplete={handleDraftComplete}
+            onCancel={() => setOnboardingPresetId(null)}
+          />
+        </div>
+      )
+: (
+        <div className="flex flex-1 items-center justify-center">
+          <Empty className="border-none">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <ServerIcon />
+              </EmptyMedia>
+              <EmptyTitle>{t('runtime.noSelection.title')}</EmptyTitle>
+              <EmptyDescription>{t('runtime.noSelection.description')}</EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button size="sm" variant="outline" onClick={startDraft}>
+                <PlusIcon />
+                {t('runtime.noSelection.addProvider')}
+              </Button>
+            </EmptyContent>
+          </Empty>
+        </div>
+      )}
+    </div>
   )
 
   return (
@@ -884,17 +932,12 @@ export function AgentRuntimeSettings() {
       title={t('runtime.header.title')}
       description={t('runtime.header.description')}
       action={headerActions}
-      floatingToolbar={floatingToolbar}
+      toolbar={toolbar}
       list={listPane}
       detail={detailPane}
       listWidth={360}
     >
       <ImportProviderDialog open={importOpen} onOpenChange={setImportOpen} />
-      <AddProviderDialog
-        open={addProviderOpen}
-        onOpenChange={setAddProviderOpen}
-        onComplete={handleAddProviderComplete}
-      />
       <AlertDialog
         open={pendingBatchRemoveProfiles.length > 0}
         onOpenChange={(open) => {

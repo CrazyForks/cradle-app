@@ -81,8 +81,6 @@ interface SettingsMasterDetailProps extends React.ComponentPropsWithoutRef<'div'
    * master-detail card (e.g. an account row card or a batch-selection bar).
    */
   toolbar?: React.ReactNode
-  /** Optional floating content anchored to the bottom of the master-detail surface. */
-  floatingToolbar?: React.ReactNode
   /** Left list pane content (search + list + footer). */
   list: React.ReactNode
   /** Right detail pane content. */
@@ -109,7 +107,6 @@ export function SettingsMasterDetail({
   description,
   action,
   toolbar,
-  floatingToolbar,
   list,
   detail,
   listWidth = 300,
@@ -118,7 +115,7 @@ export function SettingsMasterDetail({
   ...rest
 }: SettingsMasterDetailProps) {
   return (
-    <div className={cn('relative flex h-full min-h-0 w-full min-w-0 flex-col gap-5', className)} {...rest}>
+    <div className={cn('flex h-full min-h-0 w-full min-w-0 flex-col gap-5', className)} {...rest}>
       <SettingsHeader title={title} description={description} action={action} />
       {toolbar}
       <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border border-border bg-card">
@@ -132,7 +129,6 @@ export function SettingsMasterDetail({
           {detail}
         </section>
       </div>
-      {floatingToolbar}
       {children}
     </div>
   )

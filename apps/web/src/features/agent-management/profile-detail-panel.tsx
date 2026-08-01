@@ -25,7 +25,7 @@ import {
   postSecretsByIdReveal,
   putProfilesById,
 } from '~/api-gen/sdk.gen'
-import { ProviderIcon, ProviderIconTile } from '~/components/common/provider-icons'
+import { ProviderIcon } from '~/components/common/provider-icons'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -47,6 +47,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select'
+import { Separator } from '~/components/ui/separator'
 import { Spinner } from '~/components/ui/spinner'
 import { Switch } from '~/components/ui/switch'
 import { toastManager } from '~/components/ui/toast'
@@ -63,6 +64,7 @@ import { AGENT_MODELS_QUERY_KEY } from '~/features/agent-runtime/use-agent-model
 import { apiErrorMessage } from '~/lib/api-error'
 import { cn } from '~/lib/cn'
 
+import { SettingsDivider, SettingsRow } from '../settings/settings-row'
 import { ChatgptCredentialSummary } from './chatgpt-credential-summary'
 import {
   CLAUDE_AUTH_MODE_API_KEY,
@@ -91,11 +93,6 @@ import {
   presetForProviderKind,
   PROVIDER_KIND_LABELS,
 } from './provider-settings-utils'
-import {
-  AuthModeSegmented,
-  InfoCallout,
-  SetupField,
-} from './provider-setup-form'
 import type { EditableCustomModel } from './provider-target-model-settings'
 import {
   CustomModelsJsonSchema,
@@ -185,12 +182,6 @@ const INITIAL_CHATGPT_LOGIN_STATE: ChatgptLoginState = {
 }
 
 const EMPTY_ENABLED_MODELS: string[] = []
-
-const PROVIDER_KIND_SEGMENT_OPTIONS = [
-  { value: 'openai-compatible', label: PROVIDER_KIND_LABELS['openai-compatible'] },
-  { value: 'anthropic', label: PROVIDER_KIND_LABELS.anthropic },
-  { value: 'universal', label: PROVIDER_KIND_LABELS.universal },
-] as const
 
 const ModelDescriptorSchema = z.object({
   id: z.string(),
@@ -406,18 +397,6 @@ function clearTimer(timerRef: MutableRefObject<ReturnType<typeof setTimeout> | n
 
   clearTimeout(timerRef.current)
   timerRef.current = null
-}
-
-function hostnameOf(url: string | null | undefined): string | null {
-  if (!url) {
-    return null
-  }
-  try {
-    return new URL(url).hostname
-  }
-  catch {
-    return null
-  }
 }
 
 export function ProfileDetailPanel({
@@ -862,14 +841,12 @@ export function ProfileDetailPanel({
     }
 
   const headerName = name.trim() || profile.name
-  const headerEndpoint = providerKind === 'universal' ? openaiBaseUrl : baseUrl
 
   return (
-    <div data-testid="provider-detail-panel" className="flex max-w-2xl flex-col gap-10">
+    <div data-testid="provider-detail-panel" className="flex flex-col gap-2">
       <ProfileDetailHeader
         profile={profile}
         displayName={headerName}
-        subtitle={hostnameOf(headerEndpoint) ?? PROVIDER_KIND_LABELS[providerKind]}
         icon={(
           <IconPicker
             value={profile.iconSlug ?? null}
@@ -880,9 +857,9 @@ export function ProfileDetailPanel({
           >
             <button
               type="button"
-              className="shrink-0 cursor-pointer rounded-xl transition-shadow duration-150 hover:ring-2 hover:ring-foreground/10"
+              className="mt-1 shrink-0 cursor-pointer rounded-md p-0.5 transition-colors hover:bg-fill"
             >
-              <ProviderIconTile iconSlug={profile.iconSlug} presetId={preset.id} size="lg" />
+              <ProviderIcon iconSlug={profile.iconSlug} presetId={preset.id} className="size-6" />
             </button>
           </IconPicker>
         )}
@@ -893,7 +870,7 @@ export function ProfileDetailPanel({
       />
 
       {/* Configuration */}
-      <div className="flex flex-col gap-10">
+      <div className="flex flex-col">
         <ProfileGeneralSettings
           profile={profile}
           credentialMetadata={credentialMetadata.data ?? null}
@@ -914,13 +891,16 @@ export function ProfileDetailPanel({
         )}
 
         {supportsModels && supportsClaudeAgentModelAliases(providerKind) && (
-          <ClaudeModelMatrixEditor
-            aliases={claudeAgentAliases}
-            models={availableModels}
-            mainModelId={model || null}
-            loading={modelsLoading}
-            onChange={handleClaudeAgentAliasesChange}
-          />
+          <>
+            <SettingsDivider />
+            <ClaudeModelMatrixEditor
+              aliases={claudeAgentAliases}
+              models={availableModels}
+              mainModelId={model || null}
+              loading={modelsLoading}
+              onChange={handleClaudeAgentAliasesChange}
+            />
+          </>
         )}
 
         {supportsModels && (
@@ -959,18 +939,16 @@ export function ProfileDetailPanel({
 }
 
 function ProfileDetailHeader({
+  profile,
   displayName,
-  subtitle,
   icon,
   saveState,
-  profile,
   onToggle,
   onDuplicate,
   onOpenRemove,
 }: {
   profile: AgentProfile
   displayName: string
-  subtitle: string
   icon: ReactNode
   saveState: SaveState
   onToggle: (enabled: boolean) => void
@@ -978,22 +956,19 @@ function ProfileDetailHeader({
   onOpenRemove: () => void
 }) {
   return (
-    <header className="flex items-center gap-4">
+    <header className="flex items-start gap-3">
       {icon}
 
-      <div className="min-w-0 flex-1">
-        <h4 className="font-heading truncate text-[17px] font-medium tracking-[-0.01em] text-foreground">
+      <div className="min-w-0 flex-1 pt-1">
+        <h4 className="font-heading truncate text-[15px] font-medium text-foreground">
           {displayName}
         </h4>
-        <p className="mt-0.5 truncate font-mono text-[11.5px] text-muted-foreground/70">
-          {subtitle}
-        </p>
       </div>
 
-      <div className="flex shrink-0 items-center gap-2.5">
+      <div className="flex items-center gap-3 pt-0.5">
         <SaveIndicator state={saveState} />
 
-        <div className="flex items-center gap-2 rounded-full bg-muted/50 px-2.5 py-1">
+        <div className="flex items-center gap-2 rounded-full bg-muted/40 px-2.5 py-1 ring-1 ring-foreground/4">
           <Switch size="sm" checked={profile.enabled} onCheckedChange={onToggle} />
           <span className="text-[11px] font-medium text-muted-foreground">
             {profile.enabled ? 'Active' : 'Off'}
@@ -1003,14 +978,13 @@ function ProfileDetailHeader({
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              type="button"
+              data-testid={`agent-profile-duplicate-${profile.id}`}
               variant="ghost"
               size="icon-sm"
-              data-testid={`agent-profile-duplicate-${profile.id}`}
               onClick={onDuplicate}
-              aria-label="Duplicate provider"
+              className="text-muted-foreground/60 hover:bg-foreground/5 hover:text-foreground"
             >
-              <CopyIcon />
+              <CopyIcon className="size-3.5" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top">Duplicate provider</TooltipContent>
@@ -1019,15 +993,13 @@ function ProfileDetailHeader({
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              type="button"
+              data-testid={`agent-profile-remove-${profile.id}`}
               variant="ghost"
               size="icon-sm"
-              data-testid={`agent-profile-remove-${profile.id}`}
               onClick={onOpenRemove}
-              aria-label="Remove provider"
-              className="hover:text-destructive"
+              className="text-muted-foreground/60 hover:bg-destructive/6 hover:text-destructive"
             >
-              <Trash2Icon />
+              <Trash2Icon className="size-3.5" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top">Remove provider</TooltipContent>
@@ -1081,137 +1053,132 @@ function ProfileGeneralSettings({
   const providerKindDisabled = readOnly || codexAuthMode === CODEX_AUTH_MODE_CHATGPT || isChatgptCredential
 
   return (
-    <div className="flex flex-col gap-9">
-      {/* ── General ── */}
-      <section className="flex flex-col gap-4">
-        <h5 className="px-0.5 text-[13px] font-medium text-foreground">General</h5>
+    <>
+      <SettingsRow label="Display name" description="The name shown in the provider list">
+        <Input
+          data-testid="provider-edit-name"
+          value={values.name}
+          onChange={e => onTextFieldChange('name', e.target.value)}
+          disabled={readOnly}
+          className="h-9 w-56 text-[13px]"
+        />
+      </SettingsRow>
 
-        <div className="flex flex-col gap-5 rounded-xl border border-border bg-card p-4">
-          <SetupField label="Display name" hint="The name shown in the provider list.">
-            <Input
-              data-testid="provider-edit-name"
-              value={values.name}
-              onChange={e => onTextFieldChange('name', e.target.value)}
-              disabled={readOnly}
-              className="h-9 w-full text-[13px]"
-            />
-          </SetupField>
+      {supportsModels && (
+        <>
+          <SettingsDivider />
+          <SettingsRow label="Provider type" description="Runtime protocol family for this provider">
+            <Select
+              value={values.providerKind}
+              onValueChange={value => onProviderKindChange(value as ApiProviderKind)}
+              disabled={providerKindDisabled}
+            >
+              <SelectTrigger className="h-9 w-56 text-[12.5px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="openai-compatible">{PROVIDER_KIND_LABELS['openai-compatible']}</SelectItem>
+                <SelectItem value="anthropic">{PROVIDER_KIND_LABELS.anthropic}</SelectItem>
+                <SelectItem value="universal">{PROVIDER_KIND_LABELS.universal}</SelectItem>
+              </SelectContent>
+            </Select>
+          </SettingsRow>
 
-          {supportsModels && (
-            <>
-              <SetupField label="Provider type" hint="Runtime protocol family for this provider.">
-                <AuthModeSegmented
-                  testIdPrefix="provider-edit-kind"
-                  options={PROVIDER_KIND_SEGMENT_OPTIONS}
-                  value={values.providerKind}
-                  onChange={value => onProviderKindChange(value as ApiProviderKind)}
-                  disabled={providerKindDisabled}
-                />
-              </SetupField>
-
-              {isUniversal
-                ? (
-                    <SetupField label="Endpoints" hint="Separate base URLs for each API family.">
-                      <div className="flex flex-col gap-3">
-                        <div className="flex flex-col gap-1.5">
-                          <span className="text-[11px] font-medium text-muted-foreground">OpenAI</span>
-                          <Input
-                            data-testid="provider-edit-openai-baseurl"
-                            value={values.openaiBaseUrl}
-                            onChange={e => onTextFieldChange('openaiBaseUrl', e.target.value)}
-                            disabled={readOnly}
-                            className="h-9 w-full text-[12.5px] font-mono"
-                            placeholder="https://api.example.com/v1"
-                          />
-                        </div>
-                        <div className="flex flex-col gap-1.5">
-                          <span className="text-[11px] font-medium text-muted-foreground">Anthropic</span>
-                          <Input
-                            data-testid="provider-edit-anthropic-baseurl"
-                            value={values.anthropicBaseUrl}
-                            onChange={e => onTextFieldChange('anthropicBaseUrl', e.target.value)}
-                            disabled={readOnly}
-                            className="h-9 w-full text-[12.5px] font-mono"
-                            placeholder="https://api.example.com"
-                          />
-                        </div>
-                      </div>
-                    </SetupField>
-                  )
-                : (
-                    <SetupField label="Endpoint" hint="Base URL for the API.">
-                      <Input
-                        data-testid="provider-edit-baseurl"
-                        value={values.baseUrl}
-                        onChange={e => onTextFieldChange('baseUrl', e.target.value)}
-                        disabled={endpointDisabled}
-                        className="h-9 w-full text-[12.5px] font-mono"
-                        placeholder="https://api.example.com/v1"
-                      />
-                    </SetupField>
-                  )}
-
-              {!isUniversal && (
-                <SetupField label="API protocol" hint="Communication protocol for this endpoint.">
-                  <Select
-                    value={values.api || 'auto'}
-                    onValueChange={v => onTextFieldChange('api', v === 'auto' ? '' : v)}
+          <SettingsDivider />
+          {isUniversal
+            ? (
+                <SettingsRow label="Endpoints" description="Separate base URLs for each API family" vertical>
+                  <div className="flex w-full max-w-[28rem] flex-col gap-1.5">
+                    <label htmlFor="provider-edit-openai-baseurl" className="text-[11px] font-medium text-muted-foreground">
+                      OpenAI
+                    </label>
+                    <Input
+                      id="provider-edit-openai-baseurl"
+                      data-testid="provider-edit-openai-baseurl"
+                      value={values.openaiBaseUrl}
+                      onChange={e => onTextFieldChange('openaiBaseUrl', e.target.value)}
+                      disabled={readOnly}
+                      className="h-9 text-[12.5px] font-mono"
+                      placeholder="https://api.example.com/v1"
+                    />
+                    <label htmlFor="provider-edit-anthropic-baseurl" className="mt-1 text-[11px] font-medium text-muted-foreground">
+                      Anthropic
+                    </label>
+                    <Input
+                      id="provider-edit-anthropic-baseurl"
+                      data-testid="provider-edit-anthropic-baseurl"
+                      value={values.anthropicBaseUrl}
+                      onChange={e => onTextFieldChange('anthropicBaseUrl', e.target.value)}
+                      disabled={readOnly}
+                      className="h-9 text-[12.5px] font-mono"
+                      placeholder="https://api.example.com"
+                    />
+                  </div>
+                </SettingsRow>
+              )
+            : (
+                <SettingsRow label="Endpoint" description="Base URL for the API">
+                  <Input
+                    data-testid="provider-edit-baseurl"
+                    value={values.baseUrl}
+                    onChange={e => onTextFieldChange('baseUrl', e.target.value)}
                     disabled={endpointDisabled}
-                  >
-                    <SelectTrigger className="h-9 w-full text-[12.5px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="auto">Auto-detect</SelectItem>
-                      <SelectItem value="openai-completions">OpenAI Completions</SelectItem>
-                      <SelectItem value="openai-responses">OpenAI Responses</SelectItem>
-                      <SelectItem value="anthropic-messages">Anthropic Messages</SelectItem>
-                      <SelectItem value="google-generative-ai">Google Generative AI</SelectItem>
-                      <SelectItem value="bedrock-converse-stream">AWS Bedrock</SelectItem>
-                      <SelectItem value="mistral-conversations">Mistral</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </SetupField>
+                    className="h-9 w-56 text-[12.5px] font-mono"
+                    placeholder="https://api.example.com/v1"
+                  />
+                </SettingsRow>
               )}
+
+          {!isUniversal && (
+            <>
+              <SettingsDivider />
+              <SettingsRow label="API protocol" description="Communication protocol for this endpoint">
+                <Select
+                  value={values.api || 'auto'}
+                  onValueChange={v => onTextFieldChange('api', v === 'auto' ? '' : v)}
+                  disabled={endpointDisabled}
+                >
+                  <SelectTrigger className="h-9 w-56 text-[12.5px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">Auto-detect</SelectItem>
+                    <SelectItem value="openai-completions">OpenAI Completions</SelectItem>
+                    <SelectItem value="openai-responses">OpenAI Responses</SelectItem>
+                    <SelectItem value="anthropic-messages">Anthropic Messages</SelectItem>
+                    <SelectItem value="google-generative-ai">Google Generative AI</SelectItem>
+                    <SelectItem value="bedrock-converse-stream">AWS Bedrock</SelectItem>
+                    <SelectItem value="mistral-conversations">Mistral</SelectItem>
+                  </SelectContent>
+                </Select>
+              </SettingsRow>
             </>
           )}
-        </div>
-      </section>
 
-      {/* ── Authentication + Connection ── */}
-      {supportsModels && (
-        <section className="flex flex-col gap-4">
-          <h5 className="px-0.5 text-[13px] font-medium text-foreground">Authentication</h5>
+          <SettingsDivider />
+          <ProfileCredentialSettings
+            profile={profile}
+            credentialMetadata={credentialMetadata}
+            values={values}
+            onTextFieldChange={onTextFieldChange}
+            readOnly={readOnly}
+            providerKind={values.providerKind}
+            lockChatgptAuth={isChatgptCredential}
+            chatgptLoginPending={chatgptLoginPending}
+            chatgptLoginBusy={chatgptLoginBusy}
+            activeChatgptLogin={activeChatgptLogin}
+            onChatgptLogin={onChatgptLogin}
+            onCancelChatgptLogin={onCancelChatgptLogin}
+          />
 
-          <div className="flex flex-col gap-5 rounded-xl border border-border bg-card p-4">
-            <ProfileCredentialSettings
-              profile={profile}
-              credentialMetadata={credentialMetadata}
-              values={values}
-              onTextFieldChange={onTextFieldChange}
-              readOnly={readOnly}
-              providerKind={values.providerKind}
-              lockChatgptAuth={isChatgptCredential}
-              chatgptLoginPending={chatgptLoginPending}
-              chatgptLoginBusy={chatgptLoginBusy}
-              activeChatgptLogin={activeChatgptLogin}
-              onChatgptLogin={onChatgptLogin}
-              onCancelChatgptLogin={onCancelChatgptLogin}
-            />
+          <SettingsDivider />
+          <SettingsRow label="Connection" description="Probe the endpoint with the saved credentials">
+            <ProviderConnectionTestControls providerTargetId={profile.id} disabled={readOnly} />
+          </SettingsRow>
 
-            <div className="flex items-center justify-between gap-4 border-t border-border/60 pt-4">
-              <div className="flex min-w-0 flex-col gap-0.5">
-                <span className="text-[12.5px] font-medium text-foreground">Connection</span>
-                <p className="text-[11.5px] text-muted-foreground">
-                  Probe the endpoint with the saved credentials.
-                </p>
-              </div>
-              <ProviderConnectionTestControls providerTargetId={profile.id} disabled={readOnly} />
-            </div>
-          </div>
-        </section>
+        </>
       )}
-    </div>
+    </>
   )
 }
 
@@ -1297,146 +1264,161 @@ function ProfileCredentialSettings({
     }
   }
 
-  const authModeOptions = isClaudeProvider ? CLAUDE_AUTH_MODE_OPTIONS : CODEX_AUTH_MODE_OPTIONS
-  const activeAuthMode = isClaudeProvider ? claudeAuthMode : codexAuthMode
-
   return (
-    <div className="flex flex-col gap-4">
-      {(isCodexProvider || isClaudeProvider) && (
-        <AuthModeSegmented
-          testIdPrefix="provider-edit-auth-mode"
-          options={authModeOptions}
-          value={activeAuthMode}
-          disabled={readOnly || (isCodexProvider && lockChatgptAuth)}
-          onChange={(nextAuthMode) => {
-            onTextFieldChange('authMode', nextAuthMode)
-            if (nextAuthMode === CODEX_AUTH_MODE_CHATGPT || nextAuthMode === CLAUDE_AUTH_MODE_CLAUDE_AI) {
-              onTextFieldChange('apiKey', '')
-              onTextFieldChange('baseUrl', '')
-            }
-          }}
-        />
-      )}
-      <p className="-mt-1 text-[11.5px] text-muted-foreground">{description}</p>
+    <SettingsRow
+      label="Authentication"
+      description={description}
+      vertical
+    >
+      <div className="flex w-full max-w-[28rem] flex-col gap-2">
+        {isCodexProvider && (
+          <Select
+            value={codexAuthMode}
+            onValueChange={(nextAuthMode) => {
+              onTextFieldChange('authMode', nextAuthMode)
+              if (nextAuthMode === CODEX_AUTH_MODE_CHATGPT) {
+                onTextFieldChange('apiKey', '')
+                onTextFieldChange('baseUrl', '')
+              }
+            }}
+            disabled={readOnly || lockChatgptAuth}
+          >
+            <SelectTrigger className="h-9 w-56 text-[12.5px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CODEX_AUTH_MODE_OPTIONS.map(option => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
 
-      {/* Mode-specific fields swap with a quick crossfade, never a jump. */}
-      <AnimatePresence mode="wait" initial={false}>
-        <m.div
-          key={activeAuthMode}
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -6 }}
-          transition={{ duration: 0.14, ease: 'easeOut' }}
-          className="flex flex-col gap-3"
-        >
-          {claudeAiLogin && (
-            <InfoCallout>
-              {t('detail.claudeAgent.subscriptionLoginNotice')}
-            </InfoCallout>
-          )}
+        {isClaudeProvider && (
+          <Select
+            value={claudeAuthMode}
+            onValueChange={(nextAuthMode) => {
+              onTextFieldChange('authMode', nextAuthMode)
+              if (nextAuthMode === CLAUDE_AUTH_MODE_CLAUDE_AI) {
+                onTextFieldChange('apiKey', '')
+                onTextFieldChange('baseUrl', '')
+              }
+            }}
+            disabled={readOnly}
+          >
+            <SelectTrigger className="h-9 w-56 text-[12.5px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CLAUDE_AUTH_MODE_OPTIONS.map(option => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
 
-          {showChatgptControls && credentialMetadata && isChatgptCredential && (
-            <ChatgptCredentialSummary credential={credentialMetadata} />
-          )}
+        {claudeAiLogin && (
+          <div className="rounded-lg bg-muted/40 px-3 py-2.5 text-[11.5px] leading-relaxed text-muted-foreground ring-1 ring-foreground/4">
+            {t('detail.claudeAgent.subscriptionLoginNotice')}
+          </div>
+        )}
 
-          {!showChatgptControls && !claudeAiLogin && revealedSecret && (
-            <div className="flex flex-col gap-1.5">
-              <Input value={revealedSecret} readOnly type="text" className="h-9 w-full font-mono text-[12.5px]" />
-              <div className="flex items-center gap-2">
-                <Button type="button" size="xs" variant="outline" onClick={() => setRevealedSecret(null)}>
-                  Hide API key
-                </Button>
-                <span className="text-[11px] text-muted-foreground">
-                  Hidden automatically after 15 seconds.
-                </span>
-              </div>
-            </div>
-          )}
-
-          {!showChatgptControls && !claudeAiLogin && !revealedSecret && profile.credentialRef && !replacingSecret && (
+        {showChatgptControls && credentialMetadata && isChatgptCredential && (
+          <ChatgptCredentialSummary credential={credentialMetadata} />
+        )}
+        {!showChatgptControls && !claudeAiLogin && revealedSecret && (
+          <div className="flex flex-col gap-1.5">
+            <Input value={revealedSecret} readOnly type="text" className="h-9 font-mono text-[12.5px]" />
             <div className="flex items-center gap-2">
-              <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-muted-foreground">
-                {credentialMetadata?.maskedSecret ?? 'Stored API key'}
-              </span>
-              <Button type="button" size="xs" variant="outline" onClick={() => void revealSecret()} disabled={readOnly || revealingSecret}>
-                {revealingSecret ? <Spinner className="size-3" /> : null}
-                Reveal
+              <Button type="button" size="xs" variant="outline" onClick={() => setRevealedSecret(null)}>
+                Hide API key
               </Button>
-              <Button type="button" size="xs" variant="outline" onClick={() => setReplacingSecret(true)} disabled={readOnly}>
-                Replace
+              <span className="text-[11px] text-muted-foreground">Hidden automatically after 15 seconds.</span>
+            </div>
+          </div>
+        )}
+        {!showChatgptControls && !claudeAiLogin && !revealedSecret && profile.credentialRef && !replacingSecret && (
+          <div className="flex items-center gap-2">
+            <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-muted-foreground">{credentialMetadata?.maskedSecret ?? 'Stored API key'}</span>
+            <Button type="button" size="xs" variant="outline" onClick={() => void revealSecret()} disabled={readOnly || revealingSecret}>
+              {revealingSecret ? <Spinner className="size-3" /> : null}
+              Reveal
+            </Button>
+            <Button type="button" size="xs" variant="outline" onClick={() => setReplacingSecret(true)} disabled={readOnly}>
+              Replace
+            </Button>
+          </div>
+        )}
+        {!showChatgptControls && !claudeAiLogin && !revealedSecret && (!profile.credentialRef || replacingSecret) && (
+          <div className="flex flex-col gap-1.5">
+          <Input
+            data-testid="provider-edit-apikey"
+            type="password"
+            value={values.apiKey}
+            onChange={e => onTextFieldChange('apiKey', e.target.value)}
+            disabled={readOnly}
+            placeholder={isCodexProvider
+              ? codexCredentialPlaceholder(codexAuthMode, !!profile.credentialRef)
+              : isClaudeProvider
+                ? claudeCredentialPlaceholder(!!profile.credentialRef, claudeAuthMode)
+                : codexCredentialPlaceholder(CODEX_AUTH_MODE_API_KEY, !!profile.credentialRef)}
+            className="h-9 text-[12.5px] font-mono"
+          />
+            {profile.credentialRef && (
+              <Button type="button" size="xs" variant="ghost" className="self-start" onClick={() => setReplacingSecret(false)}>
+                Keep current API key
               </Button>
-            </div>
-          )}
-
-          {!showChatgptControls && !claudeAiLogin && !revealedSecret && (!profile.credentialRef || replacingSecret) && (
-            <div className="flex flex-col gap-1.5">
-              <Input
-                data-testid="provider-edit-apikey"
-                type="password"
-                value={values.apiKey}
-                onChange={e => onTextFieldChange('apiKey', e.target.value)}
-                disabled={readOnly}
-                placeholder={isCodexProvider
-                  ? codexCredentialPlaceholder(codexAuthMode, !!profile.credentialRef)
-                  : isClaudeProvider
-                    ? claudeCredentialPlaceholder(!!profile.credentialRef, claudeAuthMode)
-                    : codexCredentialPlaceholder(CODEX_AUTH_MODE_API_KEY, !!profile.credentialRef)}
-                className="h-9 w-full text-[12.5px] font-mono"
-              />
-              {profile.credentialRef && (
-                <Button type="button" size="xs" variant="ghost" className="self-start" onClick={() => setReplacingSecret(false)}>
-                  Keep current API key
-                </Button>
-              )}
-            </div>
-          )}
-
-          {isCodexProvider && codexAuthMode === CODEX_AUTH_MODE_BEDROCK_API_KEY && (
-            <Input
-              data-testid="provider-edit-bedrock-region"
-              value={values.bedrockRegion}
-              onChange={e => onTextFieldChange('bedrockRegion', e.target.value)}
-              disabled={readOnly}
-              placeholder="us-east-1"
-              className="h-9 w-full text-[12.5px] font-mono"
-            />
-          )}
-
-          {showChatgptControls && (
-            <div className="flex flex-wrap items-center gap-2">
-              {chatgptLoginPending
-                ? (
-                    <Button
-                      type="button"
-                      size="xs"
-                      variant="outline"
-                      onClick={onCancelChatgptLogin}
-                      disabled={readOnly}
-                    >
-                      <XIcon className="size-3" />
-                      Cancel ChatGPT login
-                    </Button>
-                  )
-                : (
-                    <Button
-                      type="button"
-                      size="xs"
-                      variant="outline"
-                      onClick={onChatgptLogin}
-                      disabled={readOnly || chatgptLoginBusy}
-                    >
-                      {chatgptLoginBusy ? <Spinner className="size-3" /> : <LogInIcon className="size-3" />}
-                      {isChatgptCredential ? 'Re-login with ChatGPT' : 'Sign in with ChatGPT'}
-                    </Button>
-                  )}
-            </div>
-          )}
-          {showChatgptControls && activeChatgptLogin && (
-            <ChatgptDeviceCodeNotice login={activeChatgptLogin} />
-          )}
-        </m.div>
-      </AnimatePresence>
-    </div>
+            )}
+          </div>
+        )}
+        {isCodexProvider && codexAuthMode === CODEX_AUTH_MODE_BEDROCK_API_KEY && (
+          <Input
+            data-testid="provider-edit-bedrock-region"
+            value={values.bedrockRegion}
+            onChange={e => onTextFieldChange('bedrockRegion', e.target.value)}
+            disabled={readOnly}
+            placeholder="us-east-1"
+            className="h-9 text-[12.5px] font-mono"
+          />
+        )}
+        {showChatgptControls && (
+          <div className="flex flex-wrap items-center gap-2">
+            {chatgptLoginPending
+              ? (
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="outline"
+                    onClick={onCancelChatgptLogin}
+                    disabled={readOnly}
+                  >
+                    <XIcon className="size-3" />
+                    Cancel ChatGPT login
+                  </Button>
+                )
+              : (
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="outline"
+                    onClick={onChatgptLogin}
+                    disabled={readOnly || chatgptLoginBusy}
+                  >
+                    {chatgptLoginBusy ? <Spinner className="size-3" /> : <LogInIcon className="size-3" />}
+                    {isChatgptCredential ? 'Re-login with ChatGPT' : 'Sign in with ChatGPT'}
+                  </Button>
+                )}
+          </div>
+        )}
+        {showChatgptControls && activeChatgptLogin && (
+          <ChatgptDeviceCodeNotice login={activeChatgptLogin} />
+        )}
+      </div>
+    </SettingsRow>
   )
 }
 
@@ -1448,9 +1430,7 @@ function ChatgptDeviceCodeNotice({ login }: { login: ChatgptCredentialLoginStart
   return (
     <div className="rounded-md border border-foreground/8 bg-muted/35 px-2.5 py-2">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[11px] font-medium text-muted-foreground">
-          Device code
-        </span>
+        <span className="text-[11px] font-medium text-muted-foreground">Device code</span>
         <Button type="button" size="xs" variant="ghost" className="h-6 px-1.5" onClick={copyCode}>
           <CopyIcon className="size-3" />
           Copy
@@ -1459,7 +1439,7 @@ function ChatgptDeviceCodeNotice({ login }: { login: ChatgptCredentialLoginStart
       <div className="mt-1 font-mono text-[18px] font-semibold tracking-normal text-foreground">
         {login.userCode}
       </div>
-      <div className="mt-1.5 text-[11.5px] leading-snug text-muted-foreground">
+      <div className="mt-1 text-[11px] leading-snug text-muted-foreground">
         Enter this code on the OpenAI Codex authorization page.
       </div>
     </div>
@@ -1484,17 +1464,20 @@ function ProfileModelsSection({
   cachedAt?: number | null
 }) {
   return (
-    <section className="flex flex-col gap-4">
-      <ModelsPanel
-        loading={loading}
-        models={models}
-        enabledModels={enabledModels}
-        onChange={onChange}
-        onModelRegistryMapped={onModelRegistryMapped}
-        onRefresh={onRefresh}
-        cachedAt={cachedAt}
-      />
-    </section>
+    <>
+      <Separator className="bg-foreground/6" />
+      <section className="mt-4 flex flex-col gap-4">
+        <ModelsPanel
+          loading={loading}
+          models={models}
+          enabledModels={enabledModels}
+          onChange={onChange}
+          onModelRegistryMapped={onModelRegistryMapped}
+          onRefresh={onRefresh}
+          cachedAt={cachedAt}
+        />
+      </section>
+    </>
   )
 }
 
@@ -1546,9 +1529,12 @@ function ProfileCustomModelsSection({
     }
 
   return (
-    <section className="flex flex-col gap-4">
-      <CustomModelsEditor models={models} onChange={saveCustomModels} />
-    </section>
+    <>
+      <Separator className="bg-foreground/6" />
+      <section className="mt-4 flex flex-col gap-4">
+        <CustomModelsEditor models={models} onChange={saveCustomModels} />
+      </section>
+    </>
   )
 }
 
