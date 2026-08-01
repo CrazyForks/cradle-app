@@ -11,8 +11,7 @@ import {
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from '~/components/ui/menu'
 import { toastManager } from '~/components/ui/toast'
 import type { KanbanIssue, KanbanStatus } from '~/features/kanban/types'
-import { useWorkspaces } from '~/features/workspace/use-workspace'
-import { cn } from '~/lib/cn'
+import type { Workspace } from '~/features/workspace/types'
 
 import { formatIssueId } from '../shared/format-issue-id'
 import { IssueHoverCard } from '../shared/issue-hover-card'
@@ -23,6 +22,7 @@ interface IssueHeaderProps {
   issue: KanbanIssue
   status?: KanbanStatus
   statuses: KanbanStatus[]
+  workspaces: Workspace[]
   parentIssue?: KanbanIssue
   completedSubIssueCount: number
   totalSubIssueCount: number
@@ -40,6 +40,7 @@ export const IssueHeader = ({
   issue,
   status,
   statuses,
+  workspaces,
   parentIssue,
   completedSubIssueCount,
   totalSubIssueCount,
@@ -52,7 +53,6 @@ export const IssueHeader = ({
   onDelete,
   readOnly = false,
 }: IssueHeaderProps) => {
-  const { workspaces } = useWorkspaces()
   const issueKey = formatIssueId(issue, workspaces)
 
   const copyIssueId = () => {
