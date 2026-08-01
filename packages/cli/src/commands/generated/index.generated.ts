@@ -213,7 +213,13 @@ import { register as registerProfileDelete } from './profile/delete'
 import { register as registerProfileGet } from './profile/get'
 import { register as registerProfileList } from './profile/list'
 import { register as registerProfileSet } from './profile/set'
+import { register as registerProviderDelete } from './provider/delete'
+import { register as registerProviderList } from './provider/list'
 import { register as registerProviderModels } from './provider/models'
+import { register as registerProviderPresets } from './provider/presets'
+import { register as registerProviderScanLocal } from './provider/scan-local'
+import { register as registerProviderSet } from './provider/set'
+import { register as registerProviderTest } from './provider/test'
 import { register as registerPullRequestAssignableUsers } from './pull-request/assignable-users'
 import { register as registerPullRequestAssignees } from './pull-request/assignees'
 import { register as registerPullRequestAuthored } from './pull-request/authored'
@@ -588,7 +594,13 @@ export function registerGeneratedCommands(program: Command): void {
   registerProfileGet(program)
   registerProfileList(program)
   registerProfileSet(program)
+  registerProviderDelete(program)
+  registerProviderList(program)
   registerProviderModels(program)
+  registerProviderPresets(program)
+  registerProviderScanLocal(program)
+  registerProviderSet(program)
+  registerProviderTest(program)
   registerPullRequestAssignableUsers(program)
   registerPullRequestAssignees(program)
   registerPullRequestAuthored(program)

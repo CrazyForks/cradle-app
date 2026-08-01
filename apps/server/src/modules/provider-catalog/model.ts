@@ -26,4 +26,23 @@ export const ProvidersModel = {
   modelDescriptor: modelDescriptorSchema,
 
   modelCapabilities: modelCapabilitiesSchema,
+
+  providerPreset: t.Object({
+    id: t.String(),
+    name: t.String(),
+    providerKind: providerKindSchema,
+    baseUrl: t.String(),
+    iconSlug: t.Optional(t.String()),
+    docsUrl: t.Optional(t.String()),
+    local: t.Boolean(),
+    requiresApiKey: t.Boolean(),
+    source: t.Union([t.Literal('models.dev'), t.Literal('overlay')]),
+    models: t.Array(t.Object({
+      id: t.String(),
+      name: t.Optional(t.String()),
+      reasoning: t.Optional(t.Boolean()),
+      toolCall: t.Optional(t.Boolean()),
+      vision: t.Optional(t.Boolean()),
+    })),
+  }),
 }

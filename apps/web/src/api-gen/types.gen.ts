@@ -2631,6 +2631,72 @@ export type PatchProviderTargetsByProviderTargetIdCustomModelsResponses = {
 
 export type PatchProviderTargetsByProviderTargetIdCustomModelsResponse = PatchProviderTargetsByProviderTargetIdCustomModelsResponses[keyof PatchProviderTargetsByProviderTargetIdCustomModelsResponses];
 
+export type GetProviderTargetsByProviderTargetIdTestData = {
+    body?: never;
+    path: {
+        providerTargetId: string;
+    };
+    query?: never;
+    url: '/provider-targets/{providerTargetId}/test';
+};
+
+export type GetProviderTargetsByProviderTargetIdTestErrors = {
+    /**
+     * Response for status 404
+     */
+    404: {
+        error: 'no_cached_result';
+    };
+};
+
+export type GetProviderTargetsByProviderTargetIdTestError = GetProviderTargetsByProviderTargetIdTestErrors[keyof GetProviderTargetsByProviderTargetIdTestErrors];
+
+export type GetProviderTargetsByProviderTargetIdTestResponses = {
+    /**
+     * Response for status 200
+     */
+    200: {
+        status: 'ok' | 'auth_failed' | 'network_error' | 'endpoint_error' | 'model_unavailable';
+        latencyMs: number;
+        checkedAt: string;
+        modelsCount?: number;
+        detail?: string;
+        deep?: boolean;
+        model?: string;
+    };
+};
+
+export type GetProviderTargetsByProviderTargetIdTestResponse = GetProviderTargetsByProviderTargetIdTestResponses[keyof GetProviderTargetsByProviderTargetIdTestResponses];
+
+export type PostProviderTargetsByProviderTargetIdTestData = {
+    body: {
+        deep?: boolean;
+        model?: string;
+    };
+    path: {
+        providerTargetId: string;
+    };
+    query?: never;
+    url: '/provider-targets/{providerTargetId}/test';
+};
+
+export type PostProviderTargetsByProviderTargetIdTestResponses = {
+    /**
+     * Response for status 200
+     */
+    200: {
+        status: 'ok' | 'auth_failed' | 'network_error' | 'endpoint_error' | 'model_unavailable';
+        latencyMs: number;
+        checkedAt: string;
+        modelsCount?: number;
+        detail?: string;
+        deep?: boolean;
+        model?: string;
+    };
+};
+
+export type PostProviderTargetsByProviderTargetIdTestResponse = PostProviderTargetsByProviderTargetIdTestResponses[keyof PostProviderTargetsByProviderTargetIdTestResponses];
+
 export type GetRelayServersData = {
     body?: never;
     path?: never;
@@ -3924,6 +3990,29 @@ export type PostExternalProviderSourcesRefreshResponses = {
 
 export type PostExternalProviderSourcesRefreshResponse = PostExternalProviderSourcesRefreshResponses[keyof PostExternalProviderSourcesRefreshResponses];
 
+export type PostExternalProviderSourcesLocalScanData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/external-provider-sources/local-scan';
+};
+
+export type PostExternalProviderSourcesLocalScanResponses = {
+    /**
+     * Response for status 200
+     */
+    200: {
+        sourceKey: string;
+        status: 'never' | 'ok' | 'warning' | 'error';
+        recordsSeen: number;
+        recordsProjected: number;
+        recordsMissing: number;
+        message?: string;
+    };
+};
+
+export type PostExternalProviderSourcesLocalScanResponse = PostExternalProviderSourcesLocalScanResponses[keyof PostExternalProviderSourcesLocalScanResponses];
+
 export type PostExternalProviderSourcesBySourceKeyRefreshData = {
     body?: never;
     path: {
@@ -4912,6 +5001,39 @@ export type PostProvidersModelSearchResponses = {
 };
 
 export type PostProvidersModelSearchResponse = PostProvidersModelSearchResponses[keyof PostProvidersModelSearchResponses];
+
+export type GetProviderPresetsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/provider-presets';
+};
+
+export type GetProviderPresetsResponses = {
+    /**
+     * Response for status 200
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        providerKind: 'openai-compatible' | 'anthropic' | 'universal';
+        baseUrl: string;
+        iconSlug?: string;
+        docsUrl?: string;
+        local: boolean;
+        requiresApiKey: boolean;
+        source: 'models.dev' | 'overlay';
+        models: Array<{
+            id: string;
+            name?: string;
+            reasoning?: boolean;
+            toolCall?: boolean;
+            vision?: boolean;
+        }>;
+    }>;
+};
+
+export type GetProviderPresetsResponse = GetProviderPresetsResponses[keyof GetProviderPresetsResponses];
 
 export type GetAgentsData = {
     body?: never;

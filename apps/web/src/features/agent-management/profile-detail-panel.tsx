@@ -37,7 +37,6 @@ import {
   AlertDialogMedia,
   AlertDialogTitle,
 } from '~/components/ui/alert-dialog'
-import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
 import { IconPicker } from '~/components/ui/icon-picker'
 import { Input } from '~/components/ui/input'
@@ -88,6 +87,7 @@ import {
 } from './codex-auth-modes'
 import { CustomModelsEditor } from './custom-models-editor'
 import { ModelsPanel } from './models-panel'
+import { ProviderConnectionTestControls } from './provider-connection-test'
 import {
   ALL_DISABLED_SENTINEL,
   presetForProviderKind,
@@ -403,11 +403,13 @@ export function ProfileDetailPanel({
   profile,
   onRemove,
   onToggle,
+  onDuplicate,
   onSaved,
 }: {
   profile: AgentProfile
   onRemove: () => void
   onToggle: (enabled: boolean) => void
+  onDuplicate: () => void
   onSaved: () => void
 }) {
   const queryClient = useQueryClient()
@@ -839,14 +841,12 @@ export function ProfileDetailPanel({
     }
 
   const headerName = name.trim() || profile.name
-  const kindLabel = PROVIDER_KIND_LABELS[providerKind]
 
   return (
     <div data-testid="provider-detail-panel" className="flex flex-col gap-2">
       <ProfileDetailHeader
         profile={profile}
         displayName={headerName}
-        kindLabel={kindLabel}
         icon={(
           <IconPicker
             value={profile.iconSlug ?? null}
@@ -865,6 +865,7 @@ export function ProfileDetailPanel({
         )}
         saveState={saveState}
         onToggle={onToggle}
+        onDuplicate={onDuplicate}
         onOpenRemove={() => dispatch({ type: 'remove/set', open: true })}
       />
 
@@ -940,34 +941,28 @@ export function ProfileDetailPanel({
 function ProfileDetailHeader({
   profile,
   displayName,
-  kindLabel,
   icon,
   saveState,
   onToggle,
+  onDuplicate,
   onOpenRemove,
 }: {
   profile: AgentProfile
   displayName: string
-  kindLabel: string
   icon: ReactNode
   saveState: SaveState
   onToggle: (enabled: boolean) => void
+  onDuplicate: () => void
   onOpenRemove: () => void
 }) {
   return (
     <header className="flex items-start gap-3">
       {icon}
 
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <h4 className="font-heading truncate text-[15px] font-medium text-foreground">
-            {displayName}
-          </h4>
-          <Badge variant="secondary" className="font-normal text-muted-foreground">
-            {kindLabel}
-          </Badge>
-        </div>
-        <p className="mt-1 truncate text-[11.5px] text-muted-foreground/80">{profile.id}</p>
+      <div className="min-w-0 flex-1 pt-1">
+        <h4 className="font-heading truncate text-[15px] font-medium text-foreground">
+          {displayName}
+        </h4>
       </div>
 
       <div className="flex items-center gap-3 pt-0.5">
@@ -979,6 +974,21 @@ function ProfileDetailHeader({
             {profile.enabled ? 'Active' : 'Off'}
           </span>
         </div>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              data-testid={`agent-profile-duplicate-${profile.id}`}
+              variant="ghost"
+              size="icon-sm"
+              onClick={onDuplicate}
+              className="text-muted-foreground/60 hover:bg-foreground/5 hover:text-foreground"
+            >
+              <CopyIcon className="size-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top">Duplicate provider</TooltipContent>
+        </Tooltip>
 
         <Tooltip>
           <TooltipTrigger asChild>
@@ -1160,6 +1170,11 @@ function ProfileGeneralSettings({
             onChatgptLogin={onChatgptLogin}
             onCancelChatgptLogin={onCancelChatgptLogin}
           />
+
+          <SettingsDivider />
+          <SettingsRow label="Connection" description="Probe the endpoint with the saved credentials">
+            <ProviderConnectionTestControls providerTargetId={profile.id} disabled={readOnly} />
+          </SettingsRow>
 
         </>
       )}

@@ -7,6 +7,7 @@ import {
   CopyLine as CopyIcon,
   EnterDoorLine as LogInIcon,
   RightSmallLine as ChevronRightIcon,
+  SearchLine as SearchIcon,
 } from '@mingcute/react'
 import { useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, m } from 'motion/react'
@@ -16,7 +17,8 @@ import { useForm, useWatch } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { z } from 'zod'
 
-import { postSecrets } from '~/api-gen/sdk.gen'
+import { getProviderTargetsByProviderTargetIdTestQueryKey } from '~/api-gen/@tanstack/react-query.gen'
+import { patchProfilesByIdCustomModels, postProviderTargetsByProviderTargetIdTest, postSecrets } from '~/api-gen/sdk.gen'
 import { PROVIDER_ICONS } from '~/components/common/provider-icons'
 import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
@@ -55,7 +57,7 @@ import { warmManualProviderModelCache } from './provider-model-cache'
 import type { DraftProvider } from './provider-settings-utils'
 import { buildProfileId } from './provider-settings-utils'
 import type { ProviderPreset } from './provider-templates'
-import { PROVIDER_PRESETS } from './provider-templates'
+import { presetModelsToCustomModels } from './provider-templates'
 import type { ChatgptCredentialLoginStart } from './use-chatgpt-credential-login'
 import {
   openChatgptCredentialLoginUrl,
@@ -64,6 +66,7 @@ import {
   useChatgptCredentialLoginStatus,
 } from './use-chatgpt-credential-login'
 import { useCredentialMetadata } from './use-credential-metadata'
+import { useMergedProviderPresets } from './use-provider-presets'
 
 interface PresetSetupFormValues {
   name: string
@@ -94,19 +97,29 @@ export function DraftSetupPanel({
   onComplete: (newProfileId?: string) => void
   onCancel: () => void
 }) {
-  const preset = PROVIDER_PRESETS.find(p => p.id === draft.presetId) ?? null
+  const { presets } = useMergedProviderPresets()
+  const [query, setQuery] = useState('')
+  const preset = presets.find(p => p.id === draft.presetId) ?? null
 
   if (!preset) {
+    const trimmedQuery = query.trim().toLowerCase()
+    const visiblePresets = trimmedQuery
+      ? presets.filter(p =>
+        p.name.toLowerCase().includes(trimmedQuery)
+        || p.id.includes(trimmedQuery)
+        || p.tagline.toLowerCase().includes(trimmedQuery))
+      : presets
     return (
       <div className="flex flex-col gap-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <h4 className="font-heading text-[14px] font-medium text-foreground">
-              Choose a provider
-            </h4>
-            <p className="mt-0.5 text-[12px] text-muted-foreground">
-              Cradle works with the major coding agents and any OpenAI-compatible endpoint.
-            </p>
+        <div className="flex items-center justify-between gap-3">
+          <div className="relative min-w-0 flex-1">
+            <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 !text-muted-foreground/60" />
+            <Input
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search providers..."
+              className="h-8 pl-8 text-[12.5px]"
+            />
           </div>
           <Button size="sm" variant="ghost" onClick={onCancel}>
             <XIcon />
@@ -114,9 +127,9 @@ export function DraftSetupPanel({
           </Button>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          {PROVIDER_PRESETS.map((p, idx) => {
-            const Icon = PROVIDER_ICONS[p.id] ?? PROVIDER_ICONS.custom!
+        <div className="grid grid-cols-2 gap-2 xl:grid-cols-3">
+          {visiblePresets.map((p, idx) => {
+            const Icon = PROVIDER_ICONS[p.iconSlug ?? p.id] ?? PROVIDER_ICONS.custom!
             return (
               <m.button
                 key={p.id}
@@ -125,31 +138,31 @@ export function DraftSetupPanel({
                 data-testid={`provider-preset-${p.id}`}
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.2, delay: idx * 0.03, ease: 'easeOut' }}
+                transition={{ duration: 0.2, delay: Math.min(idx, 12) * 0.03, ease: 'easeOut' }}
                 whileHover={{ y: -1 }}
                 className={cn(
-                  'group/preset relative flex flex-col gap-2 rounded-xl bg-card p-3.5 text-left',
+                  'group/preset relative flex items-center gap-2.5 rounded-xl bg-card p-3 text-left',
                   'ring-1 ring-foreground/[0.07] transition-[box-shadow,ring-color] duration-150',
                   'hover:ring-foreground/15 hover:shadow-sm',
-                  'active:scale-[0.97]',
+                  'active:scale-[0.96]',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60',
                 )}
               >
-                <div className="flex items-center gap-2.5">
-                  <Icon className="size-5 shrink-0 text-foreground/70" />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13px] font-medium text-foreground">{p.name}</div>
-                    <div className="truncate text-[11px] text-muted-foreground">{p.tagline}</div>
-                  </div>
-                  <ChevronRightIcon className="size-3.5 shrink-0 !text-muted-foreground/30 transition-[transform,color] duration-150 group-hover/preset:translate-x-0.5 group-hover/preset:!text-muted-foreground" />
+                <Icon className="size-5 shrink-0 text-foreground/70" />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[12.5px] font-medium text-foreground">{p.name}</div>
+                  <div className="truncate text-[11px] text-muted-foreground">{p.tagline}</div>
                 </div>
-                <p className="text-pretty text-[11.5px] leading-relaxed text-muted-foreground/80">
-                  {p.tagline}
-                </p>
+                <ChevronRightIcon className="size-3.5 shrink-0 !text-muted-foreground/30 transition-[transform,color] duration-150 group-hover/preset:translate-x-0.5 group-hover/preset:!text-muted-foreground" />
               </m.button>
             )
           })}
         </div>
+        {visiblePresets.length === 0 && (
+          <p className="py-6 text-center text-[11.5px] text-muted-foreground/70">
+            No providers match your search.
+          </p>
+        )}
       </div>
     )
   }
@@ -174,7 +187,7 @@ function PresetSetupForm({
   onBack: () => void
 }) {
   const { t } = useTranslation('agentManagement')
-  const Icon = PROVIDER_ICONS[preset.id] ?? PROVIDER_ICONS.custom!
+  const Icon = PROVIDER_ICONS[preset.iconSlug ?? preset.id] ?? PROVIDER_ICONS.custom!
   const { createProfile } = useAgentProfiles()
   const queryClient = useQueryClient()
   const [busy, setBusy] = useState(false)
@@ -189,11 +202,16 @@ function PresetSetupForm({
   const form = useForm<PresetSetupFormValues>({
     defaultValues: {
       name: preset.name,
-      values: preset.providerKind === 'openai-compatible'
-        ? { codexAuthMode: CODEX_AUTH_MODE_API_KEY }
-        : preset.providerKind === 'anthropic'
-          ? { claudeAuthMode: CLAUDE_AUTH_MODE_API_KEY }
-          : {},
+      values: {
+        ...(preset.providerKind === 'openai-compatible'
+          ? { codexAuthMode: CODEX_AUTH_MODE_API_KEY }
+          : preset.providerKind === 'anthropic'
+            ? { claudeAuthMode: CLAUDE_AUTH_MODE_API_KEY }
+            : {}),
+        ...(typeof preset.defaults.baseUrl === 'string' && preset.defaults.baseUrl
+          ? { baseUrl: preset.defaults.baseUrl }
+          : {}),
+      },
     },
   })
   const watchedValues = useWatch({ control: form.control }) as PresetSetupFormValues
@@ -223,7 +241,7 @@ function PresetSetupForm({
   const showEndpoint = isUniversalPreset
     || (isClaudeProvider && claudeAuthMode === CLAUDE_AUTH_MODE_API_KEY)
     || (isCodexProvider && codexAuthMode === CODEX_AUTH_MODE_API_KEY)
-  const showKeyInput = !claudeAiLogin && !isChatgptMode
+  const showKeyInput = !claudeAiLogin && !isChatgptMode && preset.fields.some(f => f.key === 'apiKey')
   const authModeOptions = isClaudeProvider ? CLAUDE_AUTH_MODE_OPTIONS : CODEX_AUTH_MODE_OPTIONS
   const selectedAuthMode = isClaudeProvider ? claudeAuthMode : codexAuthMode
   const keyPlaceholder = isCodexProvider
@@ -404,6 +422,15 @@ function PresetSetupForm({
         },
       })
 
+      // Pre-fill known models from the server catalog so the model picker is
+      // useful before the first successful upstream fetch.
+      if (preset.models && preset.models.length > 0) {
+        void patchProfilesByIdCustomModels({
+          path: { id: profileId },
+          body: { models: presetModelsToCustomModels(preset.models) },
+        }).catch(error => console.error('[ProviderSetup] custom models prefill failed', error))
+      }
+
       void warmManualProviderModelCache({
         id: profileId,
         name: currentValues.name,
@@ -413,8 +440,28 @@ function PresetSetupForm({
       })
         .then(() => queryClient.invalidateQueries({ queryKey: AGENT_MODELS_QUERY_KEY }))
         .catch(error => console.error('[ProviderSetup] model cache warm failed', error))
-      setStatus({ ok: true, text: 'Saved' })
-      setTimeout(onComplete, 500, profileId)
+
+      // Close the add-and-verify loop: run the connection test right away so
+      // the user sees a working provider (or a precise failure) before leaving.
+      try {
+        const { data: testResult } = await postProviderTargetsByProviderTargetIdTest({
+          path: { providerTargetId: profileId },
+          body: {},
+        })
+        if (testResult) {
+          queryClient.setQueryData(
+            getProviderTargetsByProviderTargetIdTestQueryKey({ path: { providerTargetId: profileId } }),
+            testResult,
+          )
+          setStatus(testResult.status === 'ok'
+            ? { ok: true, text: `Saved — connected in ${testResult.latencyMs}ms` }
+            : { ok: false, text: `Saved, but the connection test failed: ${testResult.detail ?? testResult.status}` })
+        }
+      }
+      catch {
+        setStatus({ ok: true, text: 'Saved' })
+      }
+      setTimeout(onComplete, 900, profileId)
     }
     catch (err) {
       setStatus({ ok: false, text: 'Failed to save provider' })

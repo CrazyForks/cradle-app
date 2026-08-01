@@ -61,6 +61,7 @@ import { DraftSetupPanel } from './draft-setup-panel'
 import { ExternalProviderRecordDetailPanel } from './external-provider-record-detail-panel'
 import { ImportProviderDialog } from './import-provider-dialog'
 import { ProfileDetailPanel } from './profile-detail-panel'
+import { ProviderTestStatusDot } from './provider-connection-test'
 import { collectProviderListGroups } from './provider-list-groups'
 import type {
   DraftProvider,
@@ -69,6 +70,7 @@ import type {
   ProviderListEntry,
 } from './provider-settings-utils'
 import {
+  buildProfileId,
   presetForProfile,
   presetForProviderKind,
   PROVIDER_KIND_LABELS,
@@ -84,6 +86,18 @@ import {
   visibleRecordsAreSelected,
 } from './settings-multi-selection'
 import { useSettingsSelectionShortcuts } from './settings-selection-shortcuts'
+
+function hostnameOf(url: string | null | undefined): string | null {
+  if (!url) {
+    return null
+  }
+  try {
+    return new URL(url).hostname
+  }
+  catch {
+    return null
+  }
+}
 
 function parseProfileConfigForUpdate(configJson: string): Record<string, unknown> {
   const parsed = JSON.parse(configJson) as unknown
@@ -105,16 +119,17 @@ const ProviderRow = ({
     entry,
     active,
     selected,
+    selectionActive,
     onOpenEntry,
     onSelectEntry,
   }: {
     entry: ProviderListEntry
     active: boolean
     selected: boolean
+    selectionActive: boolean
     onOpenEntry: (entryId: string, shiftKey: boolean) => void
     onSelectEntry: (entryId: string, selected: boolean, shiftKey: boolean) => void
   }) => {
-    const { t } = useTranslation('agentManagement')
     const checkboxShiftKeyRef = useRef(false)
     const manual = entry.kind === 'manual'
     const providerKind = manual ? entry.profile.providerKind : entry.record.providerKind
@@ -124,20 +139,18 @@ const ProviderRow = ({
     const externalModel = !manual && typeof entry.record.metadata.model === 'string'
       ? entry.record.metadata.model
       : null
+    const externalBaseUrl = !manual && typeof entry.record.metadata.baseUrl === 'string'
+      ? entry.record.metadata.baseUrl
+      : null
     const modelLabel = cfg?.model || externalModel
-    const subtitle = modelLabel
-      ? `${PROVIDER_KIND_LABELS[providerKind]} · ${modelLabel}`
-      : PROVIDER_KIND_LABELS[providerKind]
+    const endpointHost = hostnameOf(cfg?.baseUrl || cfg?.openaiBaseUrl || externalBaseUrl)
+    // The endpoint host is the most identifying detail in a list where every
+    // row shares the same provider kind.
+    const subtitle = endpointHost ?? modelLabel ?? PROVIDER_KIND_LABELS[providerKind]
     const alwaysOn = !manual && entry.record.status === 'unsupported'
-    const statusLabel = manual
-      ? (entry.profile.enabled ? null : t('runtime.provider.status.off'))
-      : (entry.record.status === 'active' && entry.record.runtimeTargetEnabled
-          ? null
-          : entry.record.status === 'active'
-            ? t('runtime.provider.status.off')
-            : entry.record.status === 'unsupported'
-              ? t('runtime.provider.status.always')
-            : entry.record.status)
+    const inactive = manual
+      ? !entry.profile.enabled
+      : entry.record.status !== 'active' || !entry.record.runtimeTargetEnabled
     const testId = manual
       ? `agent-profile-row-${entry.profile.id}`
       : `external-provider-row-${entry.record.id}`
@@ -151,11 +164,17 @@ const ProviderRow = ({
           active
             ? 'bg-foreground/[0.045] text-foreground'
             : 'hover:bg-foreground/[0.035] active:bg-foreground/6',
-          statusLabel && !active && !alwaysOn && 'opacity-60',
+          inactive && !active && !alwaysOn && 'opacity-60',
         )}
       >
         <Checkbox
           checked={selected}
+          className={cn(
+            'transition-opacity',
+            selected || selectionActive
+              ? 'opacity-100'
+              : 'opacity-0 group-hover/sidebar-row:opacity-100',
+          )}
           onClickCapture={(event) => {
             checkboxShiftKeyRef.current = event.shiftKey
           }}
@@ -175,32 +194,21 @@ const ProviderRow = ({
             className="size-4 shrink-0 text-muted-foreground"
           />
           <div className="min-w-0 flex-1 overflow-hidden">
-            <div className="flex min-w-0 items-center gap-1.5">
-              <span
-                className={cn(
-                  'block min-w-0 truncate text-[12.5px] leading-tight',
-                  active ? 'font-medium text-foreground' : 'text-foreground/90',
-                )}
-              >
-                {title}
-              </span>
-              {statusLabel && (
-                <span
-                  className={cn(
-                    'shrink-0 rounded-full px-1.5 py-0.5 text-[9px]',
-                    alwaysOn
-                      ? 'bg-success/10 text-success'
-                      : 'bg-muted text-muted-foreground',
-                  )}
-                >
-                  {statusLabel}
-                </span>
+            <span
+              className={cn(
+                'block min-w-0 truncate text-[12.5px] leading-tight',
+                active ? 'font-medium text-foreground' : 'text-foreground/90',
               )}
-            </div>
+            >
+              {title}
+            </span>
             <span className="block truncate text-[10.5px] leading-tight text-muted-foreground/70">
               {subtitle}
             </span>
           </div>
+          <ProviderTestStatusDot
+            providerTargetId={manual ? entry.profile.id : entry.record.providerTargetId}
+          />
           <ChevronRightIcon
             className={cn(
               'size-3 shrink-0 !text-muted-foreground/40 transition-[opacity,transform,width] duration-150',
@@ -222,12 +230,14 @@ export function AgentRuntimeSettings() {
     profiles,
     isSuccess: profilesReady,
     refetch,
+    createProfile,
     updateProfile,
     removeProfile,
   } = useAgentProfiles()
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const selectionAnchorIdRef = useRef<string | null>(null)
   const [draft, setDraft] = useState<DraftProvider | null>(null)
+  const [onboardingPresetId, setOnboardingPresetId] = useState<string | null>(null)
   const [importOpen, setImportOpen] = useState(false)
   const [filter, setFilter] = useState('')
   const deferredFilter = useDeferredValue(filter)
@@ -416,6 +426,25 @@ export function AgentRuntimeSettings() {
         selectionAnchorIdRef.current = null
       }
     }
+
+  const handleDuplicateProfile = async (profile: AgentProfile) => {
+    const name = `${profile.name} (copy)`
+    const newId = buildProfileId(name, `copy-${Date.now()}`)
+    await createProfile.mutateAsync({
+      path: { id: newId },
+      body: {
+        name,
+        providerKind: profile.providerKind,
+        enabled: false,
+        config: parseProfileConfigForUpdate(profile.configJson),
+        credentialRef: profile.credentialRef ?? null,
+      },
+    })
+    await refetch()
+    const entryId = providerListEntryId('manual', newId)
+    setSelectedIds(new Set([entryId]))
+    selectionAnchorIdRef.current = entryId
+  }
 
   const handleToggleProfile = async (profile: AgentProfile, enabled: boolean) => {
       await updateProfile.mutateAsync({
@@ -772,6 +801,7 @@ export function AgentRuntimeSettings() {
                           entry={entry}
                           active={selectedEntryId === entry.id && !isDraftSelected}
                           selected={currentSelectedIds.has(entry.id)}
+                          selectionActive={currentSelectedIds.size > 0}
                           onOpenEntry={openEntry}
                           onSelectEntry={selectEntry}
                         />
@@ -844,6 +874,7 @@ export function AgentRuntimeSettings() {
             profile={selectedEntry.profile}
             onRemove={() => void handleRemoveProfile(selectedEntry.profile.id)}
             onToggle={enabled => void handleToggleProfile(selectedEntry.profile, enabled)}
+            onDuplicate={() => void handleDuplicateProfile(selectedEntry.profile)}
             onSaved={() => {
               void refetch()
             }}
@@ -857,6 +888,18 @@ export function AgentRuntimeSettings() {
             record={selectedEntry.record}
             source={sourceById.get(selectedEntry.record.sourceKey) ?? null}
             onUpdated={handleExternalProviderUpdated}
+          />
+        </div>
+      )
+: profiles.length === 0 && externalRecordViews.length === 0
+? (
+        <div className="min-w-0 flex-1">
+          {/* First-run journey: the empty screen IS the add form. */}
+          <DraftSetupPanel
+            draft={{ id: 'onboarding', presetId: onboardingPresetId }}
+            onSelectPreset={presetId => setOnboardingPresetId(presetId || null)}
+            onComplete={handleDraftComplete}
+            onCancel={() => setOnboardingPresetId(null)}
           />
         </div>
       )

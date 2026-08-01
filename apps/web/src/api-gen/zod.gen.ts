@@ -513,6 +513,19 @@ export const zPatchProviderTargetsByProviderTargetIdCustomModelsPath = z.object(
     providerTargetId: z.string().min(1)
 });
 
+export const zGetProviderTargetsByProviderTargetIdTestPath = z.object({
+    providerTargetId: z.string().min(1)
+});
+
+export const zPostProviderTargetsByProviderTargetIdTestBody = z.object({
+    deep: z.boolean().optional(),
+    model: z.string().min(1).optional()
+});
+
+export const zPostProviderTargetsByProviderTargetIdTestPath = z.object({
+    providerTargetId: z.string().min(1)
+});
+
 export const zPostRelayServersBody = z.object({
     id: z.string().min(1).regex(/.*\S.*/).optional(),
     displayName: z.string().min(1).regex(/.*\S.*/),

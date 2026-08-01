@@ -1,4 +1,13 @@
+import type { PatchProfilesByIdCustomModelsData } from '~/api-gen/types.gen'
 import type { ApiProviderKind } from '~/features/agent-runtime/types'
+
+export interface ProviderPresetModel {
+  id: string
+  name?: string
+  reasoning?: boolean
+  toolCall?: boolean
+  vision?: boolean
+}
 
 export interface ProviderPreset {
   id: string
@@ -8,6 +17,12 @@ export interface ProviderPreset {
   accent: string
   fields: PresetField[]
   defaults: Record<string, unknown>
+  /** Secondary paragraph on the preset card; falls back to tagline. */
+  description?: string
+  /** Server-provided icon hint; falls back to the preset id. */
+  iconSlug?: string
+  /** Known models from the server catalog, used to pre-fill custom models. */
+  models?: ProviderPresetModel[]
 }
 
 interface PresetField {
@@ -56,3 +71,42 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     defaults: { baseUrl: '' },
   },
 ]
+
+type CustomModelEntry = PatchProfilesByIdCustomModelsData['body']['models'][number]
+
+/** Maps catalog preset models to the custom-models PATCH payload shape. */
+export function presetModelsToCustomModels(models: ProviderPresetModel[]): CustomModelEntry[] {
+  return models.map(model => ({
+    id: model.id,
+    label: model.name ?? model.id,
+    capabilities: {
+      ...(model.reasoning !== undefined ? { reasoning: model.reasoning } : {}),
+      ...(model.toolCall !== undefined ? { toolCall: model.toolCall } : {}),
+      ...(model.vision ? { inputModalities: ['text', 'image'] } : {}),
+    },
+  }))
+}
+
+function hostnameOf(url: string): string | null {
+  try {
+    return new URL(url).hostname.toLowerCase()
+  }
+  catch {
+    return null
+  }
+}
+
+/** Finds the catalog preset whose base URL hostname matches the given endpoint. */
+export function matchCatalogPresetByEndpoint(
+  presets: ProviderPreset[],
+  endpoint: string,
+): ProviderPreset | null {
+  const host = hostnameOf(endpoint.trim())
+  if (!host) {
+    return null
+  }
+  return presets.find((preset) => {
+    const baseUrl = preset.defaults.baseUrl
+    return typeof baseUrl === 'string' && baseUrl.length > 0 && hostnameOf(baseUrl) === host
+  }) ?? null
+}
