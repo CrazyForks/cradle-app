@@ -145,9 +145,9 @@ The system has one root radius (`--radius: 0.625rem` = 10 px). Every step is der
 
 | Token | Value | Use |
 |---|---|---|
-| `--shadow-xs` | 2 px cast + 1 px oklch ring @ 5 % | Inputs, small controls |
-| `--shadow-sm` | 3 px cast + 1 px oklch ring @ 6 % | Cards, floating chrome card |
-| `--shadow-md` | 16 px soft cast + 4 px near cast | Popovers, menus, cards on hover — **borderless** |
+| `--shadow-xs` | 2 px cast + 1 px oklch ring @ 5 % | Inputs, small controls, popovers, menus — **borderless** |
+| `--shadow-sm` | 3 px cast + 1 px oklch ring @ 6 % | Cards, floating chrome card, dialogs |
+| `--shadow-md` | 16 px soft cast + 4 px near cast | Reserved — rare hero overlays only |
 | `--shadow-lg` | 40 px far cast + 8 px near cast | Sheets, overlays, toasts — **borderless** |
 | `--shadow-inset` | `inset 0 1px 0 rgba(255,255,255,0.05)` | Top highlight (bevel effect) |
 | `--shadow-inset-ring` | `inset 0 0 0 1px rgba(0,0,0,0.06)` | Etched interior ring |

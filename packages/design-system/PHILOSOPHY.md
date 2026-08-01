@@ -67,7 +67,7 @@ The single strongest identity signature in Cradle is the **inset floating card i
 
 Cradle separates surfaces through **fill steps and layered shadows** — not visible strokes. A border is the last tool you reach for, when fill and shadow cannot convey separation on their own.
 
-Overlays (popovers, menus, dialogs, toasts) **do float**: they carry `--shadow-md` / `--shadow-lg` with *no* `border` class. In dark mode the shadow stack adds a faint top inset highlight (`inset 0 1px 0 white/4-7%`) instead of a keyline, so the surface lifts off the page cleanly.
+Overlays (popovers, menus, selects, comboboxes) **do float**, but barely: they carry `--shadow-xs` with *no* `border` class. Dialogs use `--shadow-sm`; only sheets, drawers and toasts reach `--shadow-lg`. In dark mode the shadow stack adds a faint top inset highlight (`inset 0 1px 0 white/5-7%`) instead of a keyline, so the surface lifts off the page cleanly.
 
 Page-embedded cards stay quiet: `--shadow-sm` at most, edge defined by the token, never a hand-rolled ring.
 
