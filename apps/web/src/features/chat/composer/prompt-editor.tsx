@@ -20,8 +20,12 @@ import type {
   ChatSkillContextPart,
 } from '../context/chat-context-parts'
 import {
+  fillIntentMentionTokenContent,
   formatIntentMentionTokenLabel,
+  INTENT_MENTION_OPERAND_CLASS,
+  INTENT_MENTION_OPERATOR_CLASS,
   INTENT_MENTION_TOKEN_CLASS,
+  normalizeIntentMentionName,
 } from '../mentions/intent-mention-token'
 import type { MentionItem, PluginMentionItem } from '../mentions/mention-panel'
 import type { SkillMentionItem } from '../mentions/skill-mention-panel'
@@ -265,13 +269,16 @@ const intentMentionSpec: NodeSpec = {
   draggable: false,
   selectable: false,
   toDOM(node) {
+    const name = normalizeIntentMentionName(String(node.attrs.name || node.attrs.label))
     return [
       'span',
       {
         ...intentMentionDomAttrs(node),
         contenteditable: 'false',
+        'aria-label': formatIntentMentionTokenLabel(name),
       },
-      formatIntentMentionTokenLabel(String(node.attrs.name || node.attrs.label)),
+      ['span', { class: INTENT_MENTION_OPERATOR_CLASS, 'aria-hidden': 'true' }, '/'],
+      ['span', { class: INTENT_MENTION_OPERAND_CLASS }, name],
     ]
   },
   parseDOM: [
@@ -1040,15 +1047,18 @@ function createMentionNodeView(node: ProseMirrorNode): NodeView {
       document.createTextNode(`@${String(node.attrs.displayName || node.attrs.pluginName)}`),
     )
   }
+ else if (node.type.name === 'intentMention') {
+    const name = String(node.attrs.name || node.attrs.label)
+    dom.setAttribute('aria-label', formatIntentMentionTokenLabel(name))
+    fillIntentMentionTokenContent(dom, name)
+  }
  else {
     dom.textContent
       = node.type.name === 'skillMention'
         ? formatSkillMentionTokenLabel(String(node.attrs.displayName || node.attrs.name))
         : node.type.name === 'pluginMention'
           ? `@${String(node.attrs.displayName || node.attrs.pluginName)}`
-          : node.type.name === 'intentMention'
-            ? formatIntentMentionTokenLabel(String(node.attrs.name || node.attrs.label))
-            : String(node.attrs.label)
+          : String(node.attrs.label)
   }
   dom.contentEditable = 'false'
 

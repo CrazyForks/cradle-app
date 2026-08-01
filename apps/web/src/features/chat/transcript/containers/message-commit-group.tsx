@@ -44,11 +44,12 @@ export function MessageCommitGroup({
 }: CommitGroupMarkdownProps & { sessionId: string }) {
   const filePaths = parseCommitGroupFiles(files)
   const fileLinks = filePaths.length > 0
-    ? filePaths.map(file => (
-        <MarkdownFileLink key={file} href={file} sessionId={sessionId} className="font-mono" title={file}>
+    ? new Map(filePaths.map(file => [
+        file,
+        <MarkdownFileLink href={file} sessionId={sessionId} className="font-mono" title={file}>
           {readFileDisplayName(file)}
-        </MarkdownFileLink>
-      ))
+        </MarkdownFileLink>,
+      ]))
     : undefined
 
   return (

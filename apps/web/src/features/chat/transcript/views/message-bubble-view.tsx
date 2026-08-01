@@ -96,11 +96,12 @@ const MESSAGE_MARKDOWN_COMPONENTS: MessageMarkdownComponents = {
   'commit-group': ({ message, files, body }) => {
     const filePaths = parseCommitGroupFiles(files)
     const fileLinks = filePaths.length > 0
-      ? filePaths.map(file => (
-          <MarkdownFileLinkView key={file} href={file} className="font-mono" title={file}>
+      ? new Map(filePaths.map(file => [
+          file,
+          <MarkdownFileLinkView href={file} className="font-mono" title={file}>
             {readCodeCommentFileName(file)}
-          </MarkdownFileLinkView>
-        ))
+          </MarkdownFileLinkView>,
+        ]))
       : undefined
     return <CommitGroupBlockView message={message} files={files} body={body} fileLinks={fileLinks} />
   },
