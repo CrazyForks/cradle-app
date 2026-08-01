@@ -173,6 +173,7 @@ export function IssueDetail({
       <IssueHeader
         issue={issue}
         status={statuses.find(s => s.id === issue.statusId)}
+        statuses={statuses}
         parentIssue={parentIssue}
         completedSubIssueCount={completedSubIssueCount}
         totalSubIssueCount={subIssues.length}
