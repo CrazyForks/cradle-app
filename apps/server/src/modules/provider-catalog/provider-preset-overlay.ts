@@ -30,7 +30,8 @@ export const PROVIDER_PRESET_OVERLAY: ProviderPresetOverlayEntry[] = [
   {
     id: 'deepseek',
     name: 'DeepSeek',
-    providerKind: 'openai-compatible',
+    // Dual OpenAI + Anthropic URLs; WireShape is universal via contribution.
+    providerKind: 'universal',
     baseUrl: 'https://api.deepseek.com/v1',
     hostnames: ['api.deepseek.com'],
     iconSlug: 'deepseek',
@@ -70,7 +71,8 @@ export const PROVIDER_PRESET_OVERLAY: ProviderPresetOverlayEntry[] = [
   {
     id: 'moonshot',
     name: 'Moonshot (Kimi)',
-    providerKind: 'openai-compatible',
+    // Dual OpenAI + Anthropic URLs; WireShape is universal via contribution.
+    providerKind: 'universal',
     baseUrl: 'https://api.moonshot.cn/v1',
     hostnames: ['api.moonshot.cn'],
     iconSlug: 'moonshot',

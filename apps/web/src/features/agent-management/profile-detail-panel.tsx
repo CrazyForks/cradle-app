@@ -20,6 +20,7 @@ import {
 } from '~/api-gen/@tanstack/react-query.gen'
 import {
   patchProfilesByIdIcon,
+  postProfilesByIdBindProvider,
   postProvidersModels,
   postSecrets,
   postSecretsByIdReveal,
@@ -67,7 +68,6 @@ import { ChatgptCredentialSummary } from './chatgpt-credential-summary'
 import {
   CLAUDE_AUTH_MODE_API_KEY,
   CLAUDE_AUTH_MODE_CLAUDE_AI,
-  CLAUDE_AUTH_MODE_OPTIONS,
   claudeCredentialPlaceholder,
   normalizeClaudeAuthMode,
 } from './claude-auth-modes'
@@ -77,7 +77,6 @@ import {
   CODEX_AUTH_MODE_API_KEY,
   CODEX_AUTH_MODE_BEDROCK_API_KEY,
   CODEX_AUTH_MODE_CHATGPT,
-  CODEX_AUTH_MODE_OPTIONS,
   codexAuthModeFromCredentialKind,
   codexCredentialPlaceholder,
   codexSecretKindForAuthMode,
@@ -104,6 +103,8 @@ import {
   updateProviderTargetCustomModels,
   updateProviderTargetModelVisibility,
 } from './provider-target-model-settings'
+import type { ProviderPreset, ProviderPresetAuthMethod } from './provider-templates'
+import { unboundAuthMethods } from './provider-templates'
 import type { ChatgptCredentialLoginStart } from './use-chatgpt-credential-login'
 import {
   openChatgptCredentialLoginUrl,
@@ -113,12 +114,14 @@ import {
 } from './use-chatgpt-credential-login'
 import type { CredentialMetadata } from './use-credential-metadata'
 import { isChatgptCredentialMetadata, useCredentialMetadata } from './use-credential-metadata'
+import { useMergedProviderPresets } from './use-provider-presets'
 
 type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error'
 type ProfileTextField = 'name' | 'apiKey' | 'baseUrl' | 'openaiBaseUrl' | 'anthropicBaseUrl' | 'api' | 'authMode' | 'bedrockRegion'
 
 interface BuildProfileConfigOptions {
-  codexAuthMode?: string | null
+  /** Only apply Codex authMode when providerId is openai. */
+  openaiAuthMode?: string | null
 }
 
 interface CustomModelsState {
@@ -272,6 +275,12 @@ function getProfileFormValues(
   profile: AgentProfile,
 ): ProfileDetailFormValues {
   const config = ProfileConfigJsonSchema.parse(profile.configJson)
+  const providerId = profile.providerId
+  const authMode = providerId === 'anthropic'
+    ? normalizeClaudeAuthMode(config.authMode)
+    : providerId === 'openai'
+      ? normalizeCodexAuthMode(config.authMode)
+      : CODEX_AUTH_MODE_API_KEY
   return {
     name: profile.name,
     apiKey: '',
@@ -281,9 +290,7 @@ function getProfileFormValues(
     anthropicBaseUrl: config.anthropicBaseUrl || config.baseUrl,
     model: config.model,
     api: config.api,
-    authMode: profile.providerKind === 'anthropic'
-      ? normalizeClaudeAuthMode(config.authMode)
-      : normalizeCodexAuthMode(config.authMode),
+    authMode,
     bedrockRegion: config.bedrock?.region ?? '',
     claudeAgentAliases: readClaudeAgentModelAliases(config),
     enabledModels: getInitialEnabledModels(config.enabledModels),
@@ -292,6 +299,20 @@ function getProfileFormValues(
 
 function supportsClaudeAgentModelAliases(providerKind: ApiProviderKind): boolean {
   return providerKind === 'anthropic' || providerKind === 'universal'
+}
+
+function resolveAuthMethods(
+  providerId: string | null | undefined,
+  presets: ProviderPreset[],
+): ProviderPresetAuthMethod[] {
+  if (!providerId) {
+    return unboundAuthMethods()
+  }
+  const preset = presets.find(entry => entry.providerId === providerId || entry.id === providerId)
+  if (preset?.authMethods.length) {
+    return preset.authMethods
+  }
+  return unboundAuthMethods()
 }
 
 function applyClaudeAgentAliasesToProfileConfig(
@@ -321,6 +342,7 @@ function buildProviderRequestBody(profile: AgentProfile) {
 function buildProfileConfig(
   values: ProfileDetailFormValues,
   currentConfig: Record<string, unknown>,
+  providerId: string | null,
   options: BuildProfileConfigOptions = {},
 ): Record<string, unknown> {
   const {
@@ -344,20 +366,21 @@ function buildProfileConfig(
       model: values.model || undefined,
     }, values)
   }
-  if (values.providerKind === 'openai-compatible' && options.codexAuthMode) {
-    const codexAuthMode = normalizeCodexAuthMode(options.codexAuthMode)
+  // Codex auth suite is identity-gated (openai), not WireShape-gated.
+  if (providerId === 'openai' && options.openaiAuthMode) {
+    const openaiAuthMode = normalizeCodexAuthMode(options.openaiAuthMode)
     return applyClaudeAgentAliasesToProfileConfig({
       ...rest,
-      authMode: codexAuthMode,
-      baseUrl: codexAuthMode === CODEX_AUTH_MODE_API_KEY ? values.baseUrl : '',
+      authMode: openaiAuthMode,
+      baseUrl: openaiAuthMode === CODEX_AUTH_MODE_API_KEY ? values.baseUrl : '',
       model: values.model || undefined,
       api: values.api || undefined,
-      ...(codexAuthMode === CODEX_AUTH_MODE_BEDROCK_API_KEY
+      ...(openaiAuthMode === CODEX_AUTH_MODE_BEDROCK_API_KEY
         ? { bedrock: { region: values.bedrockRegion.trim() } }
         : {}),
     }, values)
   }
-  if (values.providerKind === 'anthropic') {
+  if (providerId === 'anthropic') {
     const claudeAuthMode = normalizeClaudeAuthMode(values.authMode)
     return applyClaudeAgentAliasesToProfileConfig({
       ...rest,
@@ -472,9 +495,18 @@ export function ProfileDetailPanel({
   const { startLogin, cancelLogin } = useChatgptCredentialLoginActions()
   const chatgptLoginStatus = useChatgptCredentialLoginStatus(chatgptLogin.loginId)
   const credentialMetadata = useCredentialMetadata(profile.credentialRef)
-  const showCodexAccountDiagnostics = providerKind === 'openai-compatible'
+  const { presets } = useMergedProviderPresets()
+  const providerId = profile.providerId
+  const isOpenAiProvider = providerId === 'openai'
+  const isClaudeProvider = providerId === 'anthropic'
+  const authMethods = resolveAuthMethods(providerId, presets)
+  const showCodexAccountDiagnostics = isOpenAiProvider
     && normalizeCodexAuthMode(authMode) === CODEX_AUTH_MODE_CHATGPT
   const preset = presetForProviderKind(providerKind)
+  const showDualEndpoints = providerKind === 'universal'
+    || (presets.find(p => p.providerId === providerId)?.endpointProfiles.length ?? 0) >= 2
+  const [bindProviderId, setBindProviderId] = useState('')
+  const [bindBusy, setBindBusy] = useState(false)
 
   useEffect(() => {
     latestProfileRef.current = profile
@@ -661,7 +693,7 @@ export function ProfileDetailPanel({
   }, [form, profile.id])
 
   useEffect(() => {
-    if (profile.providerKind !== 'openai-compatible') {
+    if (profile.providerId !== 'openai') {
       return
     }
     const config = ProfileConfigJsonSchema.parse(profile.configJson)
@@ -676,7 +708,7 @@ export function ProfileDetailPanel({
     const nextValues = { ...currentValues, authMode: credentialAuthMode }
     form.setValue('authMode', credentialAuthMode, { shouldDirty: false })
     savedSignatureRef.current = createProfileSignature(nextValues)
-  }, [credentialMetadata.data?.kind, form, profile.configJson, profile.providerKind])
+  }, [credentialMetadata.data?.kind, form, profile.configJson, profile.providerId])
 
   useEffect(() => {
     if (!supportsModels) {
@@ -746,13 +778,13 @@ export function ProfileDetailPanel({
       let credentialRef = profile.credentialRef ?? null
       const credentialValue = currentValues.apiKey.trim()
       if (credentialValue && supportsModels) {
-        const codexAuthMode = currentValues.providerKind === 'openai-compatible'
+        const openaiAuthMode = profile.providerId === 'openai'
           ? normalizeCodexAuthMode(currentValues.authMode)
           : CODEX_AUTH_MODE_API_KEY
         const { data: meta } = await postSecrets({
           body: {
-            kind: currentValues.providerKind === 'openai-compatible'
-              ? codexSecretKindForAuthMode(codexAuthMode, currentValues.providerKind)
+            kind: profile.providerId === 'openai'
+              ? codexSecretKindForAuthMode(openaiAuthMode, currentValues.providerKind)
               : currentValues.providerKind,
             label: currentValues.name,
             secret: credentialValue,
@@ -760,7 +792,7 @@ export function ProfileDetailPanel({
         })
         credentialRef = SecretCreateResponseSchema.parse(meta).id
       }
-      const codexAuthMode = currentValues.providerKind === 'openai-compatible'
+      const openaiAuthMode = profile.providerId === 'openai'
         ? normalizeCodexAuthMode(currentValues.authMode)
         : null
 
@@ -771,11 +803,15 @@ export function ProfileDetailPanel({
           providerKind: currentValues.providerKind,
           enabled: profile.enabled,
           config: supportsModels
-            ? buildProfileConfig(currentValues, ProfileConfigJsonSchema.parse(profile.configJson), {
-              codexAuthMode,
-              })
+            ? buildProfileConfig(
+                currentValues,
+                ProfileConfigJsonSchema.parse(profile.configJson),
+                profile.providerId,
+                { openaiAuthMode },
+              )
             : ProfileConfigJsonSchema.parse(profile.configJson),
           credentialRef,
+          providerId: profile.providerId,
         },
       })
 
@@ -902,11 +938,47 @@ export function ProfileDetailPanel({
           onProviderKindChange={setProviderKind}
           supportsModels={supportsModels}
           readOnly={false}
+          authMethods={authMethods}
+          showDualEndpoints={showDualEndpoints}
+          isOpenAiProvider={isOpenAiProvider}
+          isClaudeProvider={isClaudeProvider}
           chatgptLoginPending={!!chatgptLogin.loginId}
           chatgptLoginBusy={startLogin.isPending}
           activeChatgptLogin={chatgptLogin.activeLogin}
           onChatgptLogin={handleChatgptLogin}
           onCancelChatgptLogin={handleCancelChatgptLogin}
+          bindPresets={presets.filter(p => p.tier === 'first-class')}
+          bindProviderId={bindProviderId}
+          onBindProviderIdChange={setBindProviderId}
+          bindBusy={bindBusy}
+          onBindProvider={async () => {
+            if (!bindProviderId.trim()) {
+              return
+            }
+            setBindBusy(true)
+            try {
+              await postProfilesByIdBindProvider({
+                path: { id: profile.id },
+                body: {
+                  providerId: bindProviderId.trim(),
+                  applyEndpointDefaults: true,
+                },
+                throwOnError: true,
+              })
+              onSaved()
+              void queryClient.invalidateQueries({ queryKey: getProviderTargetsQueryKey() })
+            }
+            catch (error) {
+              toastManager.add({
+                type: 'error',
+                title: 'Could not bind provider',
+                description: apiErrorMessage(error),
+              })
+            }
+            finally {
+              setBindBusy(false)
+            }
+          }}
         />
 
         {showCodexAccountDiagnostics && (
@@ -1045,11 +1117,20 @@ function ProfileGeneralSettings({
   onProviderKindChange,
   supportsModels,
   readOnly,
+  authMethods,
+  showDualEndpoints,
+  isOpenAiProvider,
+  isClaudeProvider,
   chatgptLoginPending,
   chatgptLoginBusy,
   activeChatgptLogin,
   onChatgptLogin,
   onCancelChatgptLogin,
+  bindPresets,
+  bindProviderId,
+  onBindProviderIdChange,
+  bindBusy,
+  onBindProvider,
 }: {
   profile: AgentProfile
   credentialMetadata: CredentialMetadata | null
@@ -1058,27 +1139,33 @@ function ProfileGeneralSettings({
   onProviderKindChange: (providerKind: ApiProviderKind) => void
   supportsModels: boolean
   readOnly: boolean
+  authMethods: ProviderPresetAuthMethod[]
+  showDualEndpoints: boolean
+  isOpenAiProvider: boolean
+  isClaudeProvider: boolean
   chatgptLoginPending: boolean
   chatgptLoginBusy: boolean
   activeChatgptLogin: ChatgptCredentialLoginStart | null
   onChatgptLogin: () => void
   onCancelChatgptLogin: () => void
+  bindPresets: ProviderPreset[]
+  bindProviderId: string
+  onBindProviderIdChange: (providerId: string) => void
+  bindBusy: boolean
+  onBindProvider: () => void
 }) {
-  const isUniversal = values.providerKind === 'universal'
-  const isCodexProvider = values.providerKind === 'openai-compatible'
-  const isClaudeProvider = values.providerKind === 'anthropic'
   const isChatgptCredential = isChatgptCredentialMetadata(credentialMetadata)
-  const codexAuthMode = isCodexProvider
+  const openaiAuthMode = isOpenAiProvider
     ? normalizeCodexAuthMode(values.authMode)
     : CODEX_AUTH_MODE_API_KEY
   const claudeAuthMode = isClaudeProvider
     ? normalizeClaudeAuthMode(values.authMode)
     : CLAUDE_AUTH_MODE_API_KEY
   const endpointDisabled = readOnly
-    || (isCodexProvider && codexAuthMode !== CODEX_AUTH_MODE_API_KEY)
-    || (isClaudeProvider
-      && claudeAuthMode !== CLAUDE_AUTH_MODE_API_KEY)
-  const providerKindDisabled = readOnly || codexAuthMode === CODEX_AUTH_MODE_CHATGPT || isChatgptCredential
+    || (isOpenAiProvider && openaiAuthMode !== CODEX_AUTH_MODE_API_KEY)
+    || (isClaudeProvider && claudeAuthMode !== CLAUDE_AUTH_MODE_API_KEY)
+  const providerKindDisabled = readOnly || openaiAuthMode === CODEX_AUTH_MODE_CHATGPT || isChatgptCredential
+  const unbound = !profile.providerId
 
   return (
     <div className="flex flex-col gap-9">
@@ -1097,6 +1184,42 @@ function ProfileGeneralSettings({
             />
           </SetupField>
 
+          {unbound && (
+            <SetupField
+              label="Bind provider"
+              hint="This profile has no integration identity yet. Binding is an explicit choice — Cradle will not infer it from the endpoint."
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <Select
+                  value={bindProviderId || undefined}
+                  onValueChange={onBindProviderIdChange}
+                  disabled={readOnly || bindBusy}
+                >
+                  <SelectTrigger data-testid="provider-bind-select" className="h-9 w-full text-[12.5px]">
+                    <SelectValue placeholder="Choose a provider…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {bindPresets.map(preset => (
+                      <SelectItem key={preset.providerId} value={preset.providerId}>
+                        {preset.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={readOnly || bindBusy || !bindProviderId}
+                  onClick={onBindProvider}
+                  data-testid="provider-bind-submit"
+                >
+                  {bindBusy ? <Spinner className="size-3" /> : null}
+                  Bind
+                </Button>
+              </div>
+            </SetupField>
+          )}
+
           {supportsModels && (
             <>
               <SetupField label="Provider type" hint="Runtime protocol family for this provider.">
@@ -1109,7 +1232,7 @@ function ProfileGeneralSettings({
                 />
               </SetupField>
 
-              {isUniversal
+              {showDualEndpoints
                 ? (
                     <SetupField label="Endpoints" hint="Separate base URLs for each API family.">
                       <div className="flex flex-col gap-3">
@@ -1132,7 +1255,7 @@ function ProfileGeneralSettings({
                             onChange={e => onTextFieldChange('anthropicBaseUrl', e.target.value)}
                             disabled={readOnly}
                             className="h-9 w-full text-[12.5px] font-mono"
-                            placeholder="https://api.example.com"
+                            placeholder="https://api.example.com/anthropic"
                           />
                         </div>
                       </div>
@@ -1151,7 +1274,7 @@ function ProfileGeneralSettings({
                     </SetupField>
                   )}
 
-              {!isUniversal && (
+              {!showDualEndpoints && (
                 <SetupField label="API protocol" hint="Communication protocol for this endpoint.">
                   <Select
                     value={values.api || 'auto'}
@@ -1190,7 +1313,9 @@ function ProfileGeneralSettings({
               values={values}
               onTextFieldChange={onTextFieldChange}
               readOnly={readOnly}
-              providerKind={values.providerKind}
+              authMethods={authMethods}
+              isOpenAiProvider={isOpenAiProvider}
+              isClaudeProvider={isClaudeProvider}
               lockChatgptAuth={isChatgptCredential}
               chatgptLoginPending={chatgptLoginPending}
               chatgptLoginBusy={chatgptLoginBusy}
@@ -1221,7 +1346,9 @@ function ProfileCredentialSettings({
   values,
   onTextFieldChange,
   readOnly,
-  providerKind,
+  authMethods,
+  isOpenAiProvider,
+  isClaudeProvider,
   lockChatgptAuth,
   chatgptLoginPending,
   chatgptLoginBusy,
@@ -1234,7 +1361,9 @@ function ProfileCredentialSettings({
   values: Pick<ProfileDetailFormValues, ProfileTextField>
   onTextFieldChange: (field: ProfileTextField, value: string) => void
   readOnly: boolean
-  providerKind: ApiProviderKind
+  authMethods: ProviderPresetAuthMethod[]
+  isOpenAiProvider: boolean
+  isClaudeProvider: boolean
   lockChatgptAuth: boolean
   chatgptLoginPending: boolean
   chatgptLoginBusy: boolean
@@ -1243,27 +1372,28 @@ function ProfileCredentialSettings({
   onCancelChatgptLogin: () => void
 }) {
   const { t } = useTranslation('agentManagement')
-  const isCodexProvider = providerKind === 'openai-compatible'
-  const isClaudeProvider = providerKind === 'anthropic'
   const isChatgptCredential = isChatgptCredentialMetadata(credentialMetadata)
-  const codexAuthMode = isCodexProvider
+  const openaiAuthMode = isOpenAiProvider
     ? normalizeCodexAuthMode(values.authMode)
     : CODEX_AUTH_MODE_API_KEY
   const claudeAuthMode = isClaudeProvider
     ? normalizeClaudeAuthMode(values.authMode)
     : CLAUDE_AUTH_MODE_API_KEY
   const claudeAiLogin = isClaudeProvider && claudeAuthMode === CLAUDE_AUTH_MODE_CLAUDE_AI
-  const showChatgptControls = isCodexProvider && codexAuthMode === CODEX_AUTH_MODE_CHATGPT
+  const showChatgptControls = isOpenAiProvider && openaiAuthMode === CODEX_AUTH_MODE_CHATGPT
   const [revealedSecret, setRevealedSecret] = useState<string | null>(null)
   const [revealingSecret, setRevealingSecret] = useState(false)
   const [replacingSecret, setReplacingSecret] = useState(false)
-  const description = isCodexProvider
-    ? 'How this provider signs in to Codex.'
-    : isClaudeProvider
-      ? 'How this provider authenticates to Claude.'
-      : profile.credentialRef
+  const hasAuthMethodChoice = authMethods.length > 1
+  const description = !hasAuthMethodChoice
+    ? (profile.credentialRef
         ? 'Stored securely. Reveal it briefly or replace it with a new value.'
-        : 'Stored locally and encrypted.'
+        : 'Stored locally and encrypted.')
+    : isOpenAiProvider
+      ? 'How this provider signs in to Codex.'
+      : isClaudeProvider
+        ? 'How this provider authenticates to Claude.'
+        : 'How you authenticate with this provider.'
 
   useEffect(() => {
     if (!revealedSecret) {
@@ -1297,17 +1427,17 @@ function ProfileCredentialSettings({
     }
   }
 
-  const authModeOptions = isClaudeProvider ? CLAUDE_AUTH_MODE_OPTIONS : CODEX_AUTH_MODE_OPTIONS
-  const activeAuthMode = isClaudeProvider ? claudeAuthMode : codexAuthMode
+  const authModeOptions = authMethods.map(method => ({ value: method.id, label: method.label }))
+  const activeAuthMode = values.authMode || authMethods[0]?.id || CODEX_AUTH_MODE_API_KEY
 
   return (
     <div className="flex flex-col gap-4">
-      {(isCodexProvider || isClaudeProvider) && (
+      {hasAuthMethodChoice && (
         <AuthModeSegmented
           testIdPrefix="provider-edit-auth-mode"
           options={authModeOptions}
           value={activeAuthMode}
-          disabled={readOnly || (isCodexProvider && lockChatgptAuth)}
+          disabled={readOnly || (isOpenAiProvider && lockChatgptAuth)}
           onChange={(nextAuthMode) => {
             onTextFieldChange('authMode', nextAuthMode)
             if (nextAuthMode === CODEX_AUTH_MODE_CHATGPT || nextAuthMode === CLAUDE_AUTH_MODE_CLAUDE_AI) {
@@ -1376,11 +1506,11 @@ function ProfileCredentialSettings({
                 value={values.apiKey}
                 onChange={e => onTextFieldChange('apiKey', e.target.value)}
                 disabled={readOnly}
-                placeholder={isCodexProvider
-                  ? codexCredentialPlaceholder(codexAuthMode, !!profile.credentialRef)
+                placeholder={isOpenAiProvider
+                  ? codexCredentialPlaceholder(openaiAuthMode, !!profile.credentialRef)
                   : isClaudeProvider
                     ? claudeCredentialPlaceholder(!!profile.credentialRef, claudeAuthMode)
-                    : codexCredentialPlaceholder(CODEX_AUTH_MODE_API_KEY, !!profile.credentialRef)}
+                    : 'sk-...'}
                 className="h-9 w-full text-[12.5px] font-mono"
               />
               {profile.credentialRef && (
@@ -1391,7 +1521,7 @@ function ProfileCredentialSettings({
             </div>
           )}
 
-          {isCodexProvider && codexAuthMode === CODEX_AUTH_MODE_BEDROCK_API_KEY && (
+          {isOpenAiProvider && openaiAuthMode === CODEX_AUTH_MODE_BEDROCK_API_KEY && (
             <Input
               data-testid="provider-edit-bedrock-region"
               value={values.bedrockRegion}

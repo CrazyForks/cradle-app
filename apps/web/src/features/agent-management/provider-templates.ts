@@ -9,6 +9,18 @@ export interface ProviderPresetModel {
   vision?: boolean
 }
 
+export interface ProviderPresetAuthMethod {
+  id: string
+  label: string
+}
+
+export interface ProviderPresetEndpointProfile {
+  id: string
+  label: string
+  wireKind: ApiProviderKind
+  defaultBaseUrl?: string
+}
+
 export interface ProviderPreset {
   id: string
   name: string
@@ -23,6 +35,11 @@ export interface ProviderPreset {
   iconSlug?: string
   /** Known models from the server catalog, used to pre-fill custom models. */
   models?: ProviderPresetModel[]
+  providerId: string
+  tier: 'first-class' | 'generic'
+  authMethods: ProviderPresetAuthMethod[]
+  endpointProfiles: ProviderPresetEndpointProfile[]
+  featured?: boolean
 }
 
 interface PresetField {
@@ -33,6 +50,23 @@ interface PresetField {
   mono?: boolean
 }
 
+const OPENAI_AUTH: ProviderPresetAuthMethod[] = [
+  { id: 'apikey', label: 'API Key' },
+  { id: 'chatgptAuthTokens', label: 'ChatGPT' },
+  { id: 'personalAccessToken', label: 'PAT' },
+  { id: 'bedrockApiKey', label: 'Bedrock' },
+]
+
+const ANTHROPIC_AUTH: ProviderPresetAuthMethod[] = [
+  { id: 'apiKey', label: 'API Key' },
+  { id: 'claudeAi', label: 'Claude.ai' },
+]
+
+const API_KEY_ONLY: ProviderPresetAuthMethod[] = [
+  { id: 'apiKey', label: 'API Key' },
+]
+
+/** Local featured fallbacks while `/provider-presets` loads. */
 export const PROVIDER_PRESETS: ProviderPreset[] = [
   {
     id: 'anthropic',
@@ -45,6 +79,13 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
       { key: 'apiKey', label: 'API Key', type: 'password', placeholder: 'sk-ant-...', mono: true },
     ],
     defaults: { baseUrl: 'https://api.anthropic.com/v1' },
+    providerId: 'anthropic',
+    tier: 'first-class',
+    authMethods: ANTHROPIC_AUTH,
+    endpointProfiles: [
+      { id: 'anthropic', label: 'Endpoint', wireKind: 'anthropic', defaultBaseUrl: 'https://api.anthropic.com/v1' },
+    ],
+    featured: true,
   },
   {
     id: 'openai',
@@ -57,6 +98,13 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
       { key: 'apiKey', label: 'API Key', type: 'password', placeholder: 'sk-...', mono: true },
     ],
     defaults: { baseUrl: 'https://api.openai.com/v1' },
+    providerId: 'openai',
+    tier: 'first-class',
+    authMethods: OPENAI_AUTH,
+    endpointProfiles: [
+      { id: 'openai', label: 'Endpoint', wireKind: 'openai-compatible', defaultBaseUrl: 'https://api.openai.com/v1' },
+    ],
+    featured: true,
   },
   {
     id: 'universal',
@@ -69,6 +117,14 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
       { key: 'apiKey', label: 'API Key', type: 'password', placeholder: 'sk-...', mono: true },
     ],
     defaults: { baseUrl: '' },
+    providerId: 'universal',
+    tier: 'first-class',
+    authMethods: API_KEY_ONLY,
+    endpointProfiles: [
+      { id: 'openai', label: 'OpenAI-compatible endpoint', wireKind: 'openai-compatible', defaultBaseUrl: '' },
+      { id: 'anthropic', label: 'Anthropic-compatible endpoint', wireKind: 'anthropic', defaultBaseUrl: '' },
+    ],
+    featured: true,
   },
 ]
 
@@ -96,17 +152,36 @@ function hostnameOf(url: string): string | null {
   }
 }
 
-/** Finds the catalog preset whose base URL hostname matches the given endpoint. */
+/**
+ * Suggest gallery presets whose base URL hostname matches the given endpoint.
+ * Suggestion only — never writes providerId.
+ */
+export function suggestCatalogPresetsByEndpoint(
+  presets: ProviderPreset[],
+  endpoint: string,
+): ProviderPreset[] {
+  const host = hostnameOf(endpoint.trim())
+  if (!host) {
+    return []
+  }
+  return presets.filter((preset) => {
+    const urls = [
+      typeof preset.defaults.baseUrl === 'string' ? preset.defaults.baseUrl : '',
+      ...preset.endpointProfiles.map(p => p.defaultBaseUrl ?? ''),
+    ]
+    return urls.some(url => url && hostnameOf(url) === host)
+  })
+}
+
+/** @deprecated Use suggestCatalogPresetsByEndpoint — identity must not be auto-resolved. */
 export function matchCatalogPresetByEndpoint(
   presets: ProviderPreset[],
   endpoint: string,
 ): ProviderPreset | null {
-  const host = hostnameOf(endpoint.trim())
-  if (!host) {
-    return null
-  }
-  return presets.find((preset) => {
-    const baseUrl = preset.defaults.baseUrl
-    return typeof baseUrl === 'string' && baseUrl.length > 0 && hostnameOf(baseUrl) === host
-  }) ?? null
+  return suggestCatalogPresetsByEndpoint(presets, endpoint)[0] ?? null
+}
+
+/** Auth methods for unbound profiles (no providerId). */
+export function unboundAuthMethods(): ProviderPresetAuthMethod[] {
+  return API_KEY_ONLY
 }

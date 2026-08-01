@@ -16,6 +16,17 @@ function toUiPreset(preset: ServerProviderPreset): ProviderPreset {
   if (preset.requiresApiKey) {
     fields.push({ key: 'apiKey', label: 'API Key', type: 'password', placeholder: 'sk-...', mono: true })
   }
+  const authMethods = preset.authMethods?.length
+    ? preset.authMethods
+    : [{ id: 'apiKey', label: 'API Key' }]
+  const endpointProfiles = preset.endpointProfiles?.length
+    ? preset.endpointProfiles
+    : [{
+        id: 'openai',
+        label: 'Endpoint',
+        wireKind: preset.providerKind,
+        defaultBaseUrl: preset.baseUrl,
+      }]
   return {
     id: preset.id,
     name: preset.name,
@@ -24,38 +35,65 @@ function toUiPreset(preset: ServerProviderPreset): ProviderPreset {
     providerKind: preset.providerKind,
     accent: '',
     fields,
-    defaults: { baseUrl: preset.baseUrl },
+    defaults: {
+      baseUrl: preset.baseUrl,
+      ...(endpointProfiles.find(p => p.id === 'openai')?.defaultBaseUrl
+        ? { openaiBaseUrl: endpointProfiles.find(p => p.id === 'openai')!.defaultBaseUrl }
+        : {}),
+      ...(endpointProfiles.find(p => p.id === 'anthropic')?.defaultBaseUrl
+        ? { anthropicBaseUrl: endpointProfiles.find(p => p.id === 'anthropic')!.defaultBaseUrl }
+        : {}),
+    },
     iconSlug: preset.iconSlug,
     models: preset.models,
+    providerId: preset.providerId ?? preset.id,
+    tier: preset.tier ?? 'generic',
+    authMethods,
+    endpointProfiles,
+    featured: preset.featured,
   }
 }
 
 /**
  * Merges the server-side provider catalog (`GET /provider-presets`) with the
  * three local wizard presets. Local presets keep their richer taglines and
- * auth flows; server presets fill in everything else and contribute known
- * model lists. Falls back to the local presets while loading or on error.
+ * auth flows while loading; server presets contribute baseUrl, authMethods,
+ * endpointProfiles, and known model lists.
  */
 export function useMergedProviderPresets(): { presets: ProviderPreset[], isLoading: boolean } {
   const query = useQuery(getProviderPresetsOptions())
 
   const presets = useMemo(() => {
     const serverPresets = query.data ?? []
-    const localIds = new Set(PROVIDER_PRESETS.map(p => p.id))
-    const merged = PROVIDER_PRESETS.map((local) => {
+    if (serverPresets.length === 0) {
+      return PROVIDER_PRESETS
+    }
+    const localById = new Set(PROVIDER_PRESETS.map(p => p.id))
+    const featuredLocal = PROVIDER_PRESETS.map((local) => {
       const remote = serverPresets.find(p => p.id === local.id)
-      return remote ? { ...local, models: remote.models } : local
+      return remote
+        ? {
+            ...local,
+            ...toUiPreset(remote),
+            tagline: local.tagline,
+            accent: local.accent,
+            fields: local.fields,
+          }
+        : local
     })
     const rest = serverPresets
-      .filter(p => !localIds.has(p.id))
+      .filter(p => !localById.has(p.id))
       .sort((a, b) => {
-        if ((a.source === 'overlay') !== (b.source === 'overlay')) {
-          return a.source === 'overlay' ? -1 : 1
+        if ((a.tier === 'first-class') !== (b.tier === 'first-class')) {
+          return a.tier === 'first-class' ? -1 : 1
+        }
+        if ((a.source === 'overlay' || a.source === 'builtin') !== (b.source === 'overlay' || b.source === 'builtin')) {
+          return (a.source === 'overlay' || a.source === 'builtin') ? -1 : 1
         }
         return a.name.localeCompare(b.name)
       })
       .map(toUiPreset)
-    return [...merged, ...rest]
+    return [...featuredLocal, ...rest]
   }, [query.data])
 
   return { presets, isLoading: query.isLoading }

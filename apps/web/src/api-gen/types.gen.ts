@@ -1904,6 +1904,7 @@ export type GetProfilesResponses = {
         credentialRef: string | null;
         customModels: string;
         iconSlug: string | null;
+        providerId: string | null;
         createdAt: number;
         updatedAt: number;
     }>;
@@ -1953,6 +1954,7 @@ export type GetProfilesByIdResponses = {
         credentialRef: string | null;
         customModels: string;
         iconSlug: string | null;
+        providerId: string | null;
         createdAt: number;
         updatedAt: number;
     };
@@ -1970,6 +1972,7 @@ export type PutProfilesByIdData = {
         };
         credentialRef?: string | null;
         iconSlug?: string | null;
+        providerId?: string | null;
     };
     path: {
         id: string;
@@ -1991,12 +1994,46 @@ export type PutProfilesByIdResponses = {
         credentialRef: string | null;
         customModels: string;
         iconSlug: string | null;
+        providerId: string | null;
         createdAt: number;
         updatedAt: number;
     };
 };
 
 export type PutProfilesByIdResponse = PutProfilesByIdResponses[keyof PutProfilesByIdResponses];
+
+export type PostProfilesByIdBindProviderData = {
+    body: {
+        providerId: string;
+        applyEndpointDefaults?: boolean;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/profiles/{id}/bind-provider';
+};
+
+export type PostProfilesByIdBindProviderResponses = {
+    /**
+     * Response for status 200
+     */
+    200: {
+        id: string;
+        name: string;
+        providerKind: 'openai-compatible' | 'anthropic' | 'universal';
+        enabled: boolean;
+        configJson: string;
+        credentialRef: string | null;
+        customModels: string;
+        iconSlug: string | null;
+        providerId: string | null;
+        createdAt: number;
+        updatedAt: number;
+    };
+};
+
+export type PostProfilesByIdBindProviderResponse = PostProfilesByIdBindProviderResponses[keyof PostProfilesByIdBindProviderResponses];
 
 export type PatchProfilesByIdIconData = {
     body: {
@@ -2022,6 +2059,7 @@ export type PatchProfilesByIdIconResponses = {
         credentialRef: string | null;
         customModels: string;
         iconSlug: string | null;
+        providerId: string | null;
         createdAt: number;
         updatedAt: number;
     };
@@ -5022,7 +5060,21 @@ export type GetProviderPresetsResponses = {
         docsUrl?: string;
         local: boolean;
         requiresApiKey: boolean;
-        source: 'models.dev' | 'overlay';
+        source: 'models.dev' | 'overlay' | 'builtin';
+        providerId: string;
+        tier: 'first-class' | 'generic';
+        featured?: boolean;
+        authMethods: Array<{
+            id: string;
+            label: string;
+        }>;
+        endpointProfiles: Array<{
+            id: string;
+            label: string;
+            wireKind: 'openai-compatible' | 'anthropic' | 'universal';
+            defaultBaseUrl?: string;
+            optional?: boolean;
+        }>;
         models: Array<{
             id: string;
             name?: string;
@@ -19019,6 +19071,13 @@ export type DeleteChatComposerDraftsBySurfaceIdResponses = {
                 lineEnd: number;
                 comment: string;
                 position?: number;
+            } | {
+                type: 'data-cradle-intent';
+                intentId: 'review' | 'commit' | 'push';
+                name: string;
+                label: string;
+                prompt: string;
+                position?: number;
             }>;
             files: Array<{
                 type: 'file';
@@ -19095,6 +19154,13 @@ export type GetChatComposerDraftsBySurfaceIdResponses = {
                 lineEnd: number;
                 comment: string;
                 position?: number;
+            } | {
+                type: 'data-cradle-intent';
+                intentId: 'review' | 'commit' | 'push';
+                name: string;
+                label: string;
+                prompt: string;
+                position?: number;
             }>;
             files: Array<{
                 type: 'file';
@@ -19157,6 +19223,13 @@ export type PutChatComposerDraftsBySurfaceIdData = {
                 lineStart: number;
                 lineEnd: number;
                 comment: string;
+                position?: number;
+            } | {
+                type: 'data-cradle-intent';
+                intentId: 'review' | 'commit' | 'push';
+                name: string;
+                label: string;
+                prompt: string;
                 position?: number;
             }>;
             files: Array<{
@@ -19224,6 +19297,13 @@ export type PutChatComposerDraftsBySurfaceIdResponses = {
                 lineStart: number;
                 lineEnd: number;
                 comment: string;
+                position?: number;
+            } | {
+                type: 'data-cradle-intent';
+                intentId: 'review' | 'commit' | 'push';
+                name: string;
+                label: string;
+                prompt: string;
                 position?: number;
             }>;
             files: Array<{
@@ -20444,6 +20524,13 @@ export type GetChatSessionsBySessionIdQueueResponses = {
                 lineEnd: number;
                 comment: string;
                 position?: number;
+            } | {
+                type: 'data-cradle-intent';
+                intentId: 'review' | 'commit' | 'push';
+                name: string;
+                label: string;
+                prompt: string;
+                position?: number;
             }>;
             providerTargetId: string | null;
             modelId: string | null;
@@ -20508,6 +20595,13 @@ export type PostChatSessionsBySessionIdQueueData = {
             lineStart: number;
             lineEnd: number;
             comment: string;
+            position?: number;
+        } | {
+            type: 'data-cradle-intent';
+            intentId: 'review' | 'commit' | 'push';
+            name: string;
+            label: string;
+            prompt: string;
             position?: number;
         }>;
         providerTargetId?: string;
@@ -20577,6 +20671,13 @@ export type PostChatSessionsBySessionIdQueueResponses = {
             lineEnd: number;
             comment: string;
             position?: number;
+        } | {
+            type: 'data-cradle-intent';
+            intentId: 'review' | 'commit' | 'push';
+            name: string;
+            label: string;
+            prompt: string;
+            position?: number;
         }>;
         providerTargetId: string | null;
         modelId: string | null;
@@ -20640,6 +20741,13 @@ export type PostChatSessionsBySessionIdSteerData = {
             lineStart: number;
             lineEnd: number;
             comment: string;
+            position?: number;
+        } | {
+            type: 'data-cradle-intent';
+            intentId: 'review' | 'commit' | 'push';
+            name: string;
+            label: string;
+            prompt: string;
             position?: number;
         }>;
         providerTargetId?: string;
@@ -20723,6 +20831,13 @@ export type PostChatSessionsBySessionIdSteerResponses = {
                 lineStart: number;
                 lineEnd: number;
                 comment: string;
+                position?: number;
+            } | {
+                type: 'data-cradle-intent';
+                intentId: 'review' | 'commit' | 'push';
+                name: string;
+                label: string;
+                prompt: string;
                 position?: number;
             }>;
             providerTargetId: string | null;
@@ -20808,6 +20923,13 @@ export type PostChatSessionsBySessionIdQueueReorderResponses = {
                 lineEnd: number;
                 comment: string;
                 position?: number;
+            } | {
+                type: 'data-cradle-intent';
+                intentId: 'review' | 'commit' | 'push';
+                name: string;
+                label: string;
+                prompt: string;
+                position?: number;
             }>;
             providerTargetId: string | null;
             modelId: string | null;
@@ -20890,6 +21012,13 @@ export type DeleteChatSessionsBySessionIdQueueByQueueItemIdResponses = {
             lineEnd: number;
             comment: string;
             position?: number;
+        } | {
+            type: 'data-cradle-intent';
+            intentId: 'review' | 'commit' | 'push';
+            name: string;
+            label: string;
+            prompt: string;
+            position?: number;
         }>;
         providerTargetId: string | null;
         modelId: string | null;
@@ -20953,6 +21082,13 @@ export type PatchChatSessionsBySessionIdQueueByQueueItemIdData = {
             lineStart: number;
             lineEnd: number;
             comment: string;
+            position?: number;
+        } | {
+            type: 'data-cradle-intent';
+            intentId: 'review' | 'commit' | 'push';
+            name: string;
+            label: string;
+            prompt: string;
             position?: number;
         }>;
         providerTargetId?: string;
@@ -21022,6 +21158,13 @@ export type PatchChatSessionsBySessionIdQueueByQueueItemIdResponses = {
             lineStart: number;
             lineEnd: number;
             comment: string;
+            position?: number;
+        } | {
+            type: 'data-cradle-intent';
+            intentId: 'review' | 'commit' | 'push';
+            name: string;
+            label: string;
+            prompt: string;
             position?: number;
         }>;
         providerTargetId: string | null;
@@ -21244,6 +21387,13 @@ export type PostChatSessionsBySessionIdResponseData = {
             lineEnd: number;
             comment: string;
             position?: number;
+        } | {
+            type: 'data-cradle-intent';
+            intentId: 'review' | 'commit' | 'push';
+            name: string;
+            label: string;
+            prompt: string;
+            position?: number;
         }>;
         messages?: Array<{
             id: string;
@@ -21329,6 +21479,13 @@ export type PostChatSideConversationsBySideConversationIdResponseData = {
             lineStart: number;
             lineEnd: number;
             comment: string;
+            position?: number;
+        } | {
+            type: 'data-cradle-intent';
+            intentId: 'review' | 'commit' | 'push';
+            name: string;
+            label: string;
+            prompt: string;
             position?: number;
         }>;
         messages?: Array<{

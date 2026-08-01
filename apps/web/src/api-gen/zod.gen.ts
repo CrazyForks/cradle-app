@@ -354,10 +354,20 @@ export const zPutProfilesByIdBody = z.object({
     enabled: z.boolean(),
     config: z.record(z.string(), z.unknown()),
     credentialRef: z.string().min(1).nullish(),
-    iconSlug: z.string().nullish()
+    iconSlug: z.string().nullish(),
+    providerId: z.string().min(1).nullish()
 });
 
 export const zPutProfilesByIdPath = z.object({
+    id: z.string().min(1)
+});
+
+export const zPostProfilesByIdBindProviderBody = z.object({
+    providerId: z.string().min(1),
+    applyEndpointDefaults: z.boolean().optional()
+});
+
+export const zPostProfilesByIdBindProviderPath = z.object({
     id: z.string().min(1)
 });
 
@@ -3127,6 +3137,18 @@ export const zPutChatComposerDraftsBySurfaceIdBody = z.object({
                 lineEnd: z.number().gte(1),
                 comment: z.string().min(1),
                 position: z.number().gte(0).optional()
+            }),
+            z.object({
+                type: z.enum(['data-cradle-intent']),
+                intentId: z.enum([
+                    'review',
+                    'commit',
+                    'push'
+                ]),
+                name: z.string().min(1),
+                label: z.string().min(1),
+                prompt: z.string().min(1),
+                position: z.number().gte(0).optional()
             })
         ])),
         files: z.array(z.object({
@@ -3329,6 +3351,18 @@ export const zPostChatSessionsBySessionIdQueueBody = z.object({
             lineEnd: z.number().gte(1),
             comment: z.string().min(1),
             position: z.number().gte(0).optional()
+        }),
+        z.object({
+            type: z.enum(['data-cradle-intent']),
+            intentId: z.enum([
+                'review',
+                'commit',
+                'push'
+            ]),
+            name: z.string().min(1),
+            label: z.string().min(1),
+            prompt: z.string().min(1),
+            position: z.number().gte(0).optional()
         })
     ])).optional(),
     providerTargetId: z.string().optional(),
@@ -3412,6 +3446,18 @@ export const zPostChatSessionsBySessionIdSteerBody = z.object({
             lineEnd: z.number().gte(1),
             comment: z.string().min(1),
             position: z.number().gte(0).optional()
+        }),
+        z.object({
+            type: z.enum(['data-cradle-intent']),
+            intentId: z.enum([
+                'review',
+                'commit',
+                'push'
+            ]),
+            name: z.string().min(1),
+            label: z.string().min(1),
+            prompt: z.string().min(1),
+            position: z.number().gte(0).optional()
         })
     ])).optional(),
     providerTargetId: z.string().optional()
@@ -3491,6 +3537,18 @@ export const zPatchChatSessionsBySessionIdQueueByQueueItemIdBody = z.object({
             lineStart: z.number().gte(1),
             lineEnd: z.number().gte(1),
             comment: z.string().min(1),
+            position: z.number().gte(0).optional()
+        }),
+        z.object({
+            type: z.enum(['data-cradle-intent']),
+            intentId: z.enum([
+                'review',
+                'commit',
+                'push'
+            ]),
+            name: z.string().min(1),
+            label: z.string().min(1),
+            prompt: z.string().min(1),
             position: z.number().gte(0).optional()
         })
     ])).optional(),
@@ -3610,6 +3668,18 @@ export const zPostChatSessionsBySessionIdResponseBody = z.object({
             lineEnd: z.number().gte(1),
             comment: z.string().min(1),
             position: z.number().gte(0).optional()
+        }),
+        z.object({
+            type: z.enum(['data-cradle-intent']),
+            intentId: z.enum([
+                'review',
+                'commit',
+                'push'
+            ]),
+            name: z.string().min(1),
+            label: z.string().min(1),
+            prompt: z.string().min(1),
+            position: z.number().gte(0).optional()
         })
     ])).optional(),
     messages: z.array(z.object({
@@ -3713,6 +3783,18 @@ export const zPostChatSideConversationsBySideConversationIdResponseBody = z.obje
             lineStart: z.number().gte(1),
             lineEnd: z.number().gte(1),
             comment: z.string().min(1),
+            position: z.number().gte(0).optional()
+        }),
+        z.object({
+            type: z.enum(['data-cradle-intent']),
+            intentId: z.enum([
+                'review',
+                'commit',
+                'push'
+            ]),
+            name: z.string().min(1),
+            label: z.string().min(1),
+            prompt: z.string().min(1),
             position: z.number().gte(0).optional()
         })
     ])).optional(),

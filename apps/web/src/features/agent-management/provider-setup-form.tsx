@@ -27,7 +27,6 @@ import { ChatgptCredentialSummary } from './chatgpt-credential-summary'
 import {
   CLAUDE_AUTH_MODE_API_KEY,
   CLAUDE_AUTH_MODE_CLAUDE_AI,
-  CLAUDE_AUTH_MODE_OPTIONS,
   claudeCredentialPlaceholder,
   normalizeClaudeAuthMode,
 } from './claude-auth-modes'
@@ -35,7 +34,6 @@ import {
   CODEX_AUTH_MODE_API_KEY,
   CODEX_AUTH_MODE_BEDROCK_API_KEY,
   CODEX_AUTH_MODE_CHATGPT,
-  CODEX_AUTH_MODE_OPTIONS,
   codexCredentialPlaceholder,
   codexSecretKindForAuthMode,
   normalizeCodexAuthMode,
@@ -173,13 +171,15 @@ export function ProviderSetupForm({
     defaultValues: {
       name: preset.name,
       values: {
-        ...(preset.providerKind === 'openai-compatible'
-          ? { codexAuthMode: CODEX_AUTH_MODE_API_KEY }
-          : preset.providerKind === 'anthropic'
-            ? { claudeAuthMode: CLAUDE_AUTH_MODE_API_KEY }
-            : {}),
+        authMethodId: preset.authMethods[0]?.id ?? 'apiKey',
         ...(typeof preset.defaults.baseUrl === 'string' && preset.defaults.baseUrl
           ? { baseUrl: preset.defaults.baseUrl }
+          : {}),
+        ...(typeof preset.defaults.openaiBaseUrl === 'string'
+          ? { openaiBaseUrl: preset.defaults.openaiBaseUrl }
+          : {}),
+        ...(typeof preset.defaults.anthropicBaseUrl === 'string'
+          ? { anthropicBaseUrl: preset.defaults.anthropicBaseUrl }
           : {}),
       },
     },
@@ -187,48 +187,63 @@ export function ProviderSetupForm({
   const watchedValues = useWatch({ control: form.control }) as PresetSetupFormValues
   const name = watchedValues.name ?? ''
   const values = watchedValues.values ?? {}
-  const isCodexProvider = preset.providerKind === 'openai-compatible'
-  const isClaudeProvider = preset.providerKind === 'anthropic'
-  const codexAuthMode = isCodexProvider
-    ? normalizeCodexAuthMode(values.codexAuthMode)
+  const providerId = preset.providerId ?? preset.id
+  const authMethods = preset.authMethods.length > 0
+    ? preset.authMethods
+    : [{ id: 'apiKey', label: 'API Key' }]
+  const selectedAuthMethodId = values.authMethodId ?? authMethods[0]!.id
+  const isOpenAiProvider = providerId === 'openai'
+  const isClaudeProvider = providerId === 'anthropic'
+  const isDualEndpoint = (preset.endpointProfiles?.length ?? 0) >= 2
+    || preset.providerKind === 'universal'
+  const codexAuthMode = isOpenAiProvider
+    ? normalizeCodexAuthMode(selectedAuthMethodId)
     : CODEX_AUTH_MODE_API_KEY
   const claudeAuthMode = isClaudeProvider
-    ? normalizeClaudeAuthMode(values.claudeAuthMode)
+    ? normalizeClaudeAuthMode(selectedAuthMethodId)
     : CLAUDE_AUTH_MODE_API_KEY
   const claudeAiLogin = isClaudeProvider && claudeAuthMode === CLAUDE_AUTH_MODE_CLAUDE_AI
   const profileId = buildProfileId(name, preset.id)
   const canSubmit = name.trim().length > 0
 
   // ── Auth method + credential field visibility ───────────────────────────
-  const hasAuthMethodChoice = isCodexProvider || isClaudeProvider
-  const isChatgptMode = isCodexProvider && codexAuthMode === CODEX_AUTH_MODE_CHATGPT
-  const isBedrockMode = isCodexProvider && codexAuthMode === CODEX_AUTH_MODE_BEDROCK_API_KEY
-  const isUniversalPreset = !isCodexProvider && !isClaudeProvider
-  // Endpoint is only meaningful when the method actually uses a custom base URL.
-  const showEndpoint = isUniversalPreset
-    || (isClaudeProvider && claudeAuthMode === CLAUDE_AUTH_MODE_API_KEY)
-    || (isCodexProvider && codexAuthMode === CODEX_AUTH_MODE_API_KEY)
+  const hasAuthMethodChoice = authMethods.length > 1
+  const isChatgptMode = isOpenAiProvider && codexAuthMode === CODEX_AUTH_MODE_CHATGPT
+  const isBedrockMode = isOpenAiProvider && codexAuthMode === CODEX_AUTH_MODE_BEDROCK_API_KEY
+  const showDualEndpoints = isDualEndpoint && !isChatgptMode && !claudeAiLogin
+  const showEndpoint = !showDualEndpoints
+    && (
+      (isClaudeProvider && claudeAuthMode === CLAUDE_AUTH_MODE_API_KEY)
+      || (isOpenAiProvider && codexAuthMode === CODEX_AUTH_MODE_API_KEY)
+      || (!isOpenAiProvider && !isClaudeProvider && !isDualEndpoint)
+    )
   const showKeyInput = !claudeAiLogin && !isChatgptMode && preset.fields.some(f => f.key === 'apiKey')
-  const authModeOptions = isClaudeProvider ? CLAUDE_AUTH_MODE_OPTIONS : CODEX_AUTH_MODE_OPTIONS
-  const selectedAuthMode = isClaudeProvider ? claudeAuthMode : codexAuthMode
-  const keyPlaceholder = isCodexProvider
+  const authModeOptions = authMethods.map(m => ({ value: m.id, label: m.label }))
+  const selectedAuthMode = selectedAuthMethodId
+  const keyPlaceholder = isOpenAiProvider
     ? codexCredentialPlaceholder(codexAuthMode, false)
     : isClaudeProvider
       ? claudeCredentialPlaceholder(false, claudeAuthMode)
       : (preset.fields.find(f => f.key === 'apiKey')?.placeholder ?? 'sk-...')
   const endpointPlaceholder = preset.fields.find(f => f.key === 'baseUrl')?.placeholder ?? 'https://api.example.com/v1'
+  const authHint = !hasAuthMethodChoice
+    ? 'Stored locally and encrypted.'
+    : isClaudeProvider
+      ? 'How this provider authenticates to Claude.'
+      : isOpenAiProvider
+        ? 'How this provider signs in to Codex.'
+        : 'How you authenticate with this provider.'
 
   const handleAuthModeChange = (next: string) => {
+    form.setValue('values.authMethodId', next, { shouldDirty: true })
     if (isClaudeProvider) {
-      form.setValue('values.claudeAuthMode', next, { shouldDirty: true })
       if (next === CLAUDE_AUTH_MODE_CLAUDE_AI) {
         form.setValue('values.apiKey', '', { shouldDirty: true })
         form.setValue('values.baseUrl', '', { shouldDirty: true })
       }
       return
     }
-    if (isCodexProvider) {
-      form.setValue('values.codexAuthMode', next, { shouldDirty: true })
+    if (isOpenAiProvider) {
       if (next !== CODEX_AUTH_MODE_CHATGPT) {
         setChatgptCredentialRef(null)
         setChatgptLoginId(null)
@@ -248,7 +263,7 @@ export function ProviderSetupForm({
     }
     if (login.state === 'completed' && login.credentialRef) {
       setChatgptCredentialRef(login.credentialRef)
-      form.setValue('values.codexAuthMode', CODEX_AUTH_MODE_CHATGPT, { shouldDirty: true })
+      form.setValue('values.authMethodId', CODEX_AUTH_MODE_CHATGPT, { shouldDirty: true })
       form.setValue('values.apiKey', '', { shouldDirty: true })
       form.setValue('values.baseUrl', '', { shouldDirty: true })
       setChatgptLoginId(null)
@@ -293,13 +308,14 @@ export function ProviderSetupForm({
     const requiresApiKey = preset.fields.some(f => f.key === 'apiKey')
     const credentialValue = currentValues.values.apiKey?.trim() ?? ''
     const bedrockRegion = currentValues.values.bedrockRegion?.trim() ?? ''
-    const selectedCodexAuthMode = isCodexProvider
-      ? normalizeCodexAuthMode(currentValues.values.codexAuthMode)
+    const selectedAuthId = currentValues.values.authMethodId ?? authMethods[0]!.id
+    const selectedCodexAuthMode = isOpenAiProvider
+      ? normalizeCodexAuthMode(selectedAuthId)
       : CODEX_AUTH_MODE_API_KEY
     const selectedClaudeAuthMode = isClaudeProvider
-      ? normalizeClaudeAuthMode(currentValues.values.claudeAuthMode)
+      ? normalizeClaudeAuthMode(selectedAuthId)
       : CLAUDE_AUTH_MODE_API_KEY
-    if (isUniversalPreset) {
+    if (isDualEndpoint) {
       const openaiBaseUrl = currentValues.values.openaiBaseUrl?.trim() ?? ''
       const anthropicBaseUrl = currentValues.values.anthropicBaseUrl?.trim() ?? ''
       if (!openaiBaseUrl || !anthropicBaseUrl) {
@@ -308,7 +324,7 @@ export function ProviderSetupForm({
       }
     }
     if (requiresApiKey) {
-      if (isCodexProvider) {
+      if (isOpenAiProvider) {
         if (selectedCodexAuthMode === CODEX_AUTH_MODE_CHATGPT && !chatgptCredentialRef) {
           setStatus({ ok: false, text: 'Credential is required' })
           return
@@ -339,7 +355,7 @@ export function ProviderSetupForm({
       if (credentialValue && selectedCodexAuthMode !== CODEX_AUTH_MODE_CHATGPT) {
         const { data: meta } = await postSecrets({
           body: {
-            kind: isCodexProvider
+            kind: isOpenAiProvider
               ? codexSecretKindForAuthMode(selectedCodexAuthMode, preset.providerKind)
               : preset.providerKind,
             label: currentValues.name,
@@ -350,7 +366,7 @@ export function ProviderSetupForm({
       }
 
       const config: Record<string, unknown> = { ...preset.defaults }
-      if (isCodexProvider) {
+      if (isOpenAiProvider) {
         config.authMode = selectedCodexAuthMode
         if (selectedCodexAuthMode === CODEX_AUTH_MODE_API_KEY) {
           config.baseUrl = currentValues.values.baseUrl ?? ''
@@ -368,11 +384,15 @@ export function ProviderSetupForm({
           ? ''
           : (currentValues.values.baseUrl ?? '')
       }
+      else if (isDualEndpoint) {
+        const openaiBaseUrl = currentValues.values.openaiBaseUrl?.trim() ?? ''
+        const anthropicBaseUrl = currentValues.values.anthropicBaseUrl?.trim() ?? ''
+        config.openaiBaseUrl = openaiBaseUrl
+        config.anthropicBaseUrl = anthropicBaseUrl
+        config.baseUrl = openaiBaseUrl || anthropicBaseUrl
+      }
       else {
-        const baseUrl = currentValues.values.baseUrl ?? ''
-        const defaults = universalEndpointDefaults(baseUrl)
-        config.openaiBaseUrl = currentValues.values.openaiBaseUrl?.trim() || defaults.openaiBaseUrl
-        config.anthropicBaseUrl = currentValues.values.anthropicBaseUrl?.trim() || defaults.anthropicBaseUrl
+        config.baseUrl = currentValues.values.baseUrl ?? ''
       }
       if (currentValues.values.model) {
         config.model = currentValues.values.model
@@ -386,6 +406,7 @@ export function ProviderSetupForm({
           enabled: true,
           config,
           credentialRef,
+          providerId,
         },
       })
 
@@ -455,9 +476,9 @@ export function ProviderSetupForm({
           />
         </SetupField>
 
-        {isUniversalPreset
+        {showDualEndpoints
           ? (
-              <SetupField label="Endpoints" hint="OpenAI normally uses /v1; Anthropic normally does not.">
+              <SetupField label="Endpoints" hint="OpenAI-compatible and Anthropic-compatible base URLs.">
                 <div className="flex flex-col gap-2">
                   <Input
                     data-testid="provider-openai-baseurl"
@@ -465,7 +486,7 @@ export function ProviderSetupForm({
                     onChange={(event) => {
                       const nextOpenaiBaseUrl = event.target.value
                       form.setValue('values.openaiBaseUrl', nextOpenaiBaseUrl, { shouldDirty: true })
-                      if (!values.anthropicBaseUrl) {
+                      if (!values.anthropicBaseUrl && providerId === 'universal') {
                         form.setValue('values.anthropicBaseUrl', universalEndpointDefaults(nextOpenaiBaseUrl).anthropicBaseUrl, { shouldDirty: true })
                       }
                     }}
@@ -476,7 +497,7 @@ export function ProviderSetupForm({
                     data-testid="provider-anthropic-baseurl"
                     value={values.anthropicBaseUrl ?? ''}
                     onChange={event => form.setValue('values.anthropicBaseUrl', event.target.value, { shouldDirty: true })}
-                    placeholder="Anthropic endpoint, e.g. https://api.example.com"
+                    placeholder="Anthropic endpoint, e.g. https://api.example.com/anthropic"
                     className="h-9 w-full text-[12.5px] font-mono"
                   />
                 </div>
@@ -497,13 +518,7 @@ export function ProviderSetupForm({
 
         <SetupField
           label={hasAuthMethodChoice ? 'Authentication' : 'Credentials'}
-          hint={
-            hasAuthMethodChoice
-              ? (isClaudeProvider
-                  ? 'How this provider authenticates to Claude.'
-                  : 'How this provider signs in to Codex.')
-              : 'Stored locally and encrypted.'
-          }
+          hint={authHint}
         >
           <div className="flex flex-col gap-3">
             {hasAuthMethodChoice && (

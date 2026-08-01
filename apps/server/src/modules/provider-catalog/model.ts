@@ -36,7 +36,21 @@ export const ProvidersModel = {
     docsUrl: t.Optional(t.String()),
     local: t.Boolean(),
     requiresApiKey: t.Boolean(),
-    source: t.Union([t.Literal('models.dev'), t.Literal('overlay')]),
+    source: t.Union([t.Literal('models.dev'), t.Literal('overlay'), t.Literal('builtin')]),
+    providerId: t.String(),
+    tier: t.Union([t.Literal('first-class'), t.Literal('generic')]),
+    featured: t.Optional(t.Boolean()),
+    authMethods: t.Array(t.Object({
+      id: t.String(),
+      label: t.String(),
+    })),
+    endpointProfiles: t.Array(t.Object({
+      id: t.String(),
+      label: t.String(),
+      wireKind: providerKindSchema,
+      defaultBaseUrl: t.Optional(t.String()),
+      optional: t.Optional(t.Boolean()),
+    })),
     models: t.Array(t.Object({
       id: t.String(),
       name: t.Optional(t.String()),

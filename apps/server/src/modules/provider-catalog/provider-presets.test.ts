@@ -84,9 +84,26 @@ describe('collectProviderPresets', () => {
     const deepseek = byId.get('deepseek')
     expect(deepseek).toBeDefined()
     expect(deepseek?.source).toBe('overlay')
-    // Overlay base URL wins over the models.dev api field.
+    // Contribution wins WireShape: dual-endpoint vendors are universal.
+    expect(deepseek?.providerKind).toBe('universal')
+    expect(deepseek?.providerId).toBe('deepseek')
+    expect(deepseek?.tier).toBe('first-class')
     expect(deepseek?.baseUrl).toBe('https://api.deepseek.com/v1')
-    expect(deepseek?.providerKind).toBe('openai-compatible')
+    expect(deepseek?.endpointProfiles).toEqual([
+      {
+        id: 'openai',
+        label: 'OpenAI-compatible endpoint',
+        wireKind: 'openai-compatible',
+        defaultBaseUrl: 'https://api.deepseek.com/v1',
+      },
+      {
+        id: 'anthropic',
+        label: 'Anthropic-compatible endpoint',
+        wireKind: 'anthropic',
+        defaultBaseUrl: 'https://api.deepseek.com/anthropic',
+      },
+    ])
+    expect(deepseek?.authMethods).toEqual([{ id: 'apiKey', label: 'API Key' }])
     expect(deepseek?.iconSlug).toBe('deepseek')
     // defaultModels carried over, enriched with models.dev names and capabilities.
     expect(deepseek?.models.map(model => model.id)).toEqual([
@@ -102,6 +119,20 @@ describe('collectProviderPresets', () => {
       toolCall: true,
     })
 
+    const openai = byId.get('openai')
+    expect(openai).toMatchObject({
+      providerId: 'openai',
+      source: 'builtin',
+      tier: 'first-class',
+      featured: true,
+    })
+    expect(openai?.authMethods.map(method => method.id)).toEqual([
+      'apikey',
+      'chatgptAuthTokens',
+      'personalAccessToken',
+      'bedrockApiKey',
+    ])
+
     // Overlay-only vendors (missing from models.dev) are still present.
     const ollama = byId.get('ollama')
     expect(ollama).toMatchObject({
@@ -109,12 +140,15 @@ describe('collectProviderPresets', () => {
       local: true,
       requiresApiKey: false,
       source: 'overlay',
+      providerId: 'ollama',
+      tier: 'first-class',
     })
     const volcengine = byId.get('volcengine-ark-coding')
     expect(volcengine).toMatchObject({
       providerKind: 'anthropic',
       baseUrl: 'https://ark.cn-beijing.volces.com/api/coding',
       source: 'overlay',
+      providerId: 'volcengine-ark-coding',
     })
     expect(volcengine?.models).toEqual([{ id: 'glm-5.2' }])
 
@@ -123,13 +157,14 @@ describe('collectProviderPresets', () => {
     expect(groq).toMatchObject({
       baseUrl: 'https://api.groq.com/openai/v1',
       source: 'overlay',
+      providerId: 'groq',
     })
     expect(groq?.models.map(model => model.id)).toEqual(['llama-3.3-70b-versatile'])
 
     // models.dev providers without an api base URL and without an overlay claim are excluded.
     expect(byId.has('no-api-vendor')).toBe(false)
 
-    // Plain models.dev providers pass through with derived capabilities.
+    // Plain models.dev providers pass through with generic contribution (apiKey only).
     const acme = byId.get('acme-ai')
     expect(acme).toMatchObject({
       name: 'Acme AI',
@@ -138,7 +173,10 @@ describe('collectProviderPresets', () => {
       local: false,
       requiresApiKey: true,
       source: 'models.dev',
+      providerId: 'acme-ai',
+      tier: 'generic',
     })
+    expect(acme?.authMethods).toEqual([{ id: 'apiKey', label: 'API Key' }])
     expect(acme?.models).toEqual([
       {
         id: 'acme-vision-1',
@@ -156,8 +194,9 @@ describe('collectProviderPresets', () => {
     const presets = await collectProviderPresets()
 
     expect(presets.length).toBeGreaterThan(0)
-    expect(presets.every(preset => preset.source === 'overlay')).toBe(true)
+    expect(presets.every(preset => preset.source === 'overlay' || preset.source === 'builtin')).toBe(true)
     const deepseek = presets.find(preset => preset.id === 'deepseek')
     expect(deepseek?.models.map(model => model.id)).toContain('deepseek-v4-flash')
+    expect(deepseek?.providerKind).toBe('universal')
   })
 })

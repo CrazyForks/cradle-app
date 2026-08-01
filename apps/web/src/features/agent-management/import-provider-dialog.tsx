@@ -52,7 +52,7 @@ import type { ParsedProvider, ParseResult } from './import-provider-parser'
 import { isBase64Like, parseProviderConfig, tryDecodeBase64 } from './import-provider-parser'
 import { warmManualProviderModelCache } from './provider-model-cache'
 import { buildProfileId } from './provider-settings-utils'
-import { matchCatalogPresetByEndpoint, presetModelsToCustomModels } from './provider-templates'
+import { presetModelsToCustomModels, suggestCatalogPresetsByEndpoint } from './provider-templates'
 import { useMergedProviderPresets } from './use-provider-presets'
 
 const SecretCreateResponseSchema = z.object({ id: z.string().min(1) })
@@ -383,15 +383,15 @@ export function ImportProviderDialog({
           },
         })
 
-        // Auto-populate custom models from the server catalog
-        const matchedPreset = matchCatalogPresetByEndpoint(
+        // Suggest catalog models by endpoint hostname only — never write providerId on import.
+        const suggestedPreset = suggestCatalogPresetsByEndpoint(
           catalogPresets,
           kind === 'universal' ? openaiBaseUrl : baseUrl,
-        )
-        if (matchedPreset?.models?.length) {
+        )[0]
+        if (suggestedPreset?.models?.length) {
           void patchProfilesByIdCustomModels({
             path: { id: profileId },
-            body: { models: presetModelsToCustomModels(matchedPreset.models) },
+            body: { models: presetModelsToCustomModels(suggestedPreset.models) },
             throwOnError: true,
           }).catch(error => console.error('[ImportProvider] custom models auto-config failed', error))
         }
@@ -562,14 +562,14 @@ export function ImportProviderDialog({
                             : (baseUrls[i] ?? p.baseUrl),
                         ))}
                         autoModelsHint={(() => {
-                          const matched = matchCatalogPresetByEndpoint(
+                          const suggested = suggestCatalogPresetsByEndpoint(
                             catalogPresets,
                             (kinds[i] ?? p.providerKind) === 'universal'
                               ? (openaiBaseUrls[i] ?? universalEndpointDefaults(p.baseUrl).openaiBaseUrl)
                               : (baseUrls[i] ?? p.baseUrl),
-                          )
-                          return matched?.models?.length
-                            ? { name: matched.name, count: matched.models.length }
+                          )[0]
+                          return suggested?.models?.length
+                            ? { name: suggested.name, count: suggested.models.length }
                             : null
                         })()}
                         enabled={enabledSet.has(i)}

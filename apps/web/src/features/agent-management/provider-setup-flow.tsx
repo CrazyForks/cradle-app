@@ -17,10 +17,13 @@ import { useMergedProviderPresets } from './use-provider-presets'
 /** Presets promoted to the large-card featured row. */
 const FEATURED_PRESET_IDS = ['anthropic', 'openai', 'universal']
 
-const stepTransition = { duration: 0.18, ease: 'easeOut' } as const
+/** Parallel blur-fade for gallery ↔ form — overlapping, not wait-serialized. */
+const stepTransition = { duration: 0.14, ease: [0.22, 1, 0.36, 1] } as const
+const stepEnter = { opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' } as const
+const stepExit = { opacity: 0, y: 4, scale: 0.985, filter: 'blur(5px)' } as const
 
 /**
- * Two-step "add provider" flow: a searchable preset gallery slides into the
+ * Two-step "add provider" flow: a searchable preset gallery crossfades into the
  * credential form for the chosen preset. Dialog-agnostic — hosts decide the
  * height (the settings dialog pins it, onboarding lets it flow) while the
  * internal regions scroll or grow accordingly.
@@ -46,17 +49,17 @@ export function ProviderSetupFlow({
   const preset = presets.find(p => p.id === presetId) ?? null
 
   return (
-    <div className={cn('flex min-h-0 flex-1 flex-col', className)}>
-      <AnimatePresence mode="wait" initial={false}>
+    <div className={cn('grid min-h-0 flex-1 grid-cols-1 grid-rows-1 overflow-hidden', className)}>
+      <AnimatePresence initial={false}>
         {preset
           ? (
               <m.div
                 key={`form-${preset.id}`}
-                initial={{ opacity: 0, x: 32 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 32 }}
+                initial={{ opacity: 0, y: 6, scale: 0.985, filter: 'blur(5px)' }}
+                animate={stepEnter}
+                exit={stepExit}
                 transition={stepTransition}
-                className="flex min-h-0 flex-1 flex-col"
+                className="col-start-1 row-start-1 flex min-h-0 flex-col"
               >
                 {/* Step header */}
                 <div className="flex shrink-0 items-center gap-3 border-b border-border/60 px-5 py-4">
@@ -84,11 +87,11 @@ export function ProviderSetupFlow({
           : (
               <m.div
                 key="gallery"
-                initial={{ opacity: 0, x: -32 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -32 }}
+                initial={{ opacity: 0, y: 6, scale: 0.985, filter: 'blur(5px)' }}
+                animate={stepEnter}
+                exit={stepExit}
                 transition={stepTransition}
-                className="flex min-h-0 flex-1 flex-col"
+                className="col-start-1 row-start-1 flex min-h-0 flex-col"
               >
                 <PresetGallery
                   presets={presets}
@@ -160,20 +163,16 @@ function PresetGallery({
               Featured
             </h4>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              {featuredPresets.map((p, idx) => (
-                <m.button
+              {featuredPresets.map(p => (
+                <button
                   key={p.id}
                   type="button"
                   onClick={() => onSelect(p.id)}
                   data-testid={`provider-preset-${p.id}`}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.22, delay: idx * 0.05, ease: 'easeOut' }}
-                  whileHover={{ y: -2 }}
                   className={cn(
                     'group/featured relative flex flex-col items-start gap-3 rounded-xl bg-card p-4 text-left',
-                    'ring-1 ring-foreground/[0.07] transition-[box-shadow,ring-color] duration-150',
-                    'hover:ring-foreground/15 hover:shadow-md hover:shadow-foreground/[0.05]',
+                    'ring-1 ring-foreground/[0.07] transition-[box-shadow,ring-color,transform] duration-150',
+                    'hover:-translate-y-0.5 hover:ring-foreground/15 hover:shadow-md hover:shadow-foreground/[0.05]',
                     'active:scale-[0.98]',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60',
                   )}
@@ -185,7 +184,7 @@ function PresetGallery({
                       {p.tagline}
                     </span>
                   </div>
-                </m.button>
+                </button>
               ))}
             </div>
           </section>
@@ -199,15 +198,12 @@ function PresetGallery({
             ? (
                 <div className="overflow-hidden rounded-xl ring-1 ring-foreground/[0.07]">
                   <div className="divide-y divide-border/50">
-                    {catalogPresets.map((p, idx) => (
-                      <m.button
+                    {catalogPresets.map(p => (
+                      <button
                         key={p.id}
                         type="button"
                         onClick={() => onSelect(p.id)}
                         data-testid={`provider-preset-${p.id}`}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 0.18, delay: Math.min(idx, 16) * 0.02, ease: 'easeOut' }}
                         className={cn(
                           'group/preset flex w-full items-center gap-3 bg-card px-3 py-2.5 text-left',
                           'transition-colors duration-150 hover:bg-foreground/[0.035]',
@@ -220,7 +216,7 @@ function PresetGallery({
                           <div className="truncate text-[11px] text-muted-foreground">{p.tagline}</div>
                         </div>
                         <ChevronRightIcon className="size-3.5 shrink-0 !text-muted-foreground/30 transition-[transform,color] duration-150 group-hover/preset:translate-x-0.5 group-hover/preset:!text-muted-foreground" />
-                      </m.button>
+                      </button>
                     ))}
                   </div>
                 </div>
