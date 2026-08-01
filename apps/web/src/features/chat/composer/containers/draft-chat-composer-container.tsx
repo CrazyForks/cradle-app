@@ -299,7 +299,7 @@ function DraftChatComposerContent({
           : !effectiveProfile || sending)
 
   const toolbar = (
-    <div className="flex min-w-0 items-center gap-1">
+    <div className="flex min-w-0 items-center gap-2">
       <ComposerToolbar
         context="new-chat"
         state={composerState}
