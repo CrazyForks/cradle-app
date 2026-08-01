@@ -1,41 +1,28 @@
 import {
   AlertLine as CircleAlertIcon,
-  ArrowLeftLine as ArrowLeftIcon,
   CheckCircleLine as CircleCheckIcon,
   CheckLine as CheckIcon,
   CloseLine as XIcon,
   CopyLine as CopyIcon,
   EnterDoorLine as LogInIcon,
-  RightSmallLine as ChevronRightIcon,
-  SearchLine as SearchIcon,
 } from '@mingcute/react'
 import { useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, m } from 'motion/react'
 import type { ReactNode } from 'react'
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { z } from 'zod'
 
 import { getProviderTargetsByProviderTargetIdTestQueryKey } from '~/api-gen/@tanstack/react-query.gen'
 import { patchProfilesByIdCustomModels, postProviderTargetsByProviderTargetIdTest, postSecrets } from '~/api-gen/sdk.gen'
-import { PROVIDER_ICONS } from '~/components/common/provider-icons'
 import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '~/components/ui/select'
-import { Separator } from '~/components/ui/separator'
 import { Spinner } from '~/components/ui/spinner'
 import { AGENT_MODELS_QUERY_KEY } from '~/features/agent-runtime/use-agent-models'
 import { useAgentProfiles } from '~/features/agent-runtime/use-agent-profiles'
 import { cn } from '~/lib/cn'
 
-import { SettingsDivider, SettingsRow } from '../settings/settings-row'
 import { ChatgptCredentialSummary } from './chatgpt-credential-summary'
 import {
   CLAUDE_AUTH_MODE_API_KEY,
@@ -54,7 +41,6 @@ import {
   normalizeCodexAuthMode,
 } from './codex-auth-modes'
 import { warmManualProviderModelCache } from './provider-model-cache'
-import type { DraftProvider } from './provider-settings-utils'
 import { buildProfileId } from './provider-settings-utils'
 import type { ProviderPreset } from './provider-templates'
 import { presetModelsToCustomModels } from './provider-templates'
@@ -66,7 +52,6 @@ import {
   useChatgptCredentialLoginStatus,
 } from './use-chatgpt-credential-login'
 import { useCredentialMetadata } from './use-credential-metadata'
-import { useMergedProviderPresets } from './use-provider-presets'
 
 interface PresetSetupFormValues {
   name: string
@@ -86,108 +71,93 @@ function universalEndpointDefaults(baseUrl: string): { openaiBaseUrl: string, an
   }
 }
 
-export function DraftSetupPanel({
-  draft,
-  onSelectPreset,
-  onComplete,
-  onCancel,
-}: {
-  draft: DraftProvider
-  onSelectPreset: (presetId: string) => void
-  onComplete: (newProfileId?: string) => void
-  onCancel: () => void
-}) {
-  const { presets } = useMergedProviderPresets()
-  const [query, setQuery] = useState('')
-  const preset = presets.find(p => p.id === draft.presetId) ?? null
-
-  if (!preset) {
-    const trimmedQuery = query.trim().toLowerCase()
-    const visiblePresets = trimmedQuery
-      ? presets.filter(p =>
-        p.name.toLowerCase().includes(trimmedQuery)
-        || p.id.includes(trimmedQuery)
-        || p.tagline.toLowerCase().includes(trimmedQuery))
-      : presets
-    return (
-      <div className="flex flex-col gap-5">
-        <div className="flex items-center justify-between gap-3">
-          <div className="relative min-w-0 flex-1">
-            <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 !text-muted-foreground/60" />
-            <Input
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              placeholder="Search providers..."
-              className="h-8 pl-8 text-[12.5px]"
-            />
-          </div>
-          <Button size="sm" variant="ghost" onClick={onCancel}>
-            <XIcon />
-            Cancel
-          </Button>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 xl:grid-cols-3">
-          {visiblePresets.map((p, idx) => {
-            const Icon = PROVIDER_ICONS[p.iconSlug ?? p.id] ?? PROVIDER_ICONS.custom!
-            return (
-              <m.button
-                key={p.id}
-                type="button"
-                onClick={() => onSelectPreset(p.id)}
-                data-testid={`provider-preset-${p.id}`}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.2, delay: Math.min(idx, 12) * 0.03, ease: 'easeOut' }}
-                whileHover={{ y: -1 }}
-                className={cn(
-                  'group/preset relative flex items-center gap-2.5 rounded-xl bg-card p-3 text-left',
-                  'ring-1 ring-foreground/[0.07] transition-[box-shadow,ring-color] duration-150',
-                  'hover:ring-foreground/15 hover:shadow-sm',
-                  'active:scale-[0.96]',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60',
-                )}
-              >
-                <Icon className="size-5 shrink-0 text-foreground/70" />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[12.5px] font-medium text-foreground">{p.name}</div>
-                  <div className="truncate text-[11px] text-muted-foreground">{p.tagline}</div>
-                </div>
-                <ChevronRightIcon className="size-3.5 shrink-0 !text-muted-foreground/30 transition-[transform,color] duration-150 group-hover/preset:translate-x-0.5 group-hover/preset:!text-muted-foreground" />
-              </m.button>
-            )
-          })}
-        </div>
-        {visiblePresets.length === 0 && (
-          <p className="py-6 text-center text-[11.5px] text-muted-foreground/70">
-            No providers match your search.
-          </p>
-        )}
-      </div>
-    )
-  }
-
+/**
+ * Stacked form field — label and supporting copy sit above a full-width
+ * control, replacing the cramped label-left/control-right settings row.
+ * Shared by the setup form and the profile detail panel.
+ */
+export function SetupField({ label, hint, children }: { label: string, hint?: string, children: ReactNode }) {
   return (
-    <PresetSetupForm
-      key={preset.id}
-      preset={preset}
-      onComplete={onComplete}
-      onBack={() => onSelectPreset('')}
-    />
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-0.5">
+        <span className="text-[12.5px] font-medium text-foreground">{label}</span>
+        {hint && <p className="text-[11.5px] leading-relaxed text-muted-foreground">{hint}</p>}
+      </div>
+      {children}
+    </div>
   )
 }
 
-function PresetSetupForm({
+/**
+ * Vercel-style segmented picker. The active segment pill slides between
+ * options via a shared layout animation. Used for auth-mode and provider-kind
+ * choices across the setup form and the profile detail panel.
+ */
+export function AuthModeSegmented({
+  options,
+  value,
+  onChange,
+  disabled = false,
+  testIdPrefix = 'provider-auth-mode',
+}: {
+  options: readonly { value: string, label: string }[]
+  value: string
+  onChange: (next: string) => void
+  disabled?: boolean
+  testIdPrefix?: string
+}) {
+  const pillId = useId()
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Authentication method"
+      className="inline-flex items-center gap-0.5 self-start rounded-lg bg-muted/70 p-0.5 ring-1 ring-foreground/[0.06] ring-inset"
+    >
+      {options.map((option) => {
+        const active = option.value === value
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            disabled={disabled}
+            data-testid={`${testIdPrefix}-${option.value}`}
+            onClick={() => onChange(option.value)}
+            className={cn(
+              'relative rounded-md px-3 py-1.5 text-[12px] font-medium outline-none transition-colors duration-150',
+              'focus-visible:ring-2 focus-visible:ring-ring/60 disabled:pointer-events-none disabled:opacity-50',
+              active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground/85',
+            )}
+          >
+            {active && (
+              <m.span
+                layoutId={`auth-mode-pill-${pillId}`}
+                transition={{ type: 'spring', bounce: 0.18, duration: 0.45 }}
+                className="absolute inset-0 rounded-md bg-background shadow-sm ring-1 ring-foreground/[0.08]"
+              />
+            )}
+            <span className="relative">{option.label}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/**
+ * Credential/setup form for a chosen preset. Owns its scroll region and a
+ * pinned footer so status messages and actions never shift the layout; in an
+ * auto-height host (onboarding) everything simply flows in natural order.
+ */
+export function ProviderSetupForm({
   preset,
   onComplete,
-  onBack,
 }: {
   preset: ProviderPreset
   onComplete: (newProfileId?: string) => void
-  onBack: () => void
 }) {
   const { t } = useTranslation('agentManagement')
-  const Icon = PROVIDER_ICONS[preset.iconSlug ?? preset.id] ?? PROVIDER_ICONS.custom!
   const { createProfile } = useAgentProfiles()
   const queryClient = useQueryClient()
   const [busy, setBusy] = useState(false)
@@ -230,9 +200,6 @@ function PresetSetupForm({
   const canSubmit = name.trim().length > 0
 
   // ── Auth method + credential field visibility ───────────────────────────
-  // Mirrors ProfileDetailPanel: a Select for the auth mode, then only the
-  // inputs the selected mode actually needs. Universal presets have no auth
-  // mode choice and just take an endpoint + key.
   const hasAuthMethodChoice = isCodexProvider || isClaudeProvider
   const isChatgptMode = isCodexProvider && codexAuthMode === CODEX_AUTH_MODE_CHATGPT
   const isBedrockMode = isCodexProvider && codexAuthMode === CODEX_AUTH_MODE_BEDROCK_API_KEY
@@ -473,219 +440,195 @@ function PresetSetupForm({
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      {/* Header */}
-      <div className="flex items-center gap-2.5">
-        <button
-          type="button"
-          onClick={onBack}
-          className="-ml-1 inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
-          aria-label="Back to templates"
-        >
-          <ArrowLeftIcon className="size-3.5" />
-        </button>
-        <Icon className="size-6 shrink-0 text-foreground/80" />
-        <div className="min-w-0 flex-1">
-          <h4 className="font-heading text-[15px] font-medium text-foreground">{preset.name}</h4>
-          <p className="mt-0.5 truncate text-[12px] text-muted-foreground">{preset.tagline}</p>
-        </div>
-      </div>
-
-      <Separator className="bg-foreground/6" />
-
-      {/* Form */}
-      <div className="flex flex-col">
-        <SettingsRow
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* Fields */}
+      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-5 py-5">
+        <SetupField
           label="Display name"
-          description="This is how the provider shows up in chat and agent settings."
+          hint="This is how the provider shows up in chat and agent settings."
         >
           <Input
             data-testid="provider-name"
             {...form.register('name')}
             placeholder={preset.name}
-            className="h-9 w-56 text-[13px]"
+            className="h-9 w-full text-[13px]"
           />
-        </SettingsRow>
+        </SetupField>
 
         {isUniversalPreset
           ? (
-              <>
-                <SettingsDivider />
-                <SettingsRow label="Endpoints" description="OpenAI normally uses /v1; Anthropic normally does not." vertical>
-                  <div className="flex w-full max-w-[28rem] flex-col gap-2">
-                    <Input
-                      data-testid="provider-openai-baseurl"
-                      value={values.openaiBaseUrl ?? ''}
-                      onChange={(event) => {
-                        const nextOpenaiBaseUrl = event.target.value
-                        form.setValue('values.openaiBaseUrl', nextOpenaiBaseUrl, { shouldDirty: true })
-                        if (!values.anthropicBaseUrl) {
-                          form.setValue('values.anthropicBaseUrl', universalEndpointDefaults(nextOpenaiBaseUrl).anthropicBaseUrl, { shouldDirty: true })
-                        }
-                      }}
-                      placeholder="OpenAI endpoint, e.g. https://api.example.com/v1"
-                      className="h-9 text-[12.5px] font-mono"
-                    />
-                    <Input
-                      data-testid="provider-anthropic-baseurl"
-                      value={values.anthropicBaseUrl ?? ''}
-                      onChange={event => form.setValue('values.anthropicBaseUrl', event.target.value, { shouldDirty: true })}
-                      placeholder="Anthropic endpoint, e.g. https://api.example.com"
-                      className="h-9 text-[12.5px] font-mono"
-                    />
-                  </div>
-                </SettingsRow>
-              </>
+              <SetupField label="Endpoints" hint="OpenAI normally uses /v1; Anthropic normally does not.">
+                <div className="flex flex-col gap-2">
+                  <Input
+                    data-testid="provider-openai-baseurl"
+                    value={values.openaiBaseUrl ?? ''}
+                    onChange={(event) => {
+                      const nextOpenaiBaseUrl = event.target.value
+                      form.setValue('values.openaiBaseUrl', nextOpenaiBaseUrl, { shouldDirty: true })
+                      if (!values.anthropicBaseUrl) {
+                        form.setValue('values.anthropicBaseUrl', universalEndpointDefaults(nextOpenaiBaseUrl).anthropicBaseUrl, { shouldDirty: true })
+                      }
+                    }}
+                    placeholder="OpenAI endpoint, e.g. https://api.example.com/v1"
+                    className="h-9 w-full text-[12.5px] font-mono"
+                  />
+                  <Input
+                    data-testid="provider-anthropic-baseurl"
+                    value={values.anthropicBaseUrl ?? ''}
+                    onChange={event => form.setValue('values.anthropicBaseUrl', event.target.value, { shouldDirty: true })}
+                    placeholder="Anthropic endpoint, e.g. https://api.example.com"
+                    className="h-9 w-full text-[12.5px] font-mono"
+                  />
+                </div>
+              </SetupField>
             )
           : showEndpoint && (
-          <>
-            <SettingsDivider />
-            <SettingsRow label="Endpoint" description="Base URL for the API">
+            <SetupField label="Endpoint" hint="Base URL for the API.">
               <Input
                 data-testid="provider-baseurl"
                 value={values.baseUrl ?? ''}
                 onChange={e =>
                   form.setValue('values.baseUrl', e.target.value, { shouldDirty: true })}
                 placeholder={endpointPlaceholder}
-                className="h-9 w-56 text-[12.5px] font-mono"
+                className="h-9 w-full text-[12.5px] font-mono"
               />
-            </SettingsRow>
-          </>
-        )}
+            </SetupField>
+          )}
 
-        <SettingsDivider />
-        <SettingsRow
+        <SetupField
           label={hasAuthMethodChoice ? 'Authentication' : 'Credentials'}
-          description={
+          hint={
             hasAuthMethodChoice
               ? (isClaudeProvider
                   ? 'How this provider authenticates to Claude.'
                   : 'How this provider signs in to Codex.')
               : 'Stored locally and encrypted.'
           }
-          vertical
         >
-          <div className="flex w-full max-w-[28rem] flex-col gap-2">
+          <div className="flex flex-col gap-3">
             {hasAuthMethodChoice && (
-              <Select
+              <AuthModeSegmented
+                options={authModeOptions}
                 value={selectedAuthMode}
-                onValueChange={handleAuthModeChange}
+                onChange={handleAuthModeChange}
+              />
+            )}
+
+            {/* Mode-specific fields swap with a quick crossfade so the form
+                never jumps when the auth method changes. */}
+            <AnimatePresence mode="wait" initial={false}>
+              <m.div
+                key={selectedAuthMode}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.14, ease: 'easeOut' }}
+                className="flex flex-col gap-3"
               >
-                <SelectTrigger className="h-9 w-56 text-[12.5px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {authModeOptions.map(option => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+                {claudeAiLogin && (
+                  <InfoCallout>
+                    {t('detail.claudeAgent.subscriptionLoginNotice')}
+                  </InfoCallout>
+                )}
 
-            {claudeAiLogin && (
-              <InfoCallout>
-                {t('detail.claudeAgent.subscriptionLoginNotice')}
-              </InfoCallout>
-            )}
+                {isChatgptMode && chatgptCredentialMetadata.data && (
+                  <ChatgptCredentialSummary credential={chatgptCredentialMetadata.data} />
+                )}
 
-            {isChatgptMode && chatgptCredentialMetadata.data && (
-              <ChatgptCredentialSummary credential={chatgptCredentialMetadata.data} />
-            )}
+                {showKeyInput && (
+                  <Input
+                    data-testid="provider-apikey"
+                    type="password"
+                    value={values.apiKey ?? ''}
+                    onChange={(e) => {
+                      setChatgptCredentialRef(null)
+                      form.setValue('values.apiKey', e.target.value, { shouldDirty: true })
+                    }}
+                    placeholder={keyPlaceholder}
+                    className="h-9 w-full text-[12.5px] font-mono"
+                  />
+                )}
 
-            {showKeyInput && (
-              <Input
-                data-testid="provider-apikey"
-                type="password"
-                value={values.apiKey ?? ''}
-                onChange={(e) => {
-                  setChatgptCredentialRef(null)
-                  form.setValue('values.apiKey', e.target.value, { shouldDirty: true })
-                }}
-                placeholder={keyPlaceholder}
-                className="h-9 text-[12.5px] font-mono"
-              />
-            )}
+                {isBedrockMode && (
+                  <Input
+                    data-testid="provider-bedrock-region"
+                    value={values.bedrockRegion ?? ''}
+                    onChange={e =>
+                      form.setValue('values.bedrockRegion', e.target.value, { shouldDirty: true })}
+                    placeholder="us-east-1"
+                    className="h-9 w-full text-[12.5px] font-mono"
+                  />
+                )}
 
-            {isBedrockMode && (
-              <Input
-                data-testid="provider-bedrock-region"
-                value={values.bedrockRegion ?? ''}
-                onChange={e =>
-                  form.setValue('values.bedrockRegion', e.target.value, { shouldDirty: true })}
-                placeholder="us-east-1"
-                className="h-9 w-56 text-[12.5px] font-mono"
-              />
-            )}
+                {isChatgptMode && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {chatgptLoginId
+                      ? (
+                          <Button
+                            type="button"
+                            size="xs"
+                            variant="outline"
+                            onClick={() => void handleCancelChatgptLogin()}
+                          >
+                            <XIcon className="size-3" />
+                            Cancel ChatGPT login
+                          </Button>
+                        )
+                      : (
+                          <Button
+                            type="button"
+                            size="xs"
+                            variant="outline"
+                            onClick={() => void handleChatgptLogin()}
+                            disabled={startLogin.isPending}
+                          >
+                            {startLogin.isPending ? <Spinner className="size-3" /> : <LogInIcon className="size-3" />}
+                            Sign in with ChatGPT
+                          </Button>
+                        )}
+                  </div>
+                )}
+                {isChatgptMode && activeChatgptLogin && (
+                  <ChatgptDeviceCodeNotice login={activeChatgptLogin} />
+                )}
 
-            {isChatgptMode && (
-              <div className="flex flex-wrap items-center gap-2">
-                {chatgptLoginId
-                  ? (
-                      <Button
-                        type="button"
-                        size="xs"
-                        variant="outline"
-                        onClick={() => void handleCancelChatgptLogin()}
-                      >
-                        <XIcon className="size-3" />
-                        Cancel ChatGPT login
-                      </Button>
-                    )
-                  : (
-                      <Button
-                        type="button"
-                        size="xs"
-                        variant="outline"
-                        onClick={() => void handleChatgptLogin()}
-                        disabled={startLogin.isPending}
-                      >
-                        {startLogin.isPending ? <Spinner className="size-3" /> : <LogInIcon className="size-3" />}
-                        Sign in with ChatGPT
-                      </Button>
-                    )}
-              </div>
-            )}
-            {isChatgptMode && activeChatgptLogin && (
-              <ChatgptDeviceCodeNotice login={activeChatgptLogin} />
-            )}
-
-            {preset.fields.length === 0 && (
-              <InfoCallout>
-                No credentials needed: this provider runs on your machine.
-              </InfoCallout>
-            )}
+                {preset.fields.length === 0 && (
+                  <InfoCallout>
+                    No credentials needed: this provider runs on your machine.
+                  </InfoCallout>
+                )}
+              </m.div>
+            </AnimatePresence>
           </div>
-        </SettingsRow>
+        </SetupField>
       </div>
 
-      {/* Status */}
-      <AnimatePresence>
-        {status && (
-          <m.div
-            data-testid="provider-status"
-            data-status-ok={status.ok ? 'true' : 'false'}
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className={cn(
-              'flex items-center gap-2 rounded-lg px-3 py-2 text-[12px] font-medium ring-1',
-              status.ok
-                ? 'bg-emerald-500/8 text-emerald-600 ring-emerald-500/15 dark:text-emerald-400'
-                : 'bg-destructive/8 text-destructive ring-destructive/15',
+      {/* Pinned footer: status has a reserved slot, actions never move. */}
+      <div className="flex shrink-0 items-center gap-3 border-t border-border/60 bg-muted/30 px-5 py-3">
+        <div className="min-w-0 flex-1">
+          <AnimatePresence>
+            {status && (
+              <m.p
+                data-testid="provider-status"
+                data-status-ok={status.ok ? 'true' : 'false'}
+                initial={{ opacity: 0, x: -4 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0 }}
+                className={cn(
+                  'flex items-center gap-1.5 truncate text-[12px] font-medium',
+                  status.ok
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : 'text-destructive',
+                )}
+              >
+                {status.ok
+                  ? <CircleCheckIcon className="size-3.5 shrink-0" />
+                  : <CircleAlertIcon className="size-3.5 shrink-0" />}
+                <span className="truncate">{status.text}</span>
+              </m.p>
             )}
-          >
-            {status.ok
-              ? <CircleCheckIcon className="size-3.5" />
-              : <CircleAlertIcon className="size-3.5" />}
-            {status.text}
-          </m.div>
-        )}
-      </AnimatePresence>
-
-      {/* Actions */}
-      <div className="flex items-center gap-2">
+          </AnimatePresence>
+        </div>
         <Button
           data-testid="provider-submit"
           size="sm"
@@ -695,15 +638,12 @@ function PresetSetupForm({
           {busy ? <Spinner className="size-3" /> : <CheckIcon />}
           {busy ? 'Saving...' : 'Save provider'}
         </Button>
-        <Button size="sm" variant="ghost" onClick={onBack}>
-          Back
-        </Button>
       </div>
     </div>
   )
 }
 
-function InfoCallout({ children }: { children: ReactNode }) {
+export function InfoCallout({ children }: { children: ReactNode }) {
   return (
     <div className="rounded-lg bg-muted/40 px-3 py-2.5 text-[11.5px] leading-relaxed text-muted-foreground ring-1 ring-foreground/4">
       {children}

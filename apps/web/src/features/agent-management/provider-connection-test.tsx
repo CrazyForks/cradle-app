@@ -97,7 +97,7 @@ export function ProviderConnectionTestControls({
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-3">
       <Button
         type="button"
         size="xs"
