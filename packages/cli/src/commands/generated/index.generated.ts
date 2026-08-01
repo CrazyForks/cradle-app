@@ -335,13 +335,9 @@ import { register as registerWorkspaceDiffsAgentFixStart } from './workspace/dif
 import { register as registerWorkspaceDiffsBranchCompare } from './workspace/diffs/branch-compare'
 import { register as registerWorkspaceDiffsClose } from './workspace/diffs/close'
 import { register as registerWorkspaceDiffsCommit } from './workspace/diffs/commit'
-import { register as registerWorkspaceDiffsCommitPlanApply } from './workspace/diffs/commit-plan/apply'
-import { register as registerWorkspaceDiffsCommitPlanUpdate } from './workspace/diffs/commit-plan/update'
 import { register as registerWorkspaceDiffsFileViewed } from './workspace/diffs/file/viewed'
 import { register as registerWorkspaceDiffsGet } from './workspace/diffs/get'
 import { register as registerWorkspaceDiffsGithubPullRequest } from './workspace/diffs/github-pull-request'
-import { register as registerWorkspaceDiffsGuideCancel } from './workspace/diffs/guide/cancel'
-import { register as registerWorkspaceDiffsGuideGenerate } from './workspace/diffs/guide/generate'
 import { register as registerWorkspaceDiffsList } from './workspace/diffs/list'
 import { register as registerWorkspaceDiffsLocalWorkingTree } from './workspace/diffs/local-working-tree'
 import { register as registerWorkspaceDiffsMerge } from './workspace/diffs/merge'
@@ -716,13 +712,9 @@ export function registerGeneratedCommands(program: Command): void {
   registerWorkspaceDiffsBranchCompare(program)
   registerWorkspaceDiffsClose(program)
   registerWorkspaceDiffsCommit(program)
-  registerWorkspaceDiffsCommitPlanApply(program)
-  registerWorkspaceDiffsCommitPlanUpdate(program)
   registerWorkspaceDiffsFileViewed(program)
   registerWorkspaceDiffsGet(program)
   registerWorkspaceDiffsGithubPullRequest(program)
-  registerWorkspaceDiffsGuideCancel(program)
-  registerWorkspaceDiffsGuideGenerate(program)
   registerWorkspaceDiffsList(program)
   registerWorkspaceDiffsLocalWorkingTree(program)
   registerWorkspaceDiffsMerge(program)

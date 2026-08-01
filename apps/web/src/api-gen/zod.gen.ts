@@ -2890,29 +2890,6 @@ export const zPutWorkspacesByWorkspaceIdDiffReviewsPreferencesPath = z.object({
     workspaceId: z.string().min(1)
 });
 
-export const zPostWorkspacesByWorkspaceIdDiffReviewsByReviewIdGuideGenerateBody = z.object({
-    providerTargetId: z.string().min(1),
-    runtimeKind: z.string().min(1).optional(),
-    modelId: z.string().min(1).nullish(),
-    force: z.boolean().optional(),
-    outputLocale: z.enum([
-        'en-US',
-        'zh-CN',
-        'ja-JP',
-        'es-ES'
-    ]).nullish()
-});
-
-export const zPostWorkspacesByWorkspaceIdDiffReviewsByReviewIdGuideGeneratePath = z.object({
-    workspaceId: z.string().min(1),
-    reviewId: z.string().min(1)
-});
-
-export const zPostWorkspacesByWorkspaceIdDiffReviewsByReviewIdGuideCancelPath = z.object({
-    workspaceId: z.string().min(1),
-    reviewId: z.string().min(1)
-});
-
 export const zPostWorkspacesByWorkspaceIdDiffReviewsByReviewIdAgentFixesBody = z.object({
     threadId: z.string().min(1).nullish(),
     anchor: z.object({
@@ -2925,11 +2902,7 @@ export const zPostWorkspacesByWorkspaceIdDiffReviewsByReviewIdAgentFixesBody = z
     }).nullish(),
     instruction: z.string().min(1),
     agentId: z.string().min(1).nullish(),
-    expectedOutput: z.enum([
-        'commit',
-        'working-tree-change',
-        'patch-artifact'
-    ])
+    expectedOutput: z.enum(['working-tree-change', 'patch-artifact'])
 });
 
 export const zPostWorkspacesByWorkspaceIdDiffReviewsByReviewIdAgentFixesPath = z.object({
@@ -2993,40 +2966,6 @@ export const zDeleteWorkspacesByWorkspaceIdDiffReviewsByReviewIdAgentFixesByAgen
     workspaceId: z.string().min(1),
     reviewId: z.string().min(1),
     agentFixId: z.string().min(1)
-});
-
-export const zPutWorkspacesByWorkspaceIdDiffReviewsByReviewIdCommitPlansByCommitPlanIdBody = z.object({
-    groups: z.array(z.object({
-        id: z.string().min(1),
-        title: z.string().min(1),
-        message: z.string().min(1),
-        rationale: z.string(),
-        fileIds: z.array(z.string().min(1)),
-        paths: z.array(z.string()).optional(),
-        dependsOn: z.array(z.string())
-    })).optional(),
-    rationale: z.string().optional(),
-    status: z.enum([
-        'draft',
-        'accepted',
-        'abandoned'
-    ]).optional()
-});
-
-export const zPutWorkspacesByWorkspaceIdDiffReviewsByReviewIdCommitPlansByCommitPlanIdPath = z.object({
-    workspaceId: z.string().min(1),
-    reviewId: z.string().min(1),
-    commitPlanId: z.string().min(1)
-});
-
-export const zPostWorkspacesByWorkspaceIdDiffReviewsByReviewIdCommitPlansByCommitPlanIdApplyBody = z.object({
-    idempotencyKey: z.string().min(1).optional()
-});
-
-export const zPostWorkspacesByWorkspaceIdDiffReviewsByReviewIdCommitPlansByCommitPlanIdApplyPath = z.object({
-    workspaceId: z.string().min(1),
-    reviewId: z.string().min(1),
-    commitPlanId: z.string().min(1)
 });
 
 export const zGetAcpRegistryByAgentIdDistributionTypesPath = z.object({
