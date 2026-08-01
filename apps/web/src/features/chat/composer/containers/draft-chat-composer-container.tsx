@@ -41,6 +41,7 @@ import type { ChatComposerSlashCommand } from '../../slash-commands/chat-slash-c
 import {
   CRADLE_APPSHOT_SLASH_ACTION_ID,
   CRADLE_APPSHOT_SLASH_COMMAND,
+  CRADLE_INTENT_SLASH_COMMANDS,
   RUNTIME_CODE_REVIEW_COMMAND_ACTION_ID,
   withSlashCommandAvailability,
 } from '../../slash-commands/chat-slash-commands'
@@ -282,7 +283,7 @@ function DraftChatComposerContent({
       return withSlashCommandAvailability(CRADLE_APPSHOT_SLASH_COMMAND, undefined)
     })()
 
-    return [appshotCommand]
+    return [...CRADLE_INTENT_SLASH_COMMANDS, appshotCommand]
   })()
   const slashCommands = useRuntimeComposerSlashCommands(
     selection.runtimeKind,

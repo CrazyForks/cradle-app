@@ -588,6 +588,13 @@ export function ComposerView({
         return
       }
 
+      if (command.action.kind === 'insertIntent') {
+        dispatch({ type: 'slash/selected', inputValue: currentState.inputValue, command: null })
+        promptEditorRef.current?.insertIntentMention(command.action.intentId, range)
+        requestAnimationFrame(() => promptEditorRef.current?.focus())
+        return
+      }
+
       const insertText = command.action.text
       const next = replaceSlashTrigger(
         currentState.inputValue,
@@ -595,7 +602,12 @@ export function ComposerView({
         range.from - 1,
         insertText,
       )
-      dispatch({ type: 'slash/selected', inputValue: next.value, command })
+      const keepsSlashCommand = insertText.trimStart().startsWith(`/${command.name}`)
+      dispatch({
+        type: 'slash/selected',
+        inputValue: next.value,
+        command: keepsSlashCommand ? command : null,
+      })
       promptEditorRef.current?.replaceRangeWithText(range, insertText)
     },
     [

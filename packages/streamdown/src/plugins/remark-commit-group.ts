@@ -2,10 +2,10 @@ import { createRemarkAttributeDirective } from './remark-attribute-directive'
 
 declare module 'mdast' {
   interface BlockContentMap {
-    'code-comment': {
-      type: 'code-comment'
+    'commit-group': {
+      type: 'commit-group'
       data: {
-        hName: 'code-comment'
+        hName: 'commit-group'
         hProperties: Record<string, string>
       }
       children: []
@@ -14,10 +14,10 @@ declare module 'mdast' {
 }
 
 /**
- * Turns complete Codex review directives into a custom markdown element.
+ * Turns complete commit-group directives into a custom markdown element.
  * Incomplete directives deliberately remain plain text so streaming stays lossless.
  */
-export const remarkCodeComment = createRemarkAttributeDirective({
-  prefix: '::code-comment{',
-  name: 'code-comment',
+export const remarkCommitGroup = createRemarkAttributeDirective({
+  prefix: '::commit-group{',
+  name: 'commit-group',
 })
