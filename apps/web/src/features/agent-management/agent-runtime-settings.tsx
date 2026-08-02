@@ -32,7 +32,6 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogMedia,
   AlertDialogTitle,
 } from '~/components/ui/alert-dialog'
 import { Button } from '~/components/ui/button'
@@ -905,9 +904,6 @@ export function AgentRuntimeSettings() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogMedia>
-              <Trash2Icon className="size-5 !text-destructive" />
-            </AlertDialogMedia>
             <AlertDialogTitle>
               {t('runtime.deleteDialog.title')}
             </AlertDialogTitle>
