@@ -8,6 +8,7 @@ import {
   fetchPullRequest,
   fetchWorkflowRunJobs,
   fetchWorkflowRunsForHead,
+  GitHubApiError,
   GitHubTargetValidationError,
   hasGitHubToken,
   isGitHubMissingTarget,
@@ -826,11 +827,22 @@ export async function fetchLiveCIStatus(filterJson: string): Promise<LiveCIStatu
   const workflowFailure = workflowRuns.some(run =>
     run.status === 'completed' && (!run.conclusion || !PASSING_CHECK_CONCLUSIONS.has(run.conclusion)))
 
-  const requiredContexts = target.baseBranch
-    ? (await fetchBranchProtection(target.owner, target.repo, target.baseBranch))
+  let requiredContexts: string[] = []
+  if (target.baseBranch) {
+    try {
+      requiredContexts = (await fetchBranchProtection(target.owner, target.repo, target.baseBranch))
         ?.required_status_checks
 ?.contexts ?? []
-    : []
+    }
+    catch (err) {
+      // Branch protection is optional display metadata. GitHub Apps without
+      // Administration: read access receive 403 here, but the live CI data is
+      // still useful and should not make the status endpoint fail.
+      if (!(err instanceof GitHubApiError && err.status === 403)) {
+        throw err
+      }
+    }
+  }
   const requiredSet = new Set(requiredContexts)
 
   return {
