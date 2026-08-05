@@ -38,6 +38,10 @@ export interface ChatResponseRequestBody {
   reviewTarget?: RuntimeReviewTarget
 }
 
+export interface ChatQuickQuestionRequestBody {
+  question: string
+}
+
 export type ChatQueueMode = 'queue'
 export type ChatQueueItemStatus = 'pending' | 'running' | 'cancelled' | 'completed' | 'failed'
 export type RuntimeSettingsValue = string | number | boolean
@@ -298,10 +302,40 @@ export async function startChatResponse(args: {
   body: ChatResponseRequestBody
   signal?: AbortSignal
 }): Promise<Response> {
-  return fetch(`${SERVER_BASE}/chat/sessions/${args.sessionId}/response`, {
+  return requestChatRuntimeSse({
+    sessionId: args.sessionId,
+    route: 'response',
+    body: buildChatResponseRequestBody(args.body),
+    signal: args.signal,
+  })
+}
+
+export async function startQuickQuestion(args: {
+  sessionId: string
+  body: ChatQuickQuestionRequestBody
+  signal?: AbortSignal
+}): Promise<Response> {
+  return requestChatRuntimeSse({
+    sessionId: args.sessionId,
+    route: 'quick-question',
+    body: args.body,
+    signal: args.signal,
+  })
+}
+
+type ChatRuntimeSseRoute = 'response' | 'quick-question'
+type ChatRuntimeSseRequestBody = ChatResponseRequestPayload | ChatQuickQuestionRequestBody
+
+async function requestChatRuntimeSse(args: {
+  sessionId: string
+  route: ChatRuntimeSseRoute
+  body: ChatRuntimeSseRequestBody
+  signal?: AbortSignal
+}): Promise<Response> {
+  return fetch(`${SERVER_BASE}/chat/sessions/${args.sessionId}/${args.route}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(buildChatResponseRequestBody(args.body)),
+    body: JSON.stringify(args.body),
     signal: args.signal,
   })
 }

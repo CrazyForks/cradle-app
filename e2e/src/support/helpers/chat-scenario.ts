@@ -130,6 +130,16 @@ export async function configureDefaultAiReply(world: CradleWorld): Promise<void>
   await world.configureCodexChat({ texts: ['Hello from Codex E2E simulator!'] })
 }
 
+export async function configureCodexQuickQuestionSimulator(world: CradleWorld): Promise<void> {
+  console.warn('[step] configure Codex quick-question simulator')
+  await world.configureCodexChat({ texts: ['Codex 初始上下文已准备好'] })
+  world.enqueueOpenAi(openAiTextExchange({
+    label: 'codex-quick-question',
+    text: 'Codex btw 回复：上下文仍然可见',
+    bodyTextIncludes: '请确认当前上下文',
+  }))
+}
+
 export async function configureReadToolLoopSimulator(world: CradleWorld): Promise<void> {
   console.warn('[step] configure Claude Agent Read tool-loop simulator')
   await world.configureClaudeAgentChat({ mode: 'text' })

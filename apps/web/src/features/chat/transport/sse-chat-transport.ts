@@ -206,10 +206,49 @@ export function buildUIMessageChunkStreamFromResponse(
     }))
 }
 
+/**
+ * Parse a Chat Runtime UIMessageChunk stream without attaching normal chat-run
+ * activity or persistence semantics. Stateless interactions such as `/btw`
+ * share this wire parser while keeping their own lifecycle.
+ */
+export function buildRawUIMessageChunkStreamFromResponse(
+  response: Response,
+): ReadableStream<UIMessageChunk> {
+  if (!response.body) {
+    throw new Error('SSE stream has no body')
+  }
+
+  return parseUIMessageChunkEventStream(response.body).pipeThrough(
+    new TransformStream<ParsedUIMessageChunk, UIMessageChunk>({
+      transform(item, controller) {
+        controller.enqueue(item.chunk)
+      },
+    }),
+  )
+}
+
+interface ParsedUIMessageChunk {
+  chunk: UIMessageChunk
+  replay: boolean
+}
+
 function parseChatChunkEventStream(
   stream: ReadableStream<Uint8Array>,
   initialReplay: boolean,
 ): ReadableStream<ChatStreamChunk> {
+  return parseUIMessageChunkEventStream(stream, initialReplay).pipeThrough(
+    new TransformStream<ParsedUIMessageChunk, ChatStreamChunk>({
+      transform(item, controller) {
+        controller.enqueue(item.replay ? replayChatStreamChunk(item.chunk) : liveChatStreamChunk(item.chunk))
+      },
+    }),
+  )
+}
+
+function parseUIMessageChunkEventStream(
+  stream: ReadableStream<Uint8Array>,
+  initialReplay = false,
+): ReadableStream<ParsedUIMessageChunk> {
   const schema = uiMessageChunkSchema() as unknown as UIMessageChunkValidator
   if (!schema.validate) {
     throw new Error('AI SDK UIMessageChunk schema is unavailable')
@@ -220,7 +259,7 @@ function parseChatChunkEventStream(
   let buffer = ''
   let replay = initialReplay
 
-  return new ReadableStream<ChatStreamChunk>({
+  return new ReadableStream<ParsedUIMessageChunk>({
     async pull(controller) {
       while (true) {
         const frame = readCompleteSseFrame()
@@ -282,7 +321,7 @@ async function processSseFrame(
 ): Promise<
   | { kind: 'skip', replay: boolean }
   | { kind: 'done', replay: boolean }
-  | { kind: 'item', replay: boolean, item: ChatStreamChunk }
+  | { kind: 'item', replay: boolean, item: ParsedUIMessageChunk }
 > {
   const boundary = readSseReplayBoundary(frame)
   if (boundary) {
@@ -307,7 +346,7 @@ async function processSseFrame(
   return {
     kind: 'item',
     replay,
-    item: itemReplay ? replayChatStreamChunk(result.value) : liveChatStreamChunk(result.value),
+    item: { chunk: result.value, replay: itemReplay },
   }
 }
 

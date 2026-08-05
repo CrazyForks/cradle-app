@@ -130,6 +130,12 @@ export class ChatPage {
     await expect(await this.expectAssistantVisible(timeout)).toContainText(text, { timeout })
   }
 
+  async expectQuickQuestionContains(text: string | RegExp, timeout = CHAT_TIMEOUT): Promise<void> {
+    const slot = this.page.locator('[data-testid="quick-question-slot"]').filter({ visible: true }).first()
+    await expect(slot).toBeVisible({ timeout })
+    await expect(slot).toContainText(text, { timeout })
+  }
+
   async expectUserMessage(text: string | RegExp, timeout = CHAT_TIMEOUT): Promise<void> {
     await expect(this.page.locator('[data-testid="message-bubble-user"]').filter({ hasText: text }).last())
       .toBeVisible({ timeout })

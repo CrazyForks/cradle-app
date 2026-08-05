@@ -9,6 +9,7 @@ import {
   configureClaudeAgentProviderWithoutExchanges,
   configureClaudeApprovalSimulator,
   configureCodexMultiTurnSimulator,
+  configureCodexQuickQuestionSimulator,
   configureDefaultAiReply,
   configureFailingClaudeAgentSimulator,
   configureMultiTurnClaudeAgentSimulator,
@@ -77,6 +78,10 @@ Given('我已配置 Claude Agent Read 工具环 Simulator', async function (this
 
 Given('我已配置 Codex 多轮 Simulator', async function (this: CradleWorld) {
   await configureCodexMultiTurnSimulator(this)
+})
+
+Given('我已配置 Codex btw Simulator', async function (this: CradleWorld) {
+  await configureCodexQuickQuestionSimulator(this)
 })
 
 Given('我已导航到新建聊天并选中 Simulator', async function (this: CradleWorld) {
@@ -192,6 +197,10 @@ Then('侧栏会话顺序应为{string}在{string}之前', async function (this: 
 
 Then('最后一条 AI 消息应包含{string}', async function (this: CradleWorld, text: string) {
   await this.chat.expectAssistantContains(text, CHAT_STATUS_TIMEOUT)
+})
+
+Then('Composer 的 btw 结果应包含{string}', async function (this: CradleWorld, text: string) {
+  await this.chat.expectQuickQuestionContains(text, CHAT_STATUS_TIMEOUT)
 })
 
 Then('聊天中不应出现错误提示', async function (this: CradleWorld) {
