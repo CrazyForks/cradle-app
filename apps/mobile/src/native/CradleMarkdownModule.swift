@@ -1,8 +1,8 @@
-import ExpoModulesCore
+internal import ExpoModulesCore
 import MarkdownView
 
-public final class CradleMarkdownModule: Module {
-  public func definition() -> ModuleDefinition {
+final class CradleMarkdownModule: Module {
+  func definition() -> ModuleDefinition {
     Name("CradleMarkdown")
 
     View(CradleMarkdownView.self) {

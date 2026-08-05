@@ -29,7 +29,9 @@ function withMarkdownView(config) {
     if (!packageReferences[packageReferenceUuid]) {
       packageReferences[packageReferenceUuid] = {
         isa: 'XCRemoteSwiftPackageReference',
-        repositoryURL: PACKAGE_URL,
+        // The xcode package writer does not quote scalar values. Keep the URL
+        // quoted because Xcode treats `//` as the start of a comment.
+        repositoryURL: JSON.stringify(PACKAGE_URL),
         requirement: {
           kind: 'upToNextMajorVersion',
           minimumVersion: PACKAGE_VERSION,
@@ -50,10 +52,8 @@ function withMarkdownView(config) {
     if (!productDependencies[productUuid]) {
       productDependencies[productUuid] = {
         isa: 'XCSwiftPackageProductDependency',
-        package: {
-          value: packageReferenceUuid,
-          comment: packageReferenceComment,
-        },
+        package: packageReferenceUuid,
+        package_comment: packageReferenceComment,
         productName: PACKAGE_NAME,
       }
       productDependencies[`${productUuid}_comment`] = productComment
@@ -73,10 +73,8 @@ function withMarkdownView(config) {
     if (!buildFiles[buildFileUuid]) {
       buildFiles[buildFileUuid] = {
         isa: 'PBXBuildFile',
-        productRef: {
-          value: productUuid,
-          comment: productComment,
-        },
+        productRef: productUuid,
+        productRef_comment: productComment,
       }
       buildFiles[`${buildFileUuid}_comment`] = buildFileComment
     }
@@ -94,7 +92,13 @@ function appendReference(references, value, comment) {
 
 function findPackageReference(section) {
   return Object.keys(section).find(key => !key.endsWith('_comment')
-    && section[key].repositoryURL === PACKAGE_URL)
+    && unquote(section[key].repositoryURL) === PACKAGE_URL)
+}
+
+function unquote(value) {
+  return typeof value === 'string' && value.startsWith('"') && value.endsWith('"')
+    ? value.slice(1, -1)
+    : value
 }
 
 function findProductDependency(section, target) {
@@ -106,7 +110,11 @@ function findProductDependency(section, target) {
 
 function findProductBuildFile(section, productUuid) {
   return Object.keys(section).find(key => !key.endsWith('_comment')
-    && section[key].productRef?.value === productUuid)
+    && unquote(
+      typeof section[key].productRef === 'string'
+        ? section[key].productRef
+        : section[key].productRef?.value,
+    ) === productUuid)
 }
 
 module.exports = withMarkdownView

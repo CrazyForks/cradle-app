@@ -1,9 +1,9 @@
-import ExpoModulesCore
+internal import ExpoModulesCore
 import MarkdownView
 import UIKit
 
 final class CradleMarkdownView: ExpoView {
-  private let markdownView = MarkdownTextView(frame: .zero)
+  private let markdownView = MarkdownTextView()
   private var markdown = ""
   private var streaming = true
   private var lastReportedSize = CGSize.zero

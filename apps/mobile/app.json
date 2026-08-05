@@ -4,7 +4,7 @@
     "slug": "cradle-mobile",
     "scheme": "cradle",
     "version": "0.1.0",
-    "icon": "../../build/icon.png",
+    "icon": "../../resources/icon.png",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "ios": {
@@ -14,13 +14,24 @@
         "NSLocalNetworkUsageDescription": "Cradle connects to your Cradle Server on the local network.",
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
+        },
+        "UIApplicationSceneManifest": {
+          "UIApplicationSupportsMultipleScenes": false,
+          "UISceneConfigurations": {
+            "UIWindowSceneSessionRoleApplication": [
+              {
+                "UISceneConfigurationName": "Default Configuration",
+                "UISceneDelegateClassName": "$(PRODUCT_MODULE_NAME).CradleSceneDelegate"
+              }
+            ]
+          }
         }
       }
     },
     "android": {
       "package": "app.cradle.mobile",
       "adaptiveIcon": {
-        "foregroundImage": "../../build/icon.png",
+        "foregroundImage": "../../resources/icon.png",
         "backgroundColor": "#fafafa"
       }
     },
@@ -38,7 +49,8 @@
           }
         }
       ],
-      "./plugins/with-markdown-view"
+      "./plugins/with-markdown-view",
+      "./plugins/with-ios-scene-lifecycle"
     ],
     "experiments": {
       "inlineModules": {
