@@ -11,6 +11,7 @@ import type { ChatMessageStatus } from './run/stream-chunks'
 import { assertStoredSession } from './runtime-session-context'
 import {
   parseStoredMessageSnapshot as parseTrustedStoredMessageSnapshot,
+  projectChatMessageDisplay,
 } from './ui-message'
 
 const messageInsertOrder = sql<number>`messages.rowid`
@@ -36,6 +37,16 @@ export interface ChatMessageRow {
 export interface ChatMessageSnapshot {
   revision: number
   rows: ChatMessageRow[]
+  nextCursor: string | null
+}
+
+export type ChatMessagePreviewRow = Omit<ChatMessageRow, 'message'> & {
+  message: ChatMessageDetail['message']
+}
+
+export interface ChatMessagePreviewSnapshot {
+  revision: number
+  rows: ChatMessagePreviewRow[]
   nextCursor: string | null
 }
 
@@ -120,6 +131,8 @@ export async function getMessageGroups(
 async function getMessagePage(
   sessionId: string,
   input: ChatMessagePageInput,
+  projectMessage: (message: ChatMessageDetail['message']) => ChatMessageDetail['message']
+    = message => message,
 ): Promise<{
   rows: ChatMessageRow[]
   nextCursor: string | null
@@ -175,10 +188,10 @@ async function getMessagePage(
       parentToolCallId: row.parentToolCallId,
       taskId: row.taskId,
       depth: row.depth,
-      message: parseStoredMessageSnapshot(
+      message: projectMessage(parseStoredMessageSnapshot(
         { id: row.messageId, messageJson: row.messageJson },
         row.role as 'user' | 'assistant',
-      ),
+      )),
     })),
   }
 }
@@ -188,6 +201,18 @@ export async function getMessageSnapshot(
   input: ChatMessagePageInput = {},
 ): Promise<ChatMessageSnapshot> {
   const page = await getMessagePage(sessionId, input)
+  return {
+    revision: page.revision,
+    rows: page.rows,
+    nextCursor: page.nextCursor,
+  }
+}
+
+export async function getMessagePreviewSnapshot(
+  sessionId: string,
+  input: ChatMessagePageInput = {},
+): Promise<ChatMessagePreviewSnapshot> {
+  const page = await getMessagePage(sessionId, input, projectChatMessageDisplay)
   return {
     revision: page.revision,
     rows: page.rows,

@@ -22,6 +22,7 @@ import {
 import {
   getMessageDetail,
   getMessageGroups,
+  getMessagePreviewSnapshot,
   getMessageSnapshot,
 } from '../src/modules/chat-runtime/history-api'
 import {
@@ -409,7 +410,7 @@ describe('chat runtime recovery', () => {
   })
 
   it('hydrates the original UIMessage only through the message detail read', async () => {
-    await withTempDataDir(() => {
+    await withTempDataDir(async () => {
       const sessionId = 'session-message-detail'
       const messageId = 'message-detail'
       const createdAt = 1700000000
@@ -450,6 +451,23 @@ describe('chat runtime recovery', () => {
         createdAt,
         updatedAt: createdAt,
       }).run()
+
+      const preview = await getMessagePreviewSnapshot(sessionId)
+      expect(preview.rows).toHaveLength(1)
+      expect(preview.rows[0]?.message).toEqual({
+        id: messageId,
+        role: 'assistant',
+        parts: [
+          { type: 'text', text: 'Durable transcript text' },
+          {
+            type: 'tool-test',
+            toolCallId: 'tool-detail',
+            state: 'output-available',
+          },
+        ],
+      })
+      expect(JSON.stringify(preview)).not.toContain('README.md')
+      expect(JSON.stringify(preview)).not.toContain('"ok":true')
 
       expect(getMessageDetail(sessionId, messageId)).toEqual({ message })
     })

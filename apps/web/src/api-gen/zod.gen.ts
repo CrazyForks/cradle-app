@@ -3941,6 +3941,15 @@ export const zGetChatSessionsBySessionIdMessagesQuery = z.object({
     limit: z.number().gte(1).lte(200).optional()
 });
 
+export const zGetChatSessionsBySessionIdMessagePreviewsPath = z.object({
+    sessionId: z.string().min(1)
+});
+
+export const zGetChatSessionsBySessionIdMessagePreviewsQuery = z.object({
+    cursor: z.string().min(1).optional(),
+    limit: z.number().gte(1).lte(200).optional()
+});
+
 export const zGetChatSessionsBySessionIdMessagesByMessageIdPath = z.object({
     sessionId: z.string().min(1),
     messageId: z.string().min(1)

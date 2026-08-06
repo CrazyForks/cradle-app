@@ -11,19 +11,28 @@ import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-nativ
 import Markdown from 'react-native-markdown-display'
 
 import { NativeMarkdown } from '@/components/ui/native-markdown'
+import { PressableScale } from '@/components/ui/pressable-scale'
 import { radius, spacing } from '@/theme/tokens'
 import { useTheme } from '@/theme/use-theme'
 
 interface ChatMessageProps {
   errorText?: string | null
+  isToolDetailLoading?: boolean
   message: UIMessage
+  onToolPress?: () => void
+  showToolDetails?: boolean
   status?: 'streaming' | 'complete' | 'aborted' | 'failed'
+  toolDetailError?: string | null
 }
 
 function ChatMessageContent({
   errorText = null,
+  isToolDetailLoading = false,
   message,
+  onToolPress,
+  showToolDetails = false,
   status = 'complete',
+  toolDetailError = null,
 }: ChatMessageProps) {
   const theme = useTheme()
 
@@ -45,6 +54,8 @@ function ChatMessageContent({
         if (isTextUIPart(part)) {
           if (!part.text) { return null }
           return Platform.OS === 'ios'
+            // Text parts have no protocol id; their position is stable for the life of a message.
+            // eslint-disable-next-line react/no-array-index-key
             ? <NativeMarkdown key={`text-${index}`} markdown={part.text} streaming={status === 'streaming'} />
             : (
                 <Markdown
@@ -131,9 +142,17 @@ function ChatMessageContent({
             || part.state === 'input-available'
             || part.state === 'approval-requested'
           const failed = part.state === 'output-error' || part.state === 'output-denied'
+          const payload = showToolDetails
+            ? ('output' in part && part.output !== undefined ? part.output : 'input' in part ? part.input : undefined)
+            : undefined
+          const payloadText = payload === undefined ? null : JSON.stringify(payload, null, 2)
           return (
-            <View
+            <PressableScale
               key={part.toolCallId}
+              accessibilityLabel={`Open ${part.title ?? getToolName(part)} details`}
+              accessibilityRole="button"
+              disabled={!onToolPress}
+              onPress={onToolPress}
               style={[
                 styles.tool,
                 {
@@ -142,18 +161,33 @@ function ChatMessageContent({
                 },
               ]}
             >
-              <View style={styles.toolIcon}>
-                {running
-                  ? <ActivityIndicator color={theme.tertiaryForeground} size="small" />
-                  : failed
-                    ? <CircleAlert color={theme.destructive} size={15} />
-                    : <Check color={theme.success} size={15} />}
+              <View style={styles.toolHeader}>
+                <View style={styles.toolIcon}>
+                  {running
+                    ? <ActivityIndicator color={theme.tertiaryForeground} size="small" />
+                    : failed
+                      ? <CircleAlert color={theme.destructive} size={15} />
+                      : <Check color={theme.success} size={15} />}
+                </View>
+                <Wrench color={theme.tertiaryForeground} size={14} />
+                <Text numberOfLines={1} style={[styles.toolName, { color: theme.tertiaryForeground }]}>
+                  {part.title ?? getToolName(part)}
+                </Text>
               </View>
-              <Wrench color={theme.tertiaryForeground} size={14} />
-              <Text numberOfLines={1} style={[styles.toolName, { color: theme.tertiaryForeground }]}>
-                {part.title ?? getToolName(part)}
-              </Text>
-            </View>
+              {payloadText && (
+                <Text selectable style={[styles.toolPayload, { color: theme.mutedForeground }]}>
+                  {payloadText}
+                </Text>
+              )}
+              {showToolDetails && isToolDetailLoading && (
+                <ActivityIndicator color={theme.mutedForeground} size="small" />
+              )}
+              {showToolDetails && toolDetailError && (
+                <Text style={[styles.toolPayload, { color: theme.destructive }]}>
+                  {toolDetailError}
+                </Text>
+              )}
+            </PressableScale>
           )
         }
 
@@ -199,15 +233,18 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   tool: {
-    alignItems: 'center',
     alignSelf: 'flex-start',
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    gap: spacing.xs,
-    height: 32,
     maxWidth: '100%',
     paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  toolHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.xs,
+    minHeight: 22,
   },
   toolIcon: {
     alignItems: 'center',
@@ -219,6 +256,13 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     fontSize: 12,
     lineHeight: 16,
+  },
+  toolPayload: {
+    fontFamily: 'GeistMono_400Regular',
+    fontSize: 11,
+    lineHeight: 16,
+    maxWidth: 300,
+    paddingTop: spacing.xs,
   },
   userBubble: {
     alignSelf: 'flex-end',

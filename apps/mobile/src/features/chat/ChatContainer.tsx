@@ -1,12 +1,13 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { InfiniteData } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { UIMessage } from 'ai'
 import { Stack } from 'expo-router'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import type {
-  GetChatSessionsBySessionIdMessagesResponse,
-  GetChatSessionsBySessionIdQueueResponse,
-  GetChatSessionsBySessionIdRunSnapshotsResponse,
+  GetChatSessionsBySessionIdMessagePreviewsResponse,
+  GetChatSessionsBySessionIdMessagesByMessageIdResponse,
+  GetChatSessionsBySessionIdRuntimeStatusResponse,
   GetSessionsResponse,
 } from '@/api-gen'
 import { ErrorState, LoadingState } from '@/components/ui/states'
@@ -14,6 +15,10 @@ import { useConnection } from '@/features/connection/connection-context'
 import { cradleRequest, cradleStreamResponse } from '@/lib/api'
 import { errorMessage } from '@/lib/errors'
 
+import {
+  readChatHistoryCache,
+  writeChatHistoryCache,
+} from './chat-history-cache'
 import { consumeChatMessageStream } from './chat-stream'
 import { ChatView } from './ChatView'
 
@@ -26,40 +31,90 @@ export function ChatContainer({ sessionId }: { sessionId: string }) {
   const [liveMessage, setLiveMessage] = useState<UIMessage | null>(null)
   const [pendingUser, setPendingUser] = useState<{ id: string | null, text: string } | null>(null)
   const [sendError, setSendError] = useState<string | null>(null)
-  const query = useQuery({
+  const [detailMessageId, setDetailMessageId] = useState<string | null>(null)
+  const [cachedHistory, setCachedHistory] = useState<InfiniteData<GetChatSessionsBySessionIdMessagePreviewsResponse, string | null> | null>(null)
+  const historyQueryKey = useMemo(
+    () => ['chat-message-previews', connection?.url, sessionId] as const,
+    [connection?.url, sessionId],
+  )
+  const sessionQuery = useQuery({
     enabled: Boolean(connection),
-    queryKey: ['chat', connection?.url, sessionId],
-    queryFn: async () => {
-      const [session, messages, snapshots, queue] = await Promise.all([
-        cradleRequest<GetSessionsResponse[number]>(connection!, `/sessions/${encodeURIComponent(sessionId)}`),
-        cradleRequest<GetChatSessionsBySessionIdMessagesResponse>(
-          connection!,
-          `/chat/sessions/${encodeURIComponent(sessionId)}/messages?limit=200`,
-        ),
-        cradleRequest<GetChatSessionsBySessionIdRunSnapshotsResponse>(
-          connection!,
-          `/chat/sessions/${encodeURIComponent(sessionId)}/run-snapshots`,
-        ),
-        cradleRequest<GetChatSessionsBySessionIdQueueResponse>(
-          connection!,
-          `/chat/sessions/${encodeURIComponent(sessionId)}/queue`,
-        ),
-      ])
-      return {
-        session,
-        messages: messages.rows,
-        queue: queue.items,
-        snapshots: snapshots.snapshots,
-      }
-    },
-    refetchInterval: data => data.state.data?.session.status === 'streaming' ? 15_000 : false,
+    queryKey: ['chat-session', connection?.url, sessionId],
+    queryFn: () => cradleRequest<GetSessionsResponse[number]>(
+      connection!,
+      `/sessions/${encodeURIComponent(sessionId)}`,
+    ),
   })
-  const sessionStatus = query.data?.session.status
-  const streamingMessageId = query.data?.messages
+  const historyQuery = useInfiniteQuery({
+    enabled: Boolean(connection),
+    initialPageParam: null as string | null,
+    queryKey: historyQueryKey,
+    queryFn: ({ pageParam }) => {
+      const cursor = pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ''
+      return cradleRequest<GetChatSessionsBySessionIdMessagePreviewsResponse>(
+        connection!,
+        `/chat/sessions/${encodeURIComponent(sessionId)}/message-previews?limit=50${cursor}`,
+      )
+    },
+    getNextPageParam: lastPage => lastPage.nextCursor ?? undefined,
+  })
+  const runtimeStatusQuery = useQuery({
+    enabled: Boolean(connection),
+    queryKey: ['chat-runtime-status', connection?.url, sessionId],
+    queryFn: () => cradleRequest<GetChatSessionsBySessionIdRuntimeStatusResponse>(
+      connection!,
+      `/chat/sessions/${encodeURIComponent(sessionId)}/runtime-status`,
+    ),
+    refetchInterval: data => data.state.data?.status === 'idle' ? false : 5_000,
+  })
+  const detailQuery = useQuery({
+    enabled: Boolean(connection && detailMessageId),
+    queryKey: ['chat-message-detail', connection?.url, sessionId, detailMessageId],
+    queryFn: () => cradleRequest<GetChatSessionsBySessionIdMessagesByMessageIdResponse>(
+      connection!,
+      `/chat/sessions/${encodeURIComponent(sessionId)}/messages/${encodeURIComponent(detailMessageId!)}`,
+    ),
+  })
+  const refetchHistory = historyQuery.refetch
+  const refetchRuntimeStatus = runtimeStatusQuery.refetch
+
+  useEffect(() => {
+    if (!connection) {
+      setCachedHistory(null)
+      return
+    }
+    let active = true
+    void readChatHistoryCache(connection.url, sessionId).then((data) => {
+      if (!active || !data) {
+        return
+      }
+      setCachedHistory(data)
+      queryClient.setQueryData(historyQueryKey, data)
+    })
+    return () => {
+      active = false
+    }
+  }, [connection, historyQueryKey, queryClient, sessionId])
+
+  useEffect(() => {
+    const queryHistoryData = historyQuery.data as InfiniteData<GetChatSessionsBySessionIdMessagePreviewsResponse, string | null> | undefined
+    if (!connection || !queryHistoryData) {
+      return
+    }
+    setCachedHistory(queryHistoryData)
+    void writeChatHistoryCache(connection.url, sessionId, queryHistoryData)
+  }, [connection, historyQuery.data, sessionId])
+
+  const queryHistoryData = historyQuery.data as InfiniteData<GetChatSessionsBySessionIdMessagePreviewsResponse, string | null> | undefined
+  const historyData = queryHistoryData ?? cachedHistory
+  const messages = [...(historyData?.pages ?? [])]
+    .reverse()
+    .flatMap(page => page.rows)
+  const sessionStatus = runtimeStatusQuery.data?.status ?? sessionQuery.data?.status
+  const streamingMessageId = messages
     .findLast(row => row.role === 'assistant' && row.status === 'streaming')
     ?.messageId ?? null
   streamingMessageIdRef.current = streamingMessageId
-  const refetchChat = query.refetch
 
   useEffect(() => () => {
     activeStreamRef.current?.abort()
@@ -100,7 +155,8 @@ export function ChatContainer({ sessionId }: { sessionId: string }) {
         }
         activeStreamRef.current = null
         setIsLiveStreaming(false)
-        const result = await refetchChat()
+        const result = await refetchHistory()
+        void refetchRuntimeStatus()
         if (result.isSuccess) {
           setLiveMessage(null)
         }
@@ -113,7 +169,7 @@ export function ChatContainer({ sessionId }: { sessionId: string }) {
       }
       setIsLiveStreaming(false)
     }
-  }, [connection, refetchChat, sessionId, sessionStatus])
+  }, [connection, refetchHistory, refetchRuntimeStatus, sessionId, sessionStatus])
 
   const send = useMutation({
     mutationFn: async (text: string) => {
@@ -155,7 +211,10 @@ export function ChatContainer({ sessionId }: { sessionId: string }) {
     },
     onError: error => setSendError(errorMessage(error)),
     onSettled: async () => {
-      const result = await query.refetch()
+      const [result] = await Promise.all([
+        refetchHistory(),
+        refetchRuntimeStatus(),
+      ])
       if (result.isSuccess) {
         setLiveMessage(null)
         setPendingUser(null)
@@ -170,9 +229,10 @@ export function ChatContainer({ sessionId }: { sessionId: string }) {
       { method: 'POST', body: { text } },
     ),
     onError: error => setSendError(errorMessage(error)),
-    onSuccess: () => queryClient.invalidateQueries({
-      queryKey: ['chat', connection?.url, sessionId],
-    }),
+    onSuccess: () => {
+      void refetchRuntimeStatus()
+      void refetchHistory()
+    },
   })
 
   const cancel = useMutation({
@@ -181,30 +241,50 @@ export function ChatContainer({ sessionId }: { sessionId: string }) {
       `/chat/sessions/${encodeURIComponent(sessionId)}/cancel`,
       { method: 'POST' },
     ),
-    onSettled: () => void query.refetch(),
+    onSettled: () => {
+      void refetchRuntimeStatus()
+      void refetchHistory()
+    },
   })
 
-  if (query.isPending) { return <LoadingState /> }
-  if (query.error) { return <ErrorState title="Could not open conversation" description={errorMessage(query.error)} /> }
-  const activeRun = [...query.data.snapshots].reverse().find(snapshot => snapshot.status === 'running')
-  const isStreaming = isLiveStreaming || query.data.session.status === 'streaming'
-  const queuedCount = query.data.queue.filter(item => item.status === 'pending').length
+  if (sessionQuery.isPending || (!historyData && historyQuery.isPending)) { return <LoadingState /> }
+  const error = sessionQuery.error ?? historyQuery.error
+  if (error) { return <ErrorState title="Could not open conversation" description={errorMessage(error)} /> }
+  if (!sessionQuery.data) { return <ErrorState title="Conversation not found" /> }
+  const activeRun = runtimeStatusQuery.data?.activeRun ?? undefined
+  const hasEarlier = Boolean(historyQuery.hasNextPage ?? historyData?.pages.at(-1)?.nextCursor)
+  const isStreaming = isLiveStreaming
+    || sessionStatus === 'streaming'
+    || sessionStatus === 'waitingForUserInput'
+    || sessionStatus === 'waitingForToolApproval'
+  const queuedCount = runtimeStatusQuery.data?.queue.pending ?? 0
   return (
     <>
-      <Stack.Screen options={{ title: query.data.session.title ?? 'Conversation' }} />
+      <Stack.Screen options={{ title: sessionQuery.data.title ?? 'Conversation' }} />
       <ChatView
         activeRun={activeRun}
         isCancelling={cancel.isPending}
         isSending={send.isPending || queue.isPending}
         isStreaming={isStreaming}
         liveMessage={liveMessage}
-        messages={query.data.messages}
+        messages={messages}
         onCancel={() => cancel.mutate()}
         onSend={text => isStreaming ? queue.mutate(text) : send.mutate(text)}
         pendingUser={pendingUser}
         queuedCount={queuedCount}
         sendError={sendError}
-        session={query.data.session}
+        hasEarlier={hasEarlier}
+        isLoadingEarlier={historyQuery.isFetchingNextPage}
+        detailMessage={detailQuery.data?.message as UIMessage | undefined}
+        detailMessageId={detailMessageId}
+        isLoadingMessageDetail={detailQuery.isFetching}
+        messageDetailError={detailQuery.error ? errorMessage(detailQuery.error) : null}
+        onLoadEarlier={() => {
+          if (hasEarlier && !historyQuery.isFetchingNextPage) {
+            void historyQuery.fetchNextPage()
+          }
+        }}
+        onRequestMessageDetail={setDetailMessageId}
       />
     </>
   )

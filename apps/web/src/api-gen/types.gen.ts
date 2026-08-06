@@ -21924,6 +21924,52 @@ export type GetChatSessionsBySessionIdMessagesResponses = {
 
 export type GetChatSessionsBySessionIdMessagesResponse = GetChatSessionsBySessionIdMessagesResponses[keyof GetChatSessionsBySessionIdMessagesResponses];
 
+export type GetChatSessionsBySessionIdMessagePreviewsData = {
+    body?: never;
+    path: {
+        sessionId: string;
+    };
+    query?: {
+        cursor?: string;
+        limit?: number;
+    };
+    url: '/chat/sessions/{sessionId}/message-previews';
+};
+
+export type GetChatSessionsBySessionIdMessagePreviewsResponses = {
+    /**
+     * Response for status 200
+     */
+    200: {
+        revision: number;
+        rows: Array<{
+            messageId: string;
+            role: 'user' | 'assistant';
+            status: 'streaming' | 'complete' | 'aborted' | 'failed';
+            errorText?: string;
+            preview: string;
+            previewTruncated: boolean;
+            parentMessageId: string | null;
+            parentToolCallId: string | null;
+            taskId: string | null;
+            depth: number;
+            message: {
+                id: string;
+                role: 'system' | 'user' | 'assistant';
+                parts: Array<{
+                    type: string;
+                    [key: string]: unknown;
+                }>;
+                metadata?: unknown;
+                [key: string]: unknown;
+            };
+        }>;
+        nextCursor: string | null;
+    };
+};
+
+export type GetChatSessionsBySessionIdMessagePreviewsResponse = GetChatSessionsBySessionIdMessagePreviewsResponses[keyof GetChatSessionsBySessionIdMessagePreviewsResponses];
+
 export type GetChatSessionsBySessionIdMessagesByMessageIdData = {
     body?: never;
     path: {

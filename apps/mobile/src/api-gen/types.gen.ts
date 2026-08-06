@@ -474,6 +474,7 @@ export type GetWorkspacesResponses = {
         };
         identifier: string;
         availability: 'available' | 'missing' | 'remote';
+        multiFolder: boolean;
         pinned: number;
         createdAt: number;
         updatedAt: number;
@@ -544,6 +545,7 @@ export type PostWorkspacesResponses = {
         };
         identifier: string;
         availability: 'available' | 'missing' | 'remote';
+        multiFolder: boolean;
         pinned: number;
         createdAt: number;
         updatedAt: number;
@@ -602,6 +604,7 @@ export type PostWorkspacesFromDirectoryResponses = {
         };
         identifier: string;
         availability: 'available' | 'missing' | 'remote';
+        multiFolder: boolean;
         pinned: number;
         createdAt: number;
         updatedAt: number;
@@ -697,6 +700,7 @@ export type PostWorkspacesMultiFolderResponses = {
         };
         identifier: string;
         availability: 'available' | 'missing' | 'remote';
+        multiFolder: boolean;
         pinned: number;
         createdAt: number;
         updatedAt: number;
@@ -755,6 +759,7 @@ export type PostWorkspacesMultiFolderFromConfigResponses = {
         };
         identifier: string;
         availability: 'available' | 'missing' | 'remote';
+        multiFolder: boolean;
         pinned: number;
         createdAt: number;
         updatedAt: number;
@@ -794,6 +799,7 @@ export type GetWorkspacesResolveResponses = {
         };
         identifier: string;
         availability: 'available' | 'missing' | 'remote';
+        multiFolder: boolean;
         pinned: number;
         createdAt: number;
         updatedAt: number;
@@ -1152,6 +1158,7 @@ export type GetWorkspacesByWorkspaceIdResponses = {
         };
         identifier: string;
         availability: 'available' | 'missing' | 'remote';
+        multiFolder: boolean;
         pinned: number;
         createdAt: number;
         updatedAt: number;
@@ -1193,6 +1200,7 @@ export type PatchWorkspacesByWorkspaceIdResponses = {
         };
         identifier: string;
         availability: 'available' | 'missing' | 'remote';
+        multiFolder: boolean;
         pinned: number;
         createdAt: number;
         updatedAt: number;
@@ -1233,6 +1241,7 @@ export type PatchWorkspacesByWorkspaceIdLocationResponses = {
         };
         identifier: string;
         availability: 'available' | 'missing' | 'remote';
+        multiFolder: boolean;
         pinned: number;
         createdAt: number;
         updatedAt: number;
@@ -1590,14 +1599,28 @@ export type GetUsageCostSummaryResponses = {
     200: {
         totalCostUsd: number;
         totalPromptTokens: number;
+        totalUncachedInputTokens: number;
+        totalCachedInputTokens: number;
+        totalCacheWriteInputTokens: number;
         totalCompletionTokens: number;
         totalTokens: number;
+        uncachedInputCostUsd: number;
+        cacheReadCostUsd: number;
+        cacheWriteCostUsd: number;
+        outputCostUsd: number;
         byModel: Array<{
             modelId: string;
             costUsd: number;
             promptTokens: number;
+            uncachedInputTokens: number;
+            cachedInputTokens: number;
+            cacheWriteInputTokens: number;
             completionTokens: number;
             totalTokens: number;
+            uncachedInputCostUsd: number;
+            cacheReadCostUsd: number;
+            cacheWriteCostUsd: number;
+            outputCostUsd: number;
             count: number;
         }>;
         byAgent: Array<{
@@ -1605,8 +1628,15 @@ export type GetUsageCostSummaryResponses = {
             agentName: string;
             costUsd: number;
             promptTokens: number;
+            uncachedInputTokens: number;
+            cachedInputTokens: number;
+            cacheWriteInputTokens: number;
             completionTokens: number;
             totalTokens: number;
+            uncachedInputCostUsd: number;
+            cacheReadCostUsd: number;
+            cacheWriteCostUsd: number;
+            outputCostUsd: number;
             count: number;
         }>;
         byProviderTarget: Array<{
@@ -1614,8 +1644,15 @@ export type GetUsageCostSummaryResponses = {
             providerTargetName: string | null;
             costUsd: number;
             promptTokens: number;
+            uncachedInputTokens: number;
+            cachedInputTokens: number;
+            cacheWriteInputTokens: number;
             completionTokens: number;
             totalTokens: number;
+            uncachedInputCostUsd: number;
+            cacheReadCostUsd: number;
+            cacheWriteCostUsd: number;
+            outputCostUsd: number;
             count: number;
         }>;
     };
@@ -1668,13 +1705,88 @@ export type GetUsageCostDailyResponses = {
         modelId: string;
         costUsd: number;
         promptTokens: number;
+        uncachedInputTokens: number;
+        cachedInputTokens: number;
+        cacheWriteInputTokens: number;
         completionTokens: number;
         totalTokens: number;
+        uncachedInputCostUsd: number;
+        cacheReadCostUsd: number;
+        cacheWriteCostUsd: number;
+        outputCostUsd: number;
         stepCount: number;
     }>;
 };
 
 export type GetUsageCostDailyResponse = GetUsageCostDailyResponses[keyof GetUsageCostDailyResponses];
+
+export type GetUsagePerformanceData = {
+    body?: never;
+    path?: never;
+    query?: {
+        from?: string;
+        to?: string;
+    };
+    url: '/usage/performance';
+};
+
+export type GetUsagePerformanceResponses = {
+    /**
+     * Response for status 200
+     */
+    200: {
+        coverageStartedAt: number | null;
+        coverageEndedAt: number | null;
+        summary: {
+            sampleCount: number;
+            firstTokenSampleCount: number;
+            p50FirstTokenMs: number | null;
+            p95FirstTokenMs: number | null;
+            p50TotalDurationMs: number | null;
+            p95TotalDurationMs: number | null;
+        };
+        byRuntime: Array<{
+            runtimeKind: string;
+            sampleCount: number;
+            firstTokenSampleCount: number;
+            p50FirstTokenMs: number | null;
+            p95FirstTokenMs: number | null;
+            p50TotalDurationMs: number | null;
+            p95TotalDurationMs: number | null;
+        }>;
+        byProviderTarget: Array<{
+            providerTargetId: string | null;
+            providerTargetName: string | null;
+            sampleCount: number;
+            firstTokenSampleCount: number;
+            p50FirstTokenMs: number | null;
+            p95FirstTokenMs: number | null;
+            p50TotalDurationMs: number | null;
+            p95TotalDurationMs: number | null;
+        }>;
+        byModel: Array<{
+            modelId: string;
+            sampleCount: number;
+            firstTokenSampleCount: number;
+            p50FirstTokenMs: number | null;
+            p95FirstTokenMs: number | null;
+            p50TotalDurationMs: number | null;
+            p95TotalDurationMs: number | null;
+        }>;
+        daily: Array<{
+            date: string;
+            runtimeKind: string;
+            sampleCount: number;
+            firstTokenSampleCount: number;
+            p50FirstTokenMs: number | null;
+            p95FirstTokenMs: number | null;
+            p50TotalDurationMs: number | null;
+            p95TotalDurationMs: number | null;
+        }>;
+    };
+};
+
+export type GetUsagePerformanceResponse = GetUsagePerformanceResponses[keyof GetUsagePerformanceResponses];
 
 export type GetUsageToolsData = {
     body?: never;
@@ -1801,6 +1913,7 @@ export type GetProfilesResponses = {
         credentialRef: string | null;
         customModels: string;
         iconSlug: string | null;
+        providerId: string | null;
         createdAt: number;
         updatedAt: number;
     }>;
@@ -1850,6 +1963,7 @@ export type GetProfilesByIdResponses = {
         credentialRef: string | null;
         customModels: string;
         iconSlug: string | null;
+        providerId: string | null;
         createdAt: number;
         updatedAt: number;
     };
@@ -1867,6 +1981,7 @@ export type PutProfilesByIdData = {
         };
         credentialRef?: string | null;
         iconSlug?: string | null;
+        providerId?: string | null;
     };
     path: {
         id: string;
@@ -1888,12 +2003,46 @@ export type PutProfilesByIdResponses = {
         credentialRef: string | null;
         customModels: string;
         iconSlug: string | null;
+        providerId: string | null;
         createdAt: number;
         updatedAt: number;
     };
 };
 
 export type PutProfilesByIdResponse = PutProfilesByIdResponses[keyof PutProfilesByIdResponses];
+
+export type PostProfilesByIdBindProviderData = {
+    body: {
+        providerId: string;
+        applyEndpointDefaults?: boolean;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/profiles/{id}/bind-provider';
+};
+
+export type PostProfilesByIdBindProviderResponses = {
+    /**
+     * Response for status 200
+     */
+    200: {
+        id: string;
+        name: string;
+        providerKind: 'openai-compatible' | 'anthropic' | 'universal';
+        enabled: boolean;
+        configJson: string;
+        credentialRef: string | null;
+        customModels: string;
+        iconSlug: string | null;
+        providerId: string | null;
+        createdAt: number;
+        updatedAt: number;
+    };
+};
+
+export type PostProfilesByIdBindProviderResponse = PostProfilesByIdBindProviderResponses[keyof PostProfilesByIdBindProviderResponses];
 
 export type PatchProfilesByIdIconData = {
     body: {
@@ -1919,6 +2068,7 @@ export type PatchProfilesByIdIconResponses = {
         credentialRef: string | null;
         customModels: string;
         iconSlug: string | null;
+        providerId: string | null;
         createdAt: number;
         updatedAt: number;
     };
@@ -2527,6 +2677,72 @@ export type PatchProviderTargetsByProviderTargetIdCustomModelsResponses = {
 };
 
 export type PatchProviderTargetsByProviderTargetIdCustomModelsResponse = PatchProviderTargetsByProviderTargetIdCustomModelsResponses[keyof PatchProviderTargetsByProviderTargetIdCustomModelsResponses];
+
+export type GetProviderTargetsByProviderTargetIdTestData = {
+    body?: never;
+    path: {
+        providerTargetId: string;
+    };
+    query?: never;
+    url: '/provider-targets/{providerTargetId}/test';
+};
+
+export type GetProviderTargetsByProviderTargetIdTestErrors = {
+    /**
+     * Response for status 404
+     */
+    404: {
+        error: 'no_cached_result';
+    };
+};
+
+export type GetProviderTargetsByProviderTargetIdTestError = GetProviderTargetsByProviderTargetIdTestErrors[keyof GetProviderTargetsByProviderTargetIdTestErrors];
+
+export type GetProviderTargetsByProviderTargetIdTestResponses = {
+    /**
+     * Response for status 200
+     */
+    200: {
+        status: 'ok' | 'auth_failed' | 'network_error' | 'endpoint_error' | 'model_unavailable';
+        latencyMs: number;
+        checkedAt: string;
+        modelsCount?: number;
+        detail?: string;
+        deep?: boolean;
+        model?: string;
+    };
+};
+
+export type GetProviderTargetsByProviderTargetIdTestResponse = GetProviderTargetsByProviderTargetIdTestResponses[keyof GetProviderTargetsByProviderTargetIdTestResponses];
+
+export type PostProviderTargetsByProviderTargetIdTestData = {
+    body: {
+        deep?: boolean;
+        model?: string;
+    };
+    path: {
+        providerTargetId: string;
+    };
+    query?: never;
+    url: '/provider-targets/{providerTargetId}/test';
+};
+
+export type PostProviderTargetsByProviderTargetIdTestResponses = {
+    /**
+     * Response for status 200
+     */
+    200: {
+        status: 'ok' | 'auth_failed' | 'network_error' | 'endpoint_error' | 'model_unavailable';
+        latencyMs: number;
+        checkedAt: string;
+        modelsCount?: number;
+        detail?: string;
+        deep?: boolean;
+        model?: string;
+    };
+};
+
+export type PostProviderTargetsByProviderTargetIdTestResponse = PostProviderTargetsByProviderTargetIdTestResponses[keyof PostProviderTargetsByProviderTargetIdTestResponses];
 
 export type GetRelayServersData = {
     body?: never;
@@ -3821,6 +4037,29 @@ export type PostExternalProviderSourcesRefreshResponses = {
 
 export type PostExternalProviderSourcesRefreshResponse = PostExternalProviderSourcesRefreshResponses[keyof PostExternalProviderSourcesRefreshResponses];
 
+export type PostExternalProviderSourcesLocalScanData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/external-provider-sources/local-scan';
+};
+
+export type PostExternalProviderSourcesLocalScanResponses = {
+    /**
+     * Response for status 200
+     */
+    200: {
+        sourceKey: string;
+        status: 'never' | 'ok' | 'warning' | 'error';
+        recordsSeen: number;
+        recordsProjected: number;
+        recordsMissing: number;
+        message?: string;
+    };
+};
+
+export type PostExternalProviderSourcesLocalScanResponse = PostExternalProviderSourcesLocalScanResponses[keyof PostExternalProviderSourcesLocalScanResponses];
+
 export type PostExternalProviderSourcesBySourceKeyRefreshData = {
     body?: never;
     path: {
@@ -4387,6 +4626,48 @@ export type PutModelRegistryMappingsByModelIdResponses = {
 
 export type PutModelRegistryMappingsByModelIdResponse = PutModelRegistryMappingsByModelIdResponses[keyof PutModelRegistryMappingsByModelIdResponses];
 
+export type GetMcpServersRegistryServersData = {
+    body?: never;
+    path?: never;
+    query?: {
+        search?: string;
+        cursor?: string;
+    };
+    url: '/mcp-servers/registry/servers';
+};
+
+export type GetMcpServersRegistryServersResponses = {
+    /**
+     * Response for status 200
+     */
+    200: {
+        servers: Array<{
+            name: string;
+            title: string | null;
+            description: string | null;
+            version: string | null;
+            publishedAt: string | null;
+            packageRegistry: 'npm' | 'pypi' | 'oci' | null;
+            env: Array<{
+                name: string;
+                description: string | null;
+                required: boolean;
+            }>;
+            installHint: {
+                transport: 'stdio';
+                command: string;
+                args: Array<string>;
+            } | {
+                transport: 'streamable-http';
+                url: string;
+            } | null;
+        }>;
+        nextCursor: string | null;
+    };
+};
+
+export type GetMcpServersRegistryServersResponse = GetMcpServersRegistryServersResponses[keyof GetMcpServersRegistryServersResponses];
+
 export type GetMcpServersData = {
     body?: never;
     path?: never;
@@ -4809,6 +5090,53 @@ export type PostProvidersModelSearchResponses = {
 };
 
 export type PostProvidersModelSearchResponse = PostProvidersModelSearchResponses[keyof PostProvidersModelSearchResponses];
+
+export type GetProviderPresetsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/provider-presets';
+};
+
+export type GetProviderPresetsResponses = {
+    /**
+     * Response for status 200
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        providerKind: 'openai-compatible' | 'anthropic' | 'universal';
+        baseUrl: string;
+        iconSlug?: string;
+        docsUrl?: string;
+        local: boolean;
+        requiresApiKey: boolean;
+        source: 'models.dev' | 'overlay' | 'builtin';
+        providerId: string;
+        tier: 'first-class' | 'generic';
+        featured?: boolean;
+        authMethods: Array<{
+            id: string;
+            label: string;
+        }>;
+        endpointProfiles: Array<{
+            id: string;
+            label: string;
+            wireKind: 'openai-compatible' | 'anthropic' | 'universal';
+            defaultBaseUrl?: string;
+            optional?: boolean;
+        }>;
+        models: Array<{
+            id: string;
+            name?: string;
+            reasoning?: boolean;
+            toolCall?: boolean;
+            vision?: boolean;
+        }>;
+    }>;
+};
+
+export type GetProviderPresetsResponse = GetProviderPresetsResponses[keyof GetProviderPresetsResponses];
 
 export type GetAgentsData = {
     body?: never;
@@ -6578,6 +6906,31 @@ export type GetAssetsByIdContentData = {
     url: '/assets/{id}/content';
 };
 
+export type GetBlobsByIdData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/blobs/{id}';
+};
+
+export type GetBlobsByIdResponses = {
+    /**
+     * Response for status 200
+     */
+    200: {
+        id: string;
+        sha256: string;
+        mediaType: string;
+        byteSize: number;
+        storagePath: string;
+        createdAt: number;
+    };
+};
+
+export type GetBlobsByIdResponse = GetBlobsByIdResponses[keyof GetBlobsByIdResponses];
+
 export type GetBackgroundActivitiesData = {
     body?: never;
     path?: never;
@@ -8158,7 +8511,7 @@ export type PostWorksData = {
         goal?: string;
         objective?: string;
         linkedIssueId?: string;
-        baseStrategy?: 'source-head' | 'remote-default';
+        baseBranch?: string;
         providerTargetId?: string;
         modelId?: string | null;
         thinkingEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
@@ -14259,41 +14612,6 @@ export type GetWorkspacesByWorkspaceIdDiffReviewsResponses = {
             createdAt: number;
             updatedAt: number;
         };
-        guide: {
-            revisionId: string | null;
-            status: 'pending' | 'running' | 'ready' | 'failed' | 'cancelled' | null;
-            providerTargetId: string | null;
-            runtimeKind: string | null;
-            modelId: string | null;
-            sessionId: string | null;
-            runId: string | null;
-            errorMessage: string | null;
-            createdAt: number | null;
-            updatedAt: number | null;
-            title: string | null;
-            steps: Array<{
-                id: string;
-                title: string;
-                rationale: string;
-                fileIds: Array<string>;
-                threadIds: Array<string>;
-                anchors: Array<{
-                    revisionId: string;
-                    fileId: string;
-                    path: string;
-                    side: 'base' | 'head';
-                    startLine: number;
-                    endLine: number;
-                    startColumn?: number;
-                    endColumn?: number;
-                    hunkHeader: string;
-                    lineHash: string;
-                    contextBeforeHash?: string;
-                    contextAfterHash?: string;
-                }>;
-                order: number;
-            }>;
-        };
         agentFixes: Array<{
             id: string;
             reviewId: string;
@@ -14315,38 +14633,13 @@ export type GetWorkspacesByWorkspaceIdDiffReviewsResponses = {
             } | null;
             instruction: string;
             profileId: string | null;
-            expectedOutput: 'commit' | 'working-tree-change' | 'patch-artifact';
+            expectedOutput: 'working-tree-change' | 'patch-artifact';
             status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
             sessionId: string | null;
             runId: string | null;
             artifactId: string | null;
             resultRevisionId: string | null;
             errorMessage: string | null;
-            createdAt: number;
-            updatedAt: number;
-        }>;
-        commitPlans: Array<{
-            id: string;
-            reviewId: string;
-            revisionId: string;
-            actorId: string;
-            strategy: 'manual';
-            status: 'draft' | 'accepted' | 'applied' | 'abandoned';
-            groups: Array<{
-                id: string;
-                title: string;
-                message: string;
-                rationale: string;
-                fileIds: Array<string>;
-                paths: Array<string>;
-                dependsOn: Array<string>;
-            }>;
-            conflicts: Array<{
-                fileId: string;
-                path: string;
-                groupIds: Array<string>;
-            }>;
-            rationale: string;
             createdAt: number;
             updatedAt: number;
         }>;
@@ -14561,41 +14854,6 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsLocalWorkingTreeResponses = {
             createdAt: number;
             updatedAt: number;
         };
-        guide: {
-            revisionId: string | null;
-            status: 'pending' | 'running' | 'ready' | 'failed' | 'cancelled' | null;
-            providerTargetId: string | null;
-            runtimeKind: string | null;
-            modelId: string | null;
-            sessionId: string | null;
-            runId: string | null;
-            errorMessage: string | null;
-            createdAt: number | null;
-            updatedAt: number | null;
-            title: string | null;
-            steps: Array<{
-                id: string;
-                title: string;
-                rationale: string;
-                fileIds: Array<string>;
-                threadIds: Array<string>;
-                anchors: Array<{
-                    revisionId: string;
-                    fileId: string;
-                    path: string;
-                    side: 'base' | 'head';
-                    startLine: number;
-                    endLine: number;
-                    startColumn?: number;
-                    endColumn?: number;
-                    hunkHeader: string;
-                    lineHash: string;
-                    contextBeforeHash?: string;
-                    contextAfterHash?: string;
-                }>;
-                order: number;
-            }>;
-        };
         agentFixes: Array<{
             id: string;
             reviewId: string;
@@ -14617,38 +14875,13 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsLocalWorkingTreeResponses = {
             } | null;
             instruction: string;
             profileId: string | null;
-            expectedOutput: 'commit' | 'working-tree-change' | 'patch-artifact';
+            expectedOutput: 'working-tree-change' | 'patch-artifact';
             status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
             sessionId: string | null;
             runId: string | null;
             artifactId: string | null;
             resultRevisionId: string | null;
             errorMessage: string | null;
-            createdAt: number;
-            updatedAt: number;
-        }>;
-        commitPlans: Array<{
-            id: string;
-            reviewId: string;
-            revisionId: string;
-            actorId: string;
-            strategy: 'manual';
-            status: 'draft' | 'accepted' | 'applied' | 'abandoned';
-            groups: Array<{
-                id: string;
-                title: string;
-                message: string;
-                rationale: string;
-                fileIds: Array<string>;
-                paths: Array<string>;
-                dependsOn: Array<string>;
-            }>;
-            conflicts: Array<{
-                fileId: string;
-                path: string;
-                groupIds: Array<string>;
-            }>;
-            rationale: string;
             createdAt: number;
             updatedAt: number;
         }>;
@@ -14838,41 +15071,6 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsLocalBranchCompareResponses = 
             createdAt: number;
             updatedAt: number;
         };
-        guide: {
-            revisionId: string | null;
-            status: 'pending' | 'running' | 'ready' | 'failed' | 'cancelled' | null;
-            providerTargetId: string | null;
-            runtimeKind: string | null;
-            modelId: string | null;
-            sessionId: string | null;
-            runId: string | null;
-            errorMessage: string | null;
-            createdAt: number | null;
-            updatedAt: number | null;
-            title: string | null;
-            steps: Array<{
-                id: string;
-                title: string;
-                rationale: string;
-                fileIds: Array<string>;
-                threadIds: Array<string>;
-                anchors: Array<{
-                    revisionId: string;
-                    fileId: string;
-                    path: string;
-                    side: 'base' | 'head';
-                    startLine: number;
-                    endLine: number;
-                    startColumn?: number;
-                    endColumn?: number;
-                    hunkHeader: string;
-                    lineHash: string;
-                    contextBeforeHash?: string;
-                    contextAfterHash?: string;
-                }>;
-                order: number;
-            }>;
-        };
         agentFixes: Array<{
             id: string;
             reviewId: string;
@@ -14894,38 +15092,13 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsLocalBranchCompareResponses = 
             } | null;
             instruction: string;
             profileId: string | null;
-            expectedOutput: 'commit' | 'working-tree-change' | 'patch-artifact';
+            expectedOutput: 'working-tree-change' | 'patch-artifact';
             status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
             sessionId: string | null;
             runId: string | null;
             artifactId: string | null;
             resultRevisionId: string | null;
             errorMessage: string | null;
-            createdAt: number;
-            updatedAt: number;
-        }>;
-        commitPlans: Array<{
-            id: string;
-            reviewId: string;
-            revisionId: string;
-            actorId: string;
-            strategy: 'manual';
-            status: 'draft' | 'accepted' | 'applied' | 'abandoned';
-            groups: Array<{
-                id: string;
-                title: string;
-                message: string;
-                rationale: string;
-                fileIds: Array<string>;
-                paths: Array<string>;
-                dependsOn: Array<string>;
-            }>;
-            conflicts: Array<{
-                fileId: string;
-                path: string;
-                groupIds: Array<string>;
-            }>;
-            rationale: string;
             createdAt: number;
             updatedAt: number;
         }>;
@@ -15114,41 +15287,6 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsLocalCommitResponses = {
             createdAt: number;
             updatedAt: number;
         };
-        guide: {
-            revisionId: string | null;
-            status: 'pending' | 'running' | 'ready' | 'failed' | 'cancelled' | null;
-            providerTargetId: string | null;
-            runtimeKind: string | null;
-            modelId: string | null;
-            sessionId: string | null;
-            runId: string | null;
-            errorMessage: string | null;
-            createdAt: number | null;
-            updatedAt: number | null;
-            title: string | null;
-            steps: Array<{
-                id: string;
-                title: string;
-                rationale: string;
-                fileIds: Array<string>;
-                threadIds: Array<string>;
-                anchors: Array<{
-                    revisionId: string;
-                    fileId: string;
-                    path: string;
-                    side: 'base' | 'head';
-                    startLine: number;
-                    endLine: number;
-                    startColumn?: number;
-                    endColumn?: number;
-                    hunkHeader: string;
-                    lineHash: string;
-                    contextBeforeHash?: string;
-                    contextAfterHash?: string;
-                }>;
-                order: number;
-            }>;
-        };
         agentFixes: Array<{
             id: string;
             reviewId: string;
@@ -15170,38 +15308,13 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsLocalCommitResponses = {
             } | null;
             instruction: string;
             profileId: string | null;
-            expectedOutput: 'commit' | 'working-tree-change' | 'patch-artifact';
+            expectedOutput: 'working-tree-change' | 'patch-artifact';
             status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
             sessionId: string | null;
             runId: string | null;
             artifactId: string | null;
             resultRevisionId: string | null;
             errorMessage: string | null;
-            createdAt: number;
-            updatedAt: number;
-        }>;
-        commitPlans: Array<{
-            id: string;
-            reviewId: string;
-            revisionId: string;
-            actorId: string;
-            strategy: 'manual';
-            status: 'draft' | 'accepted' | 'applied' | 'abandoned';
-            groups: Array<{
-                id: string;
-                title: string;
-                message: string;
-                rationale: string;
-                fileIds: Array<string>;
-                paths: Array<string>;
-                dependsOn: Array<string>;
-            }>;
-            conflicts: Array<{
-                fileId: string;
-                path: string;
-                groupIds: Array<string>;
-            }>;
-            rationale: string;
             createdAt: number;
             updatedAt: number;
         }>;
@@ -15391,41 +15504,6 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsGithubPullRequestResponses = {
             createdAt: number;
             updatedAt: number;
         };
-        guide: {
-            revisionId: string | null;
-            status: 'pending' | 'running' | 'ready' | 'failed' | 'cancelled' | null;
-            providerTargetId: string | null;
-            runtimeKind: string | null;
-            modelId: string | null;
-            sessionId: string | null;
-            runId: string | null;
-            errorMessage: string | null;
-            createdAt: number | null;
-            updatedAt: number | null;
-            title: string | null;
-            steps: Array<{
-                id: string;
-                title: string;
-                rationale: string;
-                fileIds: Array<string>;
-                threadIds: Array<string>;
-                anchors: Array<{
-                    revisionId: string;
-                    fileId: string;
-                    path: string;
-                    side: 'base' | 'head';
-                    startLine: number;
-                    endLine: number;
-                    startColumn?: number;
-                    endColumn?: number;
-                    hunkHeader: string;
-                    lineHash: string;
-                    contextBeforeHash?: string;
-                    contextAfterHash?: string;
-                }>;
-                order: number;
-            }>;
-        };
         agentFixes: Array<{
             id: string;
             reviewId: string;
@@ -15447,38 +15525,13 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsGithubPullRequestResponses = {
             } | null;
             instruction: string;
             profileId: string | null;
-            expectedOutput: 'commit' | 'working-tree-change' | 'patch-artifact';
+            expectedOutput: 'working-tree-change' | 'patch-artifact';
             status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
             sessionId: string | null;
             runId: string | null;
             artifactId: string | null;
             resultRevisionId: string | null;
             errorMessage: string | null;
-            createdAt: number;
-            updatedAt: number;
-        }>;
-        commitPlans: Array<{
-            id: string;
-            reviewId: string;
-            revisionId: string;
-            actorId: string;
-            strategy: 'manual';
-            status: 'draft' | 'accepted' | 'applied' | 'abandoned';
-            groups: Array<{
-                id: string;
-                title: string;
-                message: string;
-                rationale: string;
-                fileIds: Array<string>;
-                paths: Array<string>;
-                dependsOn: Array<string>;
-            }>;
-            conflicts: Array<{
-                fileId: string;
-                path: string;
-                groupIds: Array<string>;
-            }>;
-            rationale: string;
             createdAt: number;
             updatedAt: number;
         }>;
@@ -15665,41 +15718,6 @@ export type GetWorkspacesByWorkspaceIdDiffReviewsByReviewIdResponses = {
             createdAt: number;
             updatedAt: number;
         };
-        guide: {
-            revisionId: string | null;
-            status: 'pending' | 'running' | 'ready' | 'failed' | 'cancelled' | null;
-            providerTargetId: string | null;
-            runtimeKind: string | null;
-            modelId: string | null;
-            sessionId: string | null;
-            runId: string | null;
-            errorMessage: string | null;
-            createdAt: number | null;
-            updatedAt: number | null;
-            title: string | null;
-            steps: Array<{
-                id: string;
-                title: string;
-                rationale: string;
-                fileIds: Array<string>;
-                threadIds: Array<string>;
-                anchors: Array<{
-                    revisionId: string;
-                    fileId: string;
-                    path: string;
-                    side: 'base' | 'head';
-                    startLine: number;
-                    endLine: number;
-                    startColumn?: number;
-                    endColumn?: number;
-                    hunkHeader: string;
-                    lineHash: string;
-                    contextBeforeHash?: string;
-                    contextAfterHash?: string;
-                }>;
-                order: number;
-            }>;
-        };
         agentFixes: Array<{
             id: string;
             reviewId: string;
@@ -15721,38 +15739,13 @@ export type GetWorkspacesByWorkspaceIdDiffReviewsByReviewIdResponses = {
             } | null;
             instruction: string;
             profileId: string | null;
-            expectedOutput: 'commit' | 'working-tree-change' | 'patch-artifact';
+            expectedOutput: 'working-tree-change' | 'patch-artifact';
             status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
             sessionId: string | null;
             runId: string | null;
             artifactId: string | null;
             resultRevisionId: string | null;
             errorMessage: string | null;
-            createdAt: number;
-            updatedAt: number;
-        }>;
-        commitPlans: Array<{
-            id: string;
-            reviewId: string;
-            revisionId: string;
-            actorId: string;
-            strategy: 'manual';
-            status: 'draft' | 'accepted' | 'applied' | 'abandoned';
-            groups: Array<{
-                id: string;
-                title: string;
-                message: string;
-                rationale: string;
-                fileIds: Array<string>;
-                paths: Array<string>;
-                dependsOn: Array<string>;
-            }>;
-            conflicts: Array<{
-                fileId: string;
-                path: string;
-                groupIds: Array<string>;
-            }>;
-            rationale: string;
             createdAt: number;
             updatedAt: number;
         }>;
@@ -15939,41 +15932,6 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdRefreshResponses = {
             createdAt: number;
             updatedAt: number;
         };
-        guide: {
-            revisionId: string | null;
-            status: 'pending' | 'running' | 'ready' | 'failed' | 'cancelled' | null;
-            providerTargetId: string | null;
-            runtimeKind: string | null;
-            modelId: string | null;
-            sessionId: string | null;
-            runId: string | null;
-            errorMessage: string | null;
-            createdAt: number | null;
-            updatedAt: number | null;
-            title: string | null;
-            steps: Array<{
-                id: string;
-                title: string;
-                rationale: string;
-                fileIds: Array<string>;
-                threadIds: Array<string>;
-                anchors: Array<{
-                    revisionId: string;
-                    fileId: string;
-                    path: string;
-                    side: 'base' | 'head';
-                    startLine: number;
-                    endLine: number;
-                    startColumn?: number;
-                    endColumn?: number;
-                    hunkHeader: string;
-                    lineHash: string;
-                    contextBeforeHash?: string;
-                    contextAfterHash?: string;
-                }>;
-                order: number;
-            }>;
-        };
         agentFixes: Array<{
             id: string;
             reviewId: string;
@@ -15995,38 +15953,13 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdRefreshResponses = {
             } | null;
             instruction: string;
             profileId: string | null;
-            expectedOutput: 'commit' | 'working-tree-change' | 'patch-artifact';
+            expectedOutput: 'working-tree-change' | 'patch-artifact';
             status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
             sessionId: string | null;
             runId: string | null;
             artifactId: string | null;
             resultRevisionId: string | null;
             errorMessage: string | null;
-            createdAt: number;
-            updatedAt: number;
-        }>;
-        commitPlans: Array<{
-            id: string;
-            reviewId: string;
-            revisionId: string;
-            actorId: string;
-            strategy: 'manual';
-            status: 'draft' | 'accepted' | 'applied' | 'abandoned';
-            groups: Array<{
-                id: string;
-                title: string;
-                message: string;
-                rationale: string;
-                fileIds: Array<string>;
-                paths: Array<string>;
-                dependsOn: Array<string>;
-            }>;
-            conflicts: Array<{
-                fileId: string;
-                path: string;
-                groupIds: Array<string>;
-            }>;
-            rationale: string;
             createdAt: number;
             updatedAt: number;
         }>;
@@ -16213,41 +16146,6 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdCloseResponses = {
             createdAt: number;
             updatedAt: number;
         };
-        guide: {
-            revisionId: string | null;
-            status: 'pending' | 'running' | 'ready' | 'failed' | 'cancelled' | null;
-            providerTargetId: string | null;
-            runtimeKind: string | null;
-            modelId: string | null;
-            sessionId: string | null;
-            runId: string | null;
-            errorMessage: string | null;
-            createdAt: number | null;
-            updatedAt: number | null;
-            title: string | null;
-            steps: Array<{
-                id: string;
-                title: string;
-                rationale: string;
-                fileIds: Array<string>;
-                threadIds: Array<string>;
-                anchors: Array<{
-                    revisionId: string;
-                    fileId: string;
-                    path: string;
-                    side: 'base' | 'head';
-                    startLine: number;
-                    endLine: number;
-                    startColumn?: number;
-                    endColumn?: number;
-                    hunkHeader: string;
-                    lineHash: string;
-                    contextBeforeHash?: string;
-                    contextAfterHash?: string;
-                }>;
-                order: number;
-            }>;
-        };
         agentFixes: Array<{
             id: string;
             reviewId: string;
@@ -16269,38 +16167,13 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdCloseResponses = {
             } | null;
             instruction: string;
             profileId: string | null;
-            expectedOutput: 'commit' | 'working-tree-change' | 'patch-artifact';
+            expectedOutput: 'working-tree-change' | 'patch-artifact';
             status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
             sessionId: string | null;
             runId: string | null;
             artifactId: string | null;
             resultRevisionId: string | null;
             errorMessage: string | null;
-            createdAt: number;
-            updatedAt: number;
-        }>;
-        commitPlans: Array<{
-            id: string;
-            reviewId: string;
-            revisionId: string;
-            actorId: string;
-            strategy: 'manual';
-            status: 'draft' | 'accepted' | 'applied' | 'abandoned';
-            groups: Array<{
-                id: string;
-                title: string;
-                message: string;
-                rationale: string;
-                fileIds: Array<string>;
-                paths: Array<string>;
-                dependsOn: Array<string>;
-            }>;
-            conflicts: Array<{
-                fileId: string;
-                path: string;
-                groupIds: Array<string>;
-            }>;
-            rationale: string;
             createdAt: number;
             updatedAt: number;
         }>;
@@ -16490,41 +16363,6 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdFilesByFileIdViewedR
             createdAt: number;
             updatedAt: number;
         };
-        guide: {
-            revisionId: string | null;
-            status: 'pending' | 'running' | 'ready' | 'failed' | 'cancelled' | null;
-            providerTargetId: string | null;
-            runtimeKind: string | null;
-            modelId: string | null;
-            sessionId: string | null;
-            runId: string | null;
-            errorMessage: string | null;
-            createdAt: number | null;
-            updatedAt: number | null;
-            title: string | null;
-            steps: Array<{
-                id: string;
-                title: string;
-                rationale: string;
-                fileIds: Array<string>;
-                threadIds: Array<string>;
-                anchors: Array<{
-                    revisionId: string;
-                    fileId: string;
-                    path: string;
-                    side: 'base' | 'head';
-                    startLine: number;
-                    endLine: number;
-                    startColumn?: number;
-                    endColumn?: number;
-                    hunkHeader: string;
-                    lineHash: string;
-                    contextBeforeHash?: string;
-                    contextAfterHash?: string;
-                }>;
-                order: number;
-            }>;
-        };
         agentFixes: Array<{
             id: string;
             reviewId: string;
@@ -16546,38 +16384,13 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdFilesByFileIdViewedR
             } | null;
             instruction: string;
             profileId: string | null;
-            expectedOutput: 'commit' | 'working-tree-change' | 'patch-artifact';
+            expectedOutput: 'working-tree-change' | 'patch-artifact';
             status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
             sessionId: string | null;
             runId: string | null;
             artifactId: string | null;
             resultRevisionId: string | null;
             errorMessage: string | null;
-            createdAt: number;
-            updatedAt: number;
-        }>;
-        commitPlans: Array<{
-            id: string;
-            reviewId: string;
-            revisionId: string;
-            actorId: string;
-            strategy: 'manual';
-            status: 'draft' | 'accepted' | 'applied' | 'abandoned';
-            groups: Array<{
-                id: string;
-                title: string;
-                message: string;
-                rationale: string;
-                fileIds: Array<string>;
-                paths: Array<string>;
-                dependsOn: Array<string>;
-            }>;
-            conflicts: Array<{
-                fileId: string;
-                path: string;
-                groupIds: Array<string>;
-            }>;
-            rationale: string;
             createdAt: number;
             updatedAt: number;
         }>;
@@ -16775,41 +16588,6 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdThreadsResponses = {
             createdAt: number;
             updatedAt: number;
         };
-        guide: {
-            revisionId: string | null;
-            status: 'pending' | 'running' | 'ready' | 'failed' | 'cancelled' | null;
-            providerTargetId: string | null;
-            runtimeKind: string | null;
-            modelId: string | null;
-            sessionId: string | null;
-            runId: string | null;
-            errorMessage: string | null;
-            createdAt: number | null;
-            updatedAt: number | null;
-            title: string | null;
-            steps: Array<{
-                id: string;
-                title: string;
-                rationale: string;
-                fileIds: Array<string>;
-                threadIds: Array<string>;
-                anchors: Array<{
-                    revisionId: string;
-                    fileId: string;
-                    path: string;
-                    side: 'base' | 'head';
-                    startLine: number;
-                    endLine: number;
-                    startColumn?: number;
-                    endColumn?: number;
-                    hunkHeader: string;
-                    lineHash: string;
-                    contextBeforeHash?: string;
-                    contextAfterHash?: string;
-                }>;
-                order: number;
-            }>;
-        };
         agentFixes: Array<{
             id: string;
             reviewId: string;
@@ -16831,38 +16609,13 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdThreadsResponses = {
             } | null;
             instruction: string;
             profileId: string | null;
-            expectedOutput: 'commit' | 'working-tree-change' | 'patch-artifact';
+            expectedOutput: 'working-tree-change' | 'patch-artifact';
             status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
             sessionId: string | null;
             runId: string | null;
             artifactId: string | null;
             resultRevisionId: string | null;
             errorMessage: string | null;
-            createdAt: number;
-            updatedAt: number;
-        }>;
-        commitPlans: Array<{
-            id: string;
-            reviewId: string;
-            revisionId: string;
-            actorId: string;
-            strategy: 'manual';
-            status: 'draft' | 'accepted' | 'applied' | 'abandoned';
-            groups: Array<{
-                id: string;
-                title: string;
-                message: string;
-                rationale: string;
-                fileIds: Array<string>;
-                paths: Array<string>;
-                dependsOn: Array<string>;
-            }>;
-            conflicts: Array<{
-                fileId: string;
-                path: string;
-                groupIds: Array<string>;
-            }>;
-            rationale: string;
             createdAt: number;
             updatedAt: number;
         }>;
@@ -17052,41 +16805,6 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdThreadsByThreadIdCom
             createdAt: number;
             updatedAt: number;
         };
-        guide: {
-            revisionId: string | null;
-            status: 'pending' | 'running' | 'ready' | 'failed' | 'cancelled' | null;
-            providerTargetId: string | null;
-            runtimeKind: string | null;
-            modelId: string | null;
-            sessionId: string | null;
-            runId: string | null;
-            errorMessage: string | null;
-            createdAt: number | null;
-            updatedAt: number | null;
-            title: string | null;
-            steps: Array<{
-                id: string;
-                title: string;
-                rationale: string;
-                fileIds: Array<string>;
-                threadIds: Array<string>;
-                anchors: Array<{
-                    revisionId: string;
-                    fileId: string;
-                    path: string;
-                    side: 'base' | 'head';
-                    startLine: number;
-                    endLine: number;
-                    startColumn?: number;
-                    endColumn?: number;
-                    hunkHeader: string;
-                    lineHash: string;
-                    contextBeforeHash?: string;
-                    contextAfterHash?: string;
-                }>;
-                order: number;
-            }>;
-        };
         agentFixes: Array<{
             id: string;
             reviewId: string;
@@ -17108,38 +16826,13 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdThreadsByThreadIdCom
             } | null;
             instruction: string;
             profileId: string | null;
-            expectedOutput: 'commit' | 'working-tree-change' | 'patch-artifact';
+            expectedOutput: 'working-tree-change' | 'patch-artifact';
             status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
             sessionId: string | null;
             runId: string | null;
             artifactId: string | null;
             resultRevisionId: string | null;
             errorMessage: string | null;
-            createdAt: number;
-            updatedAt: number;
-        }>;
-        commitPlans: Array<{
-            id: string;
-            reviewId: string;
-            revisionId: string;
-            actorId: string;
-            strategy: 'manual';
-            status: 'draft' | 'accepted' | 'applied' | 'abandoned';
-            groups: Array<{
-                id: string;
-                title: string;
-                message: string;
-                rationale: string;
-                fileIds: Array<string>;
-                paths: Array<string>;
-                dependsOn: Array<string>;
-            }>;
-            conflicts: Array<{
-                fileId: string;
-                path: string;
-                groupIds: Array<string>;
-            }>;
-            rationale: string;
             createdAt: number;
             updatedAt: number;
         }>;
@@ -17327,41 +17020,6 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdThreadsByThreadIdRes
             createdAt: number;
             updatedAt: number;
         };
-        guide: {
-            revisionId: string | null;
-            status: 'pending' | 'running' | 'ready' | 'failed' | 'cancelled' | null;
-            providerTargetId: string | null;
-            runtimeKind: string | null;
-            modelId: string | null;
-            sessionId: string | null;
-            runId: string | null;
-            errorMessage: string | null;
-            createdAt: number | null;
-            updatedAt: number | null;
-            title: string | null;
-            steps: Array<{
-                id: string;
-                title: string;
-                rationale: string;
-                fileIds: Array<string>;
-                threadIds: Array<string>;
-                anchors: Array<{
-                    revisionId: string;
-                    fileId: string;
-                    path: string;
-                    side: 'base' | 'head';
-                    startLine: number;
-                    endLine: number;
-                    startColumn?: number;
-                    endColumn?: number;
-                    hunkHeader: string;
-                    lineHash: string;
-                    contextBeforeHash?: string;
-                    contextAfterHash?: string;
-                }>;
-                order: number;
-            }>;
-        };
         agentFixes: Array<{
             id: string;
             reviewId: string;
@@ -17383,38 +17041,13 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdThreadsByThreadIdRes
             } | null;
             instruction: string;
             profileId: string | null;
-            expectedOutput: 'commit' | 'working-tree-change' | 'patch-artifact';
+            expectedOutput: 'working-tree-change' | 'patch-artifact';
             status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
             sessionId: string | null;
             runId: string | null;
             artifactId: string | null;
             resultRevisionId: string | null;
             errorMessage: string | null;
-            createdAt: number;
-            updatedAt: number;
-        }>;
-        commitPlans: Array<{
-            id: string;
-            reviewId: string;
-            revisionId: string;
-            actorId: string;
-            strategy: 'manual';
-            status: 'draft' | 'accepted' | 'applied' | 'abandoned';
-            groups: Array<{
-                id: string;
-                title: string;
-                message: string;
-                rationale: string;
-                fileIds: Array<string>;
-                paths: Array<string>;
-                dependsOn: Array<string>;
-            }>;
-            conflicts: Array<{
-                fileId: string;
-                path: string;
-                groupIds: Array<string>;
-            }>;
-            rationale: string;
             createdAt: number;
             updatedAt: number;
         }>;
@@ -17604,41 +17237,6 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdSubmitResponses = {
             createdAt: number;
             updatedAt: number;
         };
-        guide: {
-            revisionId: string | null;
-            status: 'pending' | 'running' | 'ready' | 'failed' | 'cancelled' | null;
-            providerTargetId: string | null;
-            runtimeKind: string | null;
-            modelId: string | null;
-            sessionId: string | null;
-            runId: string | null;
-            errorMessage: string | null;
-            createdAt: number | null;
-            updatedAt: number | null;
-            title: string | null;
-            steps: Array<{
-                id: string;
-                title: string;
-                rationale: string;
-                fileIds: Array<string>;
-                threadIds: Array<string>;
-                anchors: Array<{
-                    revisionId: string;
-                    fileId: string;
-                    path: string;
-                    side: 'base' | 'head';
-                    startLine: number;
-                    endLine: number;
-                    startColumn?: number;
-                    endColumn?: number;
-                    hunkHeader: string;
-                    lineHash: string;
-                    contextBeforeHash?: string;
-                    contextAfterHash?: string;
-                }>;
-                order: number;
-            }>;
-        };
         agentFixes: Array<{
             id: string;
             reviewId: string;
@@ -17660,38 +17258,13 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdSubmitResponses = {
             } | null;
             instruction: string;
             profileId: string | null;
-            expectedOutput: 'commit' | 'working-tree-change' | 'patch-artifact';
+            expectedOutput: 'working-tree-change' | 'patch-artifact';
             status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
             sessionId: string | null;
             runId: string | null;
             artifactId: string | null;
             resultRevisionId: string | null;
             errorMessage: string | null;
-            createdAt: number;
-            updatedAt: number;
-        }>;
-        commitPlans: Array<{
-            id: string;
-            reviewId: string;
-            revisionId: string;
-            actorId: string;
-            strategy: 'manual';
-            status: 'draft' | 'accepted' | 'applied' | 'abandoned';
-            groups: Array<{
-                id: string;
-                title: string;
-                message: string;
-                rationale: string;
-                fileIds: Array<string>;
-                paths: Array<string>;
-                dependsOn: Array<string>;
-            }>;
-            conflicts: Array<{
-                fileId: string;
-                path: string;
-                groupIds: Array<string>;
-            }>;
-            rationale: string;
             createdAt: number;
             updatedAt: number;
         }>;
@@ -17880,41 +17453,6 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdMergeResponses = {
             createdAt: number;
             updatedAt: number;
         };
-        guide: {
-            revisionId: string | null;
-            status: 'pending' | 'running' | 'ready' | 'failed' | 'cancelled' | null;
-            providerTargetId: string | null;
-            runtimeKind: string | null;
-            modelId: string | null;
-            sessionId: string | null;
-            runId: string | null;
-            errorMessage: string | null;
-            createdAt: number | null;
-            updatedAt: number | null;
-            title: string | null;
-            steps: Array<{
-                id: string;
-                title: string;
-                rationale: string;
-                fileIds: Array<string>;
-                threadIds: Array<string>;
-                anchors: Array<{
-                    revisionId: string;
-                    fileId: string;
-                    path: string;
-                    side: 'base' | 'head';
-                    startLine: number;
-                    endLine: number;
-                    startColumn?: number;
-                    endColumn?: number;
-                    hunkHeader: string;
-                    lineHash: string;
-                    contextBeforeHash?: string;
-                    contextAfterHash?: string;
-                }>;
-                order: number;
-            }>;
-        };
         agentFixes: Array<{
             id: string;
             reviewId: string;
@@ -17936,38 +17474,13 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdMergeResponses = {
             } | null;
             instruction: string;
             profileId: string | null;
-            expectedOutput: 'commit' | 'working-tree-change' | 'patch-artifact';
+            expectedOutput: 'working-tree-change' | 'patch-artifact';
             status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
             sessionId: string | null;
             runId: string | null;
             artifactId: string | null;
             resultRevisionId: string | null;
             errorMessage: string | null;
-            createdAt: number;
-            updatedAt: number;
-        }>;
-        commitPlans: Array<{
-            id: string;
-            reviewId: string;
-            revisionId: string;
-            actorId: string;
-            strategy: 'manual';
-            status: 'draft' | 'accepted' | 'applied' | 'abandoned';
-            groups: Array<{
-                id: string;
-                title: string;
-                message: string;
-                rationale: string;
-                fileIds: Array<string>;
-                paths: Array<string>;
-                dependsOn: Array<string>;
-            }>;
-            conflicts: Array<{
-                fileId: string;
-                path: string;
-                groupIds: Array<string>;
-            }>;
-            rationale: string;
             createdAt: number;
             updatedAt: number;
         }>;
@@ -18017,560 +17530,6 @@ export type PutWorkspacesByWorkspaceIdDiffReviewsPreferencesResponses = {
 
 export type PutWorkspacesByWorkspaceIdDiffReviewsPreferencesResponse = PutWorkspacesByWorkspaceIdDiffReviewsPreferencesResponses[keyof PutWorkspacesByWorkspaceIdDiffReviewsPreferencesResponses];
 
-export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdGuideGenerateData = {
-    body: {
-        providerTargetId: string;
-        runtimeKind?: string;
-        modelId?: string | null;
-        force?: boolean;
-        outputLocale?: 'en-US' | 'zh-CN' | 'ja-JP' | 'es-ES' | null;
-    };
-    path: {
-        workspaceId: string;
-        reviewId: string;
-    };
-    query?: never;
-    url: '/workspaces/{workspaceId}/diff-reviews/{reviewId}/guide/generate';
-};
-
-export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdGuideGenerateResponses = {
-    /**
-     * Response for status 200
-     */
-    200: {
-        id: string;
-        workspaceId: string;
-        sourceId: string | null;
-        repositoryPath: string;
-        sourceKind: 'local-working-tree' | 'local-branch-compare' | 'local-commit' | 'agent-change-set' | 'github-pull-request' | 'external-import';
-        githubPullRequest: {
-            owner: string;
-            repo: string;
-            number: string | number;
-            detail?: {
-                url: string;
-                title: string;
-                body: string | null;
-                isDraft: boolean;
-                state: 'open' | 'closed';
-                merged: boolean;
-                mergeable: boolean | null;
-                mergeableState: string;
-                headRef: string;
-                baseRef: string;
-                headSha: string | null;
-                author: {
-                    login: string;
-                    avatarUrl: string | null;
-                    url: string | null;
-                } | null;
-                reviewers: Array<{
-                    login: string;
-                    avatarUrl: string | null;
-                    url: string | null;
-                }>;
-                assignees: Array<{
-                    login: string;
-                    avatarUrl: string | null;
-                    url: string | null;
-                }>;
-                labels: Array<{
-                    name: string;
-                    color: string;
-                }>;
-                checksState: 'success' | 'failure' | 'pending' | 'neutral';
-                checks: Array<{
-                    id: string;
-                    name: string;
-                    status: 'queued' | 'in_progress' | 'completed';
-                    conclusion: string | null;
-                    url: string | null;
-                }>;
-                timeline: Array<{
-                    id: string;
-                    kind: 'comment' | 'review';
-                    author: {
-                        login: string;
-                        avatarUrl: string | null;
-                        url: string | null;
-                    } | null;
-                    body: string | null;
-                    state: string | null;
-                    createdAt: string;
-                    url: string | null;
-                }>;
-            };
-        } | null;
-        title: string;
-        status: 'open' | 'merged' | 'closed' | 'abandoned';
-        reviewState: 'unreviewed' | 'in-review' | 'changes-requested' | 'approved' | 'commented';
-        currentRevisionId: string | null;
-        createdAt: number;
-        updatedAt: number;
-        currentRevision: {
-            id: string;
-            reviewId: string;
-            sourceVersion: string;
-            patchHash: string;
-            fileCount: number;
-            additions: number;
-            deletions: number;
-            generatedAt: number;
-            patch: string;
-        } | null;
-        files: Array<{
-            id: string;
-            revisionId: string;
-            path: string;
-            previousPath: string | null;
-            status: 'added' | 'modified' | 'deleted' | 'renamed' | 'untracked';
-            additions: number;
-            deletions: number;
-            isGenerated: boolean;
-            isBinary: boolean;
-            isViewed: boolean;
-        }>;
-        threads: Array<{
-            id: string;
-            reviewId: string;
-            originalRevisionId: string;
-            currentRevisionId: string | null;
-            fileId: string | null;
-            anchor: {
-                revisionId: string;
-                fileId: string;
-                path: string;
-                side: 'base' | 'head';
-                startLine: number;
-                endLine: number;
-                startColumn?: number;
-                endColumn?: number;
-                hunkHeader: string;
-                lineHash: string;
-                contextBeforeHash?: string;
-                contextAfterHash?: string;
-            } | null;
-            state: 'open' | 'resolved' | 'stale';
-            createdBy: string;
-            createdAt: number;
-            updatedAt: number;
-            resolvedBy: string | null;
-            resolvedAt: number | null;
-            comments: Array<{
-                id: string;
-                threadId: string;
-                authorKind: 'user' | 'agent' | 'external';
-                authorId: string;
-                bodyMarkdown: string;
-                externalUrl: string | null;
-                createdAt: number;
-                updatedAt: number;
-            }>;
-        }>;
-        submissions: Array<{
-            id: string;
-            reviewId: string;
-            revisionId: string;
-            actorId: string;
-            decision: 'approve' | 'request-changes' | 'comment';
-            bodyMarkdown: string | null;
-            submittedAt: number;
-            sourceSyncState: 'local-only' | 'pending' | 'synced' | 'failed';
-        }>;
-        events: Array<{
-            id: string;
-            reviewId: string;
-            eventKind: string;
-            actorKind: 'user' | 'agent' | 'external' | 'system';
-            actorId: string | null;
-            payload: unknown;
-            createdAt: number;
-        }>;
-        preferences: {
-            id: string;
-            workspaceId: string;
-            userId: string;
-            diffStyle: 'split' | 'unified';
-            codeTheme: string;
-            fontSize: number;
-            lineHeight: number;
-            hideWhitespaceOnly: boolean;
-            structuralHighlighting: boolean;
-            collapseGeneratedFiles: boolean;
-            notificationMode: 'all-activity' | 'all-activity-by-people' | 'reviews-and-comments' | 'reviews-and-comments-by-people' | 'none';
-            createdAt: number;
-            updatedAt: number;
-        };
-        guide: {
-            revisionId: string | null;
-            status: 'pending' | 'running' | 'ready' | 'failed' | 'cancelled' | null;
-            providerTargetId: string | null;
-            runtimeKind: string | null;
-            modelId: string | null;
-            sessionId: string | null;
-            runId: string | null;
-            errorMessage: string | null;
-            createdAt: number | null;
-            updatedAt: number | null;
-            title: string | null;
-            steps: Array<{
-                id: string;
-                title: string;
-                rationale: string;
-                fileIds: Array<string>;
-                threadIds: Array<string>;
-                anchors: Array<{
-                    revisionId: string;
-                    fileId: string;
-                    path: string;
-                    side: 'base' | 'head';
-                    startLine: number;
-                    endLine: number;
-                    startColumn?: number;
-                    endColumn?: number;
-                    hunkHeader: string;
-                    lineHash: string;
-                    contextBeforeHash?: string;
-                    contextAfterHash?: string;
-                }>;
-                order: number;
-            }>;
-        };
-        agentFixes: Array<{
-            id: string;
-            reviewId: string;
-            targetRevisionId: string | null;
-            threadId: string | null;
-            anchor: {
-                revisionId: string;
-                fileId: string;
-                path: string;
-                side: 'base' | 'head';
-                startLine: number;
-                endLine: number;
-                startColumn?: number;
-                endColumn?: number;
-                hunkHeader: string;
-                lineHash: string;
-                contextBeforeHash?: string;
-                contextAfterHash?: string;
-            } | null;
-            instruction: string;
-            profileId: string | null;
-            expectedOutput: 'commit' | 'working-tree-change' | 'patch-artifact';
-            status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
-            sessionId: string | null;
-            runId: string | null;
-            artifactId: string | null;
-            resultRevisionId: string | null;
-            errorMessage: string | null;
-            createdAt: number;
-            updatedAt: number;
-        }>;
-        commitPlans: Array<{
-            id: string;
-            reviewId: string;
-            revisionId: string;
-            actorId: string;
-            strategy: 'manual';
-            status: 'draft' | 'accepted' | 'applied' | 'abandoned';
-            groups: Array<{
-                id: string;
-                title: string;
-                message: string;
-                rationale: string;
-                fileIds: Array<string>;
-                paths: Array<string>;
-                dependsOn: Array<string>;
-            }>;
-            conflicts: Array<{
-                fileId: string;
-                path: string;
-                groupIds: Array<string>;
-            }>;
-            rationale: string;
-            createdAt: number;
-            updatedAt: number;
-        }>;
-    };
-};
-
-export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdGuideGenerateResponse = PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdGuideGenerateResponses[keyof PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdGuideGenerateResponses];
-
-export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdGuideCancelData = {
-    body?: never;
-    path: {
-        workspaceId: string;
-        reviewId: string;
-    };
-    query?: never;
-    url: '/workspaces/{workspaceId}/diff-reviews/{reviewId}/guide/cancel';
-};
-
-export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdGuideCancelResponses = {
-    /**
-     * Response for status 200
-     */
-    200: {
-        id: string;
-        workspaceId: string;
-        sourceId: string | null;
-        repositoryPath: string;
-        sourceKind: 'local-working-tree' | 'local-branch-compare' | 'local-commit' | 'agent-change-set' | 'github-pull-request' | 'external-import';
-        githubPullRequest: {
-            owner: string;
-            repo: string;
-            number: string | number;
-            detail?: {
-                url: string;
-                title: string;
-                body: string | null;
-                isDraft: boolean;
-                state: 'open' | 'closed';
-                merged: boolean;
-                mergeable: boolean | null;
-                mergeableState: string;
-                headRef: string;
-                baseRef: string;
-                headSha: string | null;
-                author: {
-                    login: string;
-                    avatarUrl: string | null;
-                    url: string | null;
-                } | null;
-                reviewers: Array<{
-                    login: string;
-                    avatarUrl: string | null;
-                    url: string | null;
-                }>;
-                assignees: Array<{
-                    login: string;
-                    avatarUrl: string | null;
-                    url: string | null;
-                }>;
-                labels: Array<{
-                    name: string;
-                    color: string;
-                }>;
-                checksState: 'success' | 'failure' | 'pending' | 'neutral';
-                checks: Array<{
-                    id: string;
-                    name: string;
-                    status: 'queued' | 'in_progress' | 'completed';
-                    conclusion: string | null;
-                    url: string | null;
-                }>;
-                timeline: Array<{
-                    id: string;
-                    kind: 'comment' | 'review';
-                    author: {
-                        login: string;
-                        avatarUrl: string | null;
-                        url: string | null;
-                    } | null;
-                    body: string | null;
-                    state: string | null;
-                    createdAt: string;
-                    url: string | null;
-                }>;
-            };
-        } | null;
-        title: string;
-        status: 'open' | 'merged' | 'closed' | 'abandoned';
-        reviewState: 'unreviewed' | 'in-review' | 'changes-requested' | 'approved' | 'commented';
-        currentRevisionId: string | null;
-        createdAt: number;
-        updatedAt: number;
-        currentRevision: {
-            id: string;
-            reviewId: string;
-            sourceVersion: string;
-            patchHash: string;
-            fileCount: number;
-            additions: number;
-            deletions: number;
-            generatedAt: number;
-            patch: string;
-        } | null;
-        files: Array<{
-            id: string;
-            revisionId: string;
-            path: string;
-            previousPath: string | null;
-            status: 'added' | 'modified' | 'deleted' | 'renamed' | 'untracked';
-            additions: number;
-            deletions: number;
-            isGenerated: boolean;
-            isBinary: boolean;
-            isViewed: boolean;
-        }>;
-        threads: Array<{
-            id: string;
-            reviewId: string;
-            originalRevisionId: string;
-            currentRevisionId: string | null;
-            fileId: string | null;
-            anchor: {
-                revisionId: string;
-                fileId: string;
-                path: string;
-                side: 'base' | 'head';
-                startLine: number;
-                endLine: number;
-                startColumn?: number;
-                endColumn?: number;
-                hunkHeader: string;
-                lineHash: string;
-                contextBeforeHash?: string;
-                contextAfterHash?: string;
-            } | null;
-            state: 'open' | 'resolved' | 'stale';
-            createdBy: string;
-            createdAt: number;
-            updatedAt: number;
-            resolvedBy: string | null;
-            resolvedAt: number | null;
-            comments: Array<{
-                id: string;
-                threadId: string;
-                authorKind: 'user' | 'agent' | 'external';
-                authorId: string;
-                bodyMarkdown: string;
-                externalUrl: string | null;
-                createdAt: number;
-                updatedAt: number;
-            }>;
-        }>;
-        submissions: Array<{
-            id: string;
-            reviewId: string;
-            revisionId: string;
-            actorId: string;
-            decision: 'approve' | 'request-changes' | 'comment';
-            bodyMarkdown: string | null;
-            submittedAt: number;
-            sourceSyncState: 'local-only' | 'pending' | 'synced' | 'failed';
-        }>;
-        events: Array<{
-            id: string;
-            reviewId: string;
-            eventKind: string;
-            actorKind: 'user' | 'agent' | 'external' | 'system';
-            actorId: string | null;
-            payload: unknown;
-            createdAt: number;
-        }>;
-        preferences: {
-            id: string;
-            workspaceId: string;
-            userId: string;
-            diffStyle: 'split' | 'unified';
-            codeTheme: string;
-            fontSize: number;
-            lineHeight: number;
-            hideWhitespaceOnly: boolean;
-            structuralHighlighting: boolean;
-            collapseGeneratedFiles: boolean;
-            notificationMode: 'all-activity' | 'all-activity-by-people' | 'reviews-and-comments' | 'reviews-and-comments-by-people' | 'none';
-            createdAt: number;
-            updatedAt: number;
-        };
-        guide: {
-            revisionId: string | null;
-            status: 'pending' | 'running' | 'ready' | 'failed' | 'cancelled' | null;
-            providerTargetId: string | null;
-            runtimeKind: string | null;
-            modelId: string | null;
-            sessionId: string | null;
-            runId: string | null;
-            errorMessage: string | null;
-            createdAt: number | null;
-            updatedAt: number | null;
-            title: string | null;
-            steps: Array<{
-                id: string;
-                title: string;
-                rationale: string;
-                fileIds: Array<string>;
-                threadIds: Array<string>;
-                anchors: Array<{
-                    revisionId: string;
-                    fileId: string;
-                    path: string;
-                    side: 'base' | 'head';
-                    startLine: number;
-                    endLine: number;
-                    startColumn?: number;
-                    endColumn?: number;
-                    hunkHeader: string;
-                    lineHash: string;
-                    contextBeforeHash?: string;
-                    contextAfterHash?: string;
-                }>;
-                order: number;
-            }>;
-        };
-        agentFixes: Array<{
-            id: string;
-            reviewId: string;
-            targetRevisionId: string | null;
-            threadId: string | null;
-            anchor: {
-                revisionId: string;
-                fileId: string;
-                path: string;
-                side: 'base' | 'head';
-                startLine: number;
-                endLine: number;
-                startColumn?: number;
-                endColumn?: number;
-                hunkHeader: string;
-                lineHash: string;
-                contextBeforeHash?: string;
-                contextAfterHash?: string;
-            } | null;
-            instruction: string;
-            profileId: string | null;
-            expectedOutput: 'commit' | 'working-tree-change' | 'patch-artifact';
-            status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
-            sessionId: string | null;
-            runId: string | null;
-            artifactId: string | null;
-            resultRevisionId: string | null;
-            errorMessage: string | null;
-            createdAt: number;
-            updatedAt: number;
-        }>;
-        commitPlans: Array<{
-            id: string;
-            reviewId: string;
-            revisionId: string;
-            actorId: string;
-            strategy: 'manual';
-            status: 'draft' | 'accepted' | 'applied' | 'abandoned';
-            groups: Array<{
-                id: string;
-                title: string;
-                message: string;
-                rationale: string;
-                fileIds: Array<string>;
-                paths: Array<string>;
-                dependsOn: Array<string>;
-            }>;
-            conflicts: Array<{
-                fileId: string;
-                path: string;
-                groupIds: Array<string>;
-            }>;
-            rationale: string;
-            createdAt: number;
-            updatedAt: number;
-        }>;
-    };
-};
-
-export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdGuideCancelResponse = PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdGuideCancelResponses[keyof PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdGuideCancelResponses];
-
 export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdAgentFixesData = {
     body: {
         threadId?: string | null;
@@ -18584,7 +17543,7 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdAgentFixesData = {
         } | null;
         instruction: string;
         agentId?: string | null;
-        expectedOutput: 'commit' | 'working-tree-change' | 'patch-artifact';
+        expectedOutput: 'working-tree-change' | 'patch-artifact';
     };
     path: {
         workspaceId: string;
@@ -18762,41 +17721,6 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdAgentFixesResponses 
             createdAt: number;
             updatedAt: number;
         };
-        guide: {
-            revisionId: string | null;
-            status: 'pending' | 'running' | 'ready' | 'failed' | 'cancelled' | null;
-            providerTargetId: string | null;
-            runtimeKind: string | null;
-            modelId: string | null;
-            sessionId: string | null;
-            runId: string | null;
-            errorMessage: string | null;
-            createdAt: number | null;
-            updatedAt: number | null;
-            title: string | null;
-            steps: Array<{
-                id: string;
-                title: string;
-                rationale: string;
-                fileIds: Array<string>;
-                threadIds: Array<string>;
-                anchors: Array<{
-                    revisionId: string;
-                    fileId: string;
-                    path: string;
-                    side: 'base' | 'head';
-                    startLine: number;
-                    endLine: number;
-                    startColumn?: number;
-                    endColumn?: number;
-                    hunkHeader: string;
-                    lineHash: string;
-                    contextBeforeHash?: string;
-                    contextAfterHash?: string;
-                }>;
-                order: number;
-            }>;
-        };
         agentFixes: Array<{
             id: string;
             reviewId: string;
@@ -18818,38 +17742,13 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdAgentFixesResponses 
             } | null;
             instruction: string;
             profileId: string | null;
-            expectedOutput: 'commit' | 'working-tree-change' | 'patch-artifact';
+            expectedOutput: 'working-tree-change' | 'patch-artifact';
             status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
             sessionId: string | null;
             runId: string | null;
             artifactId: string | null;
             resultRevisionId: string | null;
             errorMessage: string | null;
-            createdAt: number;
-            updatedAt: number;
-        }>;
-        commitPlans: Array<{
-            id: string;
-            reviewId: string;
-            revisionId: string;
-            actorId: string;
-            strategy: 'manual';
-            status: 'draft' | 'accepted' | 'applied' | 'abandoned';
-            groups: Array<{
-                id: string;
-                title: string;
-                message: string;
-                rationale: string;
-                fileIds: Array<string>;
-                paths: Array<string>;
-                dependsOn: Array<string>;
-            }>;
-            conflicts: Array<{
-                fileId: string;
-                path: string;
-                groupIds: Array<string>;
-            }>;
-            rationale: string;
             createdAt: number;
             updatedAt: number;
         }>;
@@ -19043,41 +17942,6 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdAgentFixesByAgentFix
             createdAt: number;
             updatedAt: number;
         };
-        guide: {
-            revisionId: string | null;
-            status: 'pending' | 'running' | 'ready' | 'failed' | 'cancelled' | null;
-            providerTargetId: string | null;
-            runtimeKind: string | null;
-            modelId: string | null;
-            sessionId: string | null;
-            runId: string | null;
-            errorMessage: string | null;
-            createdAt: number | null;
-            updatedAt: number | null;
-            title: string | null;
-            steps: Array<{
-                id: string;
-                title: string;
-                rationale: string;
-                fileIds: Array<string>;
-                threadIds: Array<string>;
-                anchors: Array<{
-                    revisionId: string;
-                    fileId: string;
-                    path: string;
-                    side: 'base' | 'head';
-                    startLine: number;
-                    endLine: number;
-                    startColumn?: number;
-                    endColumn?: number;
-                    hunkHeader: string;
-                    lineHash: string;
-                    contextBeforeHash?: string;
-                    contextAfterHash?: string;
-                }>;
-                order: number;
-            }>;
-        };
         agentFixes: Array<{
             id: string;
             reviewId: string;
@@ -19099,38 +17963,13 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdAgentFixesByAgentFix
             } | null;
             instruction: string;
             profileId: string | null;
-            expectedOutput: 'commit' | 'working-tree-change' | 'patch-artifact';
+            expectedOutput: 'working-tree-change' | 'patch-artifact';
             status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
             sessionId: string | null;
             runId: string | null;
             artifactId: string | null;
             resultRevisionId: string | null;
             errorMessage: string | null;
-            createdAt: number;
-            updatedAt: number;
-        }>;
-        commitPlans: Array<{
-            id: string;
-            reviewId: string;
-            revisionId: string;
-            actorId: string;
-            strategy: 'manual';
-            status: 'draft' | 'accepted' | 'applied' | 'abandoned';
-            groups: Array<{
-                id: string;
-                title: string;
-                message: string;
-                rationale: string;
-                fileIds: Array<string>;
-                paths: Array<string>;
-                dependsOn: Array<string>;
-            }>;
-            conflicts: Array<{
-                fileId: string;
-                path: string;
-                groupIds: Array<string>;
-            }>;
-            rationale: string;
             createdAt: number;
             updatedAt: number;
         }>;
@@ -19351,41 +18190,6 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdAgentFixesByAgentFix
             createdAt: number;
             updatedAt: number;
         };
-        guide: {
-            revisionId: string | null;
-            status: 'pending' | 'running' | 'ready' | 'failed' | 'cancelled' | null;
-            providerTargetId: string | null;
-            runtimeKind: string | null;
-            modelId: string | null;
-            sessionId: string | null;
-            runId: string | null;
-            errorMessage: string | null;
-            createdAt: number | null;
-            updatedAt: number | null;
-            title: string | null;
-            steps: Array<{
-                id: string;
-                title: string;
-                rationale: string;
-                fileIds: Array<string>;
-                threadIds: Array<string>;
-                anchors: Array<{
-                    revisionId: string;
-                    fileId: string;
-                    path: string;
-                    side: 'base' | 'head';
-                    startLine: number;
-                    endLine: number;
-                    startColumn?: number;
-                    endColumn?: number;
-                    hunkHeader: string;
-                    lineHash: string;
-                    contextBeforeHash?: string;
-                    contextAfterHash?: string;
-                }>;
-                order: number;
-            }>;
-        };
         agentFixes: Array<{
             id: string;
             reviewId: string;
@@ -19407,38 +18211,13 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdAgentFixesByAgentFix
             } | null;
             instruction: string;
             profileId: string | null;
-            expectedOutput: 'commit' | 'working-tree-change' | 'patch-artifact';
+            expectedOutput: 'working-tree-change' | 'patch-artifact';
             status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
             sessionId: string | null;
             runId: string | null;
             artifactId: string | null;
             resultRevisionId: string | null;
             errorMessage: string | null;
-            createdAt: number;
-            updatedAt: number;
-        }>;
-        commitPlans: Array<{
-            id: string;
-            reviewId: string;
-            revisionId: string;
-            actorId: string;
-            strategy: 'manual';
-            status: 'draft' | 'accepted' | 'applied' | 'abandoned';
-            groups: Array<{
-                id: string;
-                title: string;
-                message: string;
-                rationale: string;
-                fileIds: Array<string>;
-                paths: Array<string>;
-                dependsOn: Array<string>;
-            }>;
-            conflicts: Array<{
-                fileId: string;
-                path: string;
-                groupIds: Array<string>;
-            }>;
-            rationale: string;
             createdAt: number;
             updatedAt: number;
         }>;
@@ -19632,41 +18411,6 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdAgentFixesByAgentFix
             createdAt: number;
             updatedAt: number;
         };
-        guide: {
-            revisionId: string | null;
-            status: 'pending' | 'running' | 'ready' | 'failed' | 'cancelled' | null;
-            providerTargetId: string | null;
-            runtimeKind: string | null;
-            modelId: string | null;
-            sessionId: string | null;
-            runId: string | null;
-            errorMessage: string | null;
-            createdAt: number | null;
-            updatedAt: number | null;
-            title: string | null;
-            steps: Array<{
-                id: string;
-                title: string;
-                rationale: string;
-                fileIds: Array<string>;
-                threadIds: Array<string>;
-                anchors: Array<{
-                    revisionId: string;
-                    fileId: string;
-                    path: string;
-                    side: 'base' | 'head';
-                    startLine: number;
-                    endLine: number;
-                    startColumn?: number;
-                    endColumn?: number;
-                    hunkHeader: string;
-                    lineHash: string;
-                    contextBeforeHash?: string;
-                    contextAfterHash?: string;
-                }>;
-                order: number;
-            }>;
-        };
         agentFixes: Array<{
             id: string;
             reviewId: string;
@@ -19688,38 +18432,13 @@ export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdAgentFixesByAgentFix
             } | null;
             instruction: string;
             profileId: string | null;
-            expectedOutput: 'commit' | 'working-tree-change' | 'patch-artifact';
+            expectedOutput: 'working-tree-change' | 'patch-artifact';
             status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
             sessionId: string | null;
             runId: string | null;
             artifactId: string | null;
             resultRevisionId: string | null;
             errorMessage: string | null;
-            createdAt: number;
-            updatedAt: number;
-        }>;
-        commitPlans: Array<{
-            id: string;
-            reviewId: string;
-            revisionId: string;
-            actorId: string;
-            strategy: 'manual';
-            status: 'draft' | 'accepted' | 'applied' | 'abandoned';
-            groups: Array<{
-                id: string;
-                title: string;
-                message: string;
-                rationale: string;
-                fileIds: Array<string>;
-                paths: Array<string>;
-                dependsOn: Array<string>;
-            }>;
-            conflicts: Array<{
-                fileId: string;
-                path: string;
-                groupIds: Array<string>;
-            }>;
-            rationale: string;
             createdAt: number;
             updatedAt: number;
         }>;
@@ -19907,41 +18626,6 @@ export type DeleteWorkspacesByWorkspaceIdDiffReviewsByReviewIdAgentFixesByAgentF
             createdAt: number;
             updatedAt: number;
         };
-        guide: {
-            revisionId: string | null;
-            status: 'pending' | 'running' | 'ready' | 'failed' | 'cancelled' | null;
-            providerTargetId: string | null;
-            runtimeKind: string | null;
-            modelId: string | null;
-            sessionId: string | null;
-            runId: string | null;
-            errorMessage: string | null;
-            createdAt: number | null;
-            updatedAt: number | null;
-            title: string | null;
-            steps: Array<{
-                id: string;
-                title: string;
-                rationale: string;
-                fileIds: Array<string>;
-                threadIds: Array<string>;
-                anchors: Array<{
-                    revisionId: string;
-                    fileId: string;
-                    path: string;
-                    side: 'base' | 'head';
-                    startLine: number;
-                    endLine: number;
-                    startColumn?: number;
-                    endColumn?: number;
-                    hunkHeader: string;
-                    lineHash: string;
-                    contextBeforeHash?: string;
-                    contextAfterHash?: string;
-                }>;
-                order: number;
-            }>;
-        };
         agentFixes: Array<{
             id: string;
             reviewId: string;
@@ -19963,38 +18647,13 @@ export type DeleteWorkspacesByWorkspaceIdDiffReviewsByReviewIdAgentFixesByAgentF
             } | null;
             instruction: string;
             profileId: string | null;
-            expectedOutput: 'commit' | 'working-tree-change' | 'patch-artifact';
+            expectedOutput: 'working-tree-change' | 'patch-artifact';
             status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
             sessionId: string | null;
             runId: string | null;
             artifactId: string | null;
             resultRevisionId: string | null;
             errorMessage: string | null;
-            createdAt: number;
-            updatedAt: number;
-        }>;
-        commitPlans: Array<{
-            id: string;
-            reviewId: string;
-            revisionId: string;
-            actorId: string;
-            strategy: 'manual';
-            status: 'draft' | 'accepted' | 'applied' | 'abandoned';
-            groups: Array<{
-                id: string;
-                title: string;
-                message: string;
-                rationale: string;
-                fileIds: Array<string>;
-                paths: Array<string>;
-                dependsOn: Array<string>;
-            }>;
-            conflicts: Array<{
-                fileId: string;
-                path: string;
-                groupIds: Array<string>;
-            }>;
-            rationale: string;
             createdAt: number;
             updatedAt: number;
         }>;
@@ -20002,570 +18661,6 @@ export type DeleteWorkspacesByWorkspaceIdDiffReviewsByReviewIdAgentFixesByAgentF
 };
 
 export type DeleteWorkspacesByWorkspaceIdDiffReviewsByReviewIdAgentFixesByAgentFixIdResponse = DeleteWorkspacesByWorkspaceIdDiffReviewsByReviewIdAgentFixesByAgentFixIdResponses[keyof DeleteWorkspacesByWorkspaceIdDiffReviewsByReviewIdAgentFixesByAgentFixIdResponses];
-
-export type PutWorkspacesByWorkspaceIdDiffReviewsByReviewIdCommitPlansByCommitPlanIdData = {
-    body: {
-        groups?: Array<{
-            id: string;
-            title: string;
-            message: string;
-            rationale: string;
-            fileIds: Array<string>;
-            paths?: Array<string>;
-            dependsOn: Array<string>;
-        }>;
-        rationale?: string;
-        status?: 'draft' | 'accepted' | 'abandoned';
-    };
-    path: {
-        workspaceId: string;
-        reviewId: string;
-        commitPlanId: string;
-    };
-    query?: never;
-    url: '/workspaces/{workspaceId}/diff-reviews/{reviewId}/commit-plans/{commitPlanId}';
-};
-
-export type PutWorkspacesByWorkspaceIdDiffReviewsByReviewIdCommitPlansByCommitPlanIdResponses = {
-    /**
-     * Response for status 200
-     */
-    200: {
-        id: string;
-        workspaceId: string;
-        sourceId: string | null;
-        repositoryPath: string;
-        sourceKind: 'local-working-tree' | 'local-branch-compare' | 'local-commit' | 'agent-change-set' | 'github-pull-request' | 'external-import';
-        githubPullRequest: {
-            owner: string;
-            repo: string;
-            number: string | number;
-            detail?: {
-                url: string;
-                title: string;
-                body: string | null;
-                isDraft: boolean;
-                state: 'open' | 'closed';
-                merged: boolean;
-                mergeable: boolean | null;
-                mergeableState: string;
-                headRef: string;
-                baseRef: string;
-                headSha: string | null;
-                author: {
-                    login: string;
-                    avatarUrl: string | null;
-                    url: string | null;
-                } | null;
-                reviewers: Array<{
-                    login: string;
-                    avatarUrl: string | null;
-                    url: string | null;
-                }>;
-                assignees: Array<{
-                    login: string;
-                    avatarUrl: string | null;
-                    url: string | null;
-                }>;
-                labels: Array<{
-                    name: string;
-                    color: string;
-                }>;
-                checksState: 'success' | 'failure' | 'pending' | 'neutral';
-                checks: Array<{
-                    id: string;
-                    name: string;
-                    status: 'queued' | 'in_progress' | 'completed';
-                    conclusion: string | null;
-                    url: string | null;
-                }>;
-                timeline: Array<{
-                    id: string;
-                    kind: 'comment' | 'review';
-                    author: {
-                        login: string;
-                        avatarUrl: string | null;
-                        url: string | null;
-                    } | null;
-                    body: string | null;
-                    state: string | null;
-                    createdAt: string;
-                    url: string | null;
-                }>;
-            };
-        } | null;
-        title: string;
-        status: 'open' | 'merged' | 'closed' | 'abandoned';
-        reviewState: 'unreviewed' | 'in-review' | 'changes-requested' | 'approved' | 'commented';
-        currentRevisionId: string | null;
-        createdAt: number;
-        updatedAt: number;
-        currentRevision: {
-            id: string;
-            reviewId: string;
-            sourceVersion: string;
-            patchHash: string;
-            fileCount: number;
-            additions: number;
-            deletions: number;
-            generatedAt: number;
-            patch: string;
-        } | null;
-        files: Array<{
-            id: string;
-            revisionId: string;
-            path: string;
-            previousPath: string | null;
-            status: 'added' | 'modified' | 'deleted' | 'renamed' | 'untracked';
-            additions: number;
-            deletions: number;
-            isGenerated: boolean;
-            isBinary: boolean;
-            isViewed: boolean;
-        }>;
-        threads: Array<{
-            id: string;
-            reviewId: string;
-            originalRevisionId: string;
-            currentRevisionId: string | null;
-            fileId: string | null;
-            anchor: {
-                revisionId: string;
-                fileId: string;
-                path: string;
-                side: 'base' | 'head';
-                startLine: number;
-                endLine: number;
-                startColumn?: number;
-                endColumn?: number;
-                hunkHeader: string;
-                lineHash: string;
-                contextBeforeHash?: string;
-                contextAfterHash?: string;
-            } | null;
-            state: 'open' | 'resolved' | 'stale';
-            createdBy: string;
-            createdAt: number;
-            updatedAt: number;
-            resolvedBy: string | null;
-            resolvedAt: number | null;
-            comments: Array<{
-                id: string;
-                threadId: string;
-                authorKind: 'user' | 'agent' | 'external';
-                authorId: string;
-                bodyMarkdown: string;
-                externalUrl: string | null;
-                createdAt: number;
-                updatedAt: number;
-            }>;
-        }>;
-        submissions: Array<{
-            id: string;
-            reviewId: string;
-            revisionId: string;
-            actorId: string;
-            decision: 'approve' | 'request-changes' | 'comment';
-            bodyMarkdown: string | null;
-            submittedAt: number;
-            sourceSyncState: 'local-only' | 'pending' | 'synced' | 'failed';
-        }>;
-        events: Array<{
-            id: string;
-            reviewId: string;
-            eventKind: string;
-            actorKind: 'user' | 'agent' | 'external' | 'system';
-            actorId: string | null;
-            payload: unknown;
-            createdAt: number;
-        }>;
-        preferences: {
-            id: string;
-            workspaceId: string;
-            userId: string;
-            diffStyle: 'split' | 'unified';
-            codeTheme: string;
-            fontSize: number;
-            lineHeight: number;
-            hideWhitespaceOnly: boolean;
-            structuralHighlighting: boolean;
-            collapseGeneratedFiles: boolean;
-            notificationMode: 'all-activity' | 'all-activity-by-people' | 'reviews-and-comments' | 'reviews-and-comments-by-people' | 'none';
-            createdAt: number;
-            updatedAt: number;
-        };
-        guide: {
-            revisionId: string | null;
-            status: 'pending' | 'running' | 'ready' | 'failed' | 'cancelled' | null;
-            providerTargetId: string | null;
-            runtimeKind: string | null;
-            modelId: string | null;
-            sessionId: string | null;
-            runId: string | null;
-            errorMessage: string | null;
-            createdAt: number | null;
-            updatedAt: number | null;
-            title: string | null;
-            steps: Array<{
-                id: string;
-                title: string;
-                rationale: string;
-                fileIds: Array<string>;
-                threadIds: Array<string>;
-                anchors: Array<{
-                    revisionId: string;
-                    fileId: string;
-                    path: string;
-                    side: 'base' | 'head';
-                    startLine: number;
-                    endLine: number;
-                    startColumn?: number;
-                    endColumn?: number;
-                    hunkHeader: string;
-                    lineHash: string;
-                    contextBeforeHash?: string;
-                    contextAfterHash?: string;
-                }>;
-                order: number;
-            }>;
-        };
-        agentFixes: Array<{
-            id: string;
-            reviewId: string;
-            targetRevisionId: string | null;
-            threadId: string | null;
-            anchor: {
-                revisionId: string;
-                fileId: string;
-                path: string;
-                side: 'base' | 'head';
-                startLine: number;
-                endLine: number;
-                startColumn?: number;
-                endColumn?: number;
-                hunkHeader: string;
-                lineHash: string;
-                contextBeforeHash?: string;
-                contextAfterHash?: string;
-            } | null;
-            instruction: string;
-            profileId: string | null;
-            expectedOutput: 'commit' | 'working-tree-change' | 'patch-artifact';
-            status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
-            sessionId: string | null;
-            runId: string | null;
-            artifactId: string | null;
-            resultRevisionId: string | null;
-            errorMessage: string | null;
-            createdAt: number;
-            updatedAt: number;
-        }>;
-        commitPlans: Array<{
-            id: string;
-            reviewId: string;
-            revisionId: string;
-            actorId: string;
-            strategy: 'manual';
-            status: 'draft' | 'accepted' | 'applied' | 'abandoned';
-            groups: Array<{
-                id: string;
-                title: string;
-                message: string;
-                rationale: string;
-                fileIds: Array<string>;
-                paths: Array<string>;
-                dependsOn: Array<string>;
-            }>;
-            conflicts: Array<{
-                fileId: string;
-                path: string;
-                groupIds: Array<string>;
-            }>;
-            rationale: string;
-            createdAt: number;
-            updatedAt: number;
-        }>;
-    };
-};
-
-export type PutWorkspacesByWorkspaceIdDiffReviewsByReviewIdCommitPlansByCommitPlanIdResponse = PutWorkspacesByWorkspaceIdDiffReviewsByReviewIdCommitPlansByCommitPlanIdResponses[keyof PutWorkspacesByWorkspaceIdDiffReviewsByReviewIdCommitPlansByCommitPlanIdResponses];
-
-export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdCommitPlansByCommitPlanIdApplyData = {
-    body: {
-        idempotencyKey?: string;
-    };
-    path: {
-        workspaceId: string;
-        reviewId: string;
-        commitPlanId: string;
-    };
-    query?: never;
-    url: '/workspaces/{workspaceId}/diff-reviews/{reviewId}/commit-plans/{commitPlanId}/apply';
-};
-
-export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdCommitPlansByCommitPlanIdApplyResponses = {
-    /**
-     * Response for status 200
-     */
-    200: {
-        id: string;
-        workspaceId: string;
-        sourceId: string | null;
-        repositoryPath: string;
-        sourceKind: 'local-working-tree' | 'local-branch-compare' | 'local-commit' | 'agent-change-set' | 'github-pull-request' | 'external-import';
-        githubPullRequest: {
-            owner: string;
-            repo: string;
-            number: string | number;
-            detail?: {
-                url: string;
-                title: string;
-                body: string | null;
-                isDraft: boolean;
-                state: 'open' | 'closed';
-                merged: boolean;
-                mergeable: boolean | null;
-                mergeableState: string;
-                headRef: string;
-                baseRef: string;
-                headSha: string | null;
-                author: {
-                    login: string;
-                    avatarUrl: string | null;
-                    url: string | null;
-                } | null;
-                reviewers: Array<{
-                    login: string;
-                    avatarUrl: string | null;
-                    url: string | null;
-                }>;
-                assignees: Array<{
-                    login: string;
-                    avatarUrl: string | null;
-                    url: string | null;
-                }>;
-                labels: Array<{
-                    name: string;
-                    color: string;
-                }>;
-                checksState: 'success' | 'failure' | 'pending' | 'neutral';
-                checks: Array<{
-                    id: string;
-                    name: string;
-                    status: 'queued' | 'in_progress' | 'completed';
-                    conclusion: string | null;
-                    url: string | null;
-                }>;
-                timeline: Array<{
-                    id: string;
-                    kind: 'comment' | 'review';
-                    author: {
-                        login: string;
-                        avatarUrl: string | null;
-                        url: string | null;
-                    } | null;
-                    body: string | null;
-                    state: string | null;
-                    createdAt: string;
-                    url: string | null;
-                }>;
-            };
-        } | null;
-        title: string;
-        status: 'open' | 'merged' | 'closed' | 'abandoned';
-        reviewState: 'unreviewed' | 'in-review' | 'changes-requested' | 'approved' | 'commented';
-        currentRevisionId: string | null;
-        createdAt: number;
-        updatedAt: number;
-        currentRevision: {
-            id: string;
-            reviewId: string;
-            sourceVersion: string;
-            patchHash: string;
-            fileCount: number;
-            additions: number;
-            deletions: number;
-            generatedAt: number;
-            patch: string;
-        } | null;
-        files: Array<{
-            id: string;
-            revisionId: string;
-            path: string;
-            previousPath: string | null;
-            status: 'added' | 'modified' | 'deleted' | 'renamed' | 'untracked';
-            additions: number;
-            deletions: number;
-            isGenerated: boolean;
-            isBinary: boolean;
-            isViewed: boolean;
-        }>;
-        threads: Array<{
-            id: string;
-            reviewId: string;
-            originalRevisionId: string;
-            currentRevisionId: string | null;
-            fileId: string | null;
-            anchor: {
-                revisionId: string;
-                fileId: string;
-                path: string;
-                side: 'base' | 'head';
-                startLine: number;
-                endLine: number;
-                startColumn?: number;
-                endColumn?: number;
-                hunkHeader: string;
-                lineHash: string;
-                contextBeforeHash?: string;
-                contextAfterHash?: string;
-            } | null;
-            state: 'open' | 'resolved' | 'stale';
-            createdBy: string;
-            createdAt: number;
-            updatedAt: number;
-            resolvedBy: string | null;
-            resolvedAt: number | null;
-            comments: Array<{
-                id: string;
-                threadId: string;
-                authorKind: 'user' | 'agent' | 'external';
-                authorId: string;
-                bodyMarkdown: string;
-                externalUrl: string | null;
-                createdAt: number;
-                updatedAt: number;
-            }>;
-        }>;
-        submissions: Array<{
-            id: string;
-            reviewId: string;
-            revisionId: string;
-            actorId: string;
-            decision: 'approve' | 'request-changes' | 'comment';
-            bodyMarkdown: string | null;
-            submittedAt: number;
-            sourceSyncState: 'local-only' | 'pending' | 'synced' | 'failed';
-        }>;
-        events: Array<{
-            id: string;
-            reviewId: string;
-            eventKind: string;
-            actorKind: 'user' | 'agent' | 'external' | 'system';
-            actorId: string | null;
-            payload: unknown;
-            createdAt: number;
-        }>;
-        preferences: {
-            id: string;
-            workspaceId: string;
-            userId: string;
-            diffStyle: 'split' | 'unified';
-            codeTheme: string;
-            fontSize: number;
-            lineHeight: number;
-            hideWhitespaceOnly: boolean;
-            structuralHighlighting: boolean;
-            collapseGeneratedFiles: boolean;
-            notificationMode: 'all-activity' | 'all-activity-by-people' | 'reviews-and-comments' | 'reviews-and-comments-by-people' | 'none';
-            createdAt: number;
-            updatedAt: number;
-        };
-        guide: {
-            revisionId: string | null;
-            status: 'pending' | 'running' | 'ready' | 'failed' | 'cancelled' | null;
-            providerTargetId: string | null;
-            runtimeKind: string | null;
-            modelId: string | null;
-            sessionId: string | null;
-            runId: string | null;
-            errorMessage: string | null;
-            createdAt: number | null;
-            updatedAt: number | null;
-            title: string | null;
-            steps: Array<{
-                id: string;
-                title: string;
-                rationale: string;
-                fileIds: Array<string>;
-                threadIds: Array<string>;
-                anchors: Array<{
-                    revisionId: string;
-                    fileId: string;
-                    path: string;
-                    side: 'base' | 'head';
-                    startLine: number;
-                    endLine: number;
-                    startColumn?: number;
-                    endColumn?: number;
-                    hunkHeader: string;
-                    lineHash: string;
-                    contextBeforeHash?: string;
-                    contextAfterHash?: string;
-                }>;
-                order: number;
-            }>;
-        };
-        agentFixes: Array<{
-            id: string;
-            reviewId: string;
-            targetRevisionId: string | null;
-            threadId: string | null;
-            anchor: {
-                revisionId: string;
-                fileId: string;
-                path: string;
-                side: 'base' | 'head';
-                startLine: number;
-                endLine: number;
-                startColumn?: number;
-                endColumn?: number;
-                hunkHeader: string;
-                lineHash: string;
-                contextBeforeHash?: string;
-                contextAfterHash?: string;
-            } | null;
-            instruction: string;
-            profileId: string | null;
-            expectedOutput: 'commit' | 'working-tree-change' | 'patch-artifact';
-            status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
-            sessionId: string | null;
-            runId: string | null;
-            artifactId: string | null;
-            resultRevisionId: string | null;
-            errorMessage: string | null;
-            createdAt: number;
-            updatedAt: number;
-        }>;
-        commitPlans: Array<{
-            id: string;
-            reviewId: string;
-            revisionId: string;
-            actorId: string;
-            strategy: 'manual';
-            status: 'draft' | 'accepted' | 'applied' | 'abandoned';
-            groups: Array<{
-                id: string;
-                title: string;
-                message: string;
-                rationale: string;
-                fileIds: Array<string>;
-                paths: Array<string>;
-                dependsOn: Array<string>;
-            }>;
-            conflicts: Array<{
-                fileId: string;
-                path: string;
-                groupIds: Array<string>;
-            }>;
-            rationale: string;
-            createdAt: number;
-            updatedAt: number;
-        }>;
-    };
-};
-
-export type PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdCommitPlansByCommitPlanIdApplyResponse = PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdCommitPlansByCommitPlanIdApplyResponses[keyof PostWorkspacesByWorkspaceIdDiffReviewsByReviewIdCommitPlansByCommitPlanIdApplyResponses];
 
 export type GetAcpRegistryData = {
     body?: never;
@@ -20965,6 +19060,16 @@ export type GetChatSessionsBySessionIdEventsResponses = {
 
 export type GetChatSessionsBySessionIdEventsResponse = GetChatSessionsBySessionIdEventsResponses[keyof GetChatSessionsBySessionIdEventsResponses];
 
+export type GetChatSessionsBySessionIdBlobsByBlobIdContentData = {
+    body?: never;
+    path: {
+        sessionId: string;
+        blobId: string;
+    };
+    query?: never;
+    url: '/chat/sessions/{sessionId}/blobs/{blobId}/content';
+};
+
 export type DeleteChatComposerDraftsBySurfaceIdData = {
     body?: never;
     path: {
@@ -21016,6 +19121,13 @@ export type DeleteChatComposerDraftsBySurfaceIdResponses = {
                 lineStart: number;
                 lineEnd: number;
                 comment: string;
+                position?: number;
+            } | {
+                type: 'data-cradle-intent';
+                intentId: 'review' | 'commit' | 'push';
+                name: string;
+                label: string;
+                prompt: string;
                 position?: number;
             }>;
             files: Array<{
@@ -21093,6 +19205,13 @@ export type GetChatComposerDraftsBySurfaceIdResponses = {
                 lineEnd: number;
                 comment: string;
                 position?: number;
+            } | {
+                type: 'data-cradle-intent';
+                intentId: 'review' | 'commit' | 'push';
+                name: string;
+                label: string;
+                prompt: string;
+                position?: number;
             }>;
             files: Array<{
                 type: 'file';
@@ -21155,6 +19274,13 @@ export type PutChatComposerDraftsBySurfaceIdData = {
                 lineStart: number;
                 lineEnd: number;
                 comment: string;
+                position?: number;
+            } | {
+                type: 'data-cradle-intent';
+                intentId: 'review' | 'commit' | 'push';
+                name: string;
+                label: string;
+                prompt: string;
                 position?: number;
             }>;
             files: Array<{
@@ -21222,6 +19348,13 @@ export type PutChatComposerDraftsBySurfaceIdResponses = {
                 lineStart: number;
                 lineEnd: number;
                 comment: string;
+                position?: number;
+            } | {
+                type: 'data-cradle-intent';
+                intentId: 'review' | 'commit' | 'push';
+                name: string;
+                label: string;
+                prompt: string;
                 position?: number;
             }>;
             files: Array<{
@@ -21766,6 +19899,13 @@ export type GetChatSessionsBySessionIdUiSlotStatesResponses = {
             disabledCount: number;
             errorCount: number;
             roots: Array<string>;
+            items?: Array<{
+                name: string;
+                enabled: boolean;
+                displayName: string | null;
+                iconUrl: string | null;
+                brandColor: string | null;
+            }>;
             updatedAt: number;
         } | {
             kind: 'plugin';
@@ -21836,6 +19976,14 @@ export type GetChatSessionsBySessionIdUiSlotStatesResponses = {
                     agentNickname: string | null;
                     agentRole: string | null;
                 }>;
+                retry?: {
+                    agentId: string;
+                    attempt: number;
+                    maxRetries: number;
+                    retryDelayMs: number;
+                    errorStatus: number | null;
+                    errorCategory: string;
+                } | null;
                 startedAt: number | null;
                 completedAt: number | null;
             }>;
@@ -22434,6 +20582,13 @@ export type GetChatSessionsBySessionIdQueueResponses = {
                 lineEnd: number;
                 comment: string;
                 position?: number;
+            } | {
+                type: 'data-cradle-intent';
+                intentId: 'review' | 'commit' | 'push';
+                name: string;
+                label: string;
+                prompt: string;
+                position?: number;
             }>;
             providerTargetId: string | null;
             modelId: string | null;
@@ -22498,6 +20653,13 @@ export type PostChatSessionsBySessionIdQueueData = {
             lineStart: number;
             lineEnd: number;
             comment: string;
+            position?: number;
+        } | {
+            type: 'data-cradle-intent';
+            intentId: 'review' | 'commit' | 'push';
+            name: string;
+            label: string;
+            prompt: string;
             position?: number;
         }>;
         providerTargetId?: string;
@@ -22567,6 +20729,13 @@ export type PostChatSessionsBySessionIdQueueResponses = {
             lineEnd: number;
             comment: string;
             position?: number;
+        } | {
+            type: 'data-cradle-intent';
+            intentId: 'review' | 'commit' | 'push';
+            name: string;
+            label: string;
+            prompt: string;
+            position?: number;
         }>;
         providerTargetId: string | null;
         modelId: string | null;
@@ -22630,6 +20799,13 @@ export type PostChatSessionsBySessionIdSteerData = {
             lineStart: number;
             lineEnd: number;
             comment: string;
+            position?: number;
+        } | {
+            type: 'data-cradle-intent';
+            intentId: 'review' | 'commit' | 'push';
+            name: string;
+            label: string;
+            prompt: string;
             position?: number;
         }>;
         providerTargetId?: string;
@@ -22713,6 +20889,13 @@ export type PostChatSessionsBySessionIdSteerResponses = {
                 lineStart: number;
                 lineEnd: number;
                 comment: string;
+                position?: number;
+            } | {
+                type: 'data-cradle-intent';
+                intentId: 'review' | 'commit' | 'push';
+                name: string;
+                label: string;
+                prompt: string;
                 position?: number;
             }>;
             providerTargetId: string | null;
@@ -22798,6 +20981,13 @@ export type PostChatSessionsBySessionIdQueueReorderResponses = {
                 lineEnd: number;
                 comment: string;
                 position?: number;
+            } | {
+                type: 'data-cradle-intent';
+                intentId: 'review' | 'commit' | 'push';
+                name: string;
+                label: string;
+                prompt: string;
+                position?: number;
             }>;
             providerTargetId: string | null;
             modelId: string | null;
@@ -22880,6 +21070,13 @@ export type DeleteChatSessionsBySessionIdQueueByQueueItemIdResponses = {
             lineEnd: number;
             comment: string;
             position?: number;
+        } | {
+            type: 'data-cradle-intent';
+            intentId: 'review' | 'commit' | 'push';
+            name: string;
+            label: string;
+            prompt: string;
+            position?: number;
         }>;
         providerTargetId: string | null;
         modelId: string | null;
@@ -22943,6 +21140,13 @@ export type PatchChatSessionsBySessionIdQueueByQueueItemIdData = {
             lineStart: number;
             lineEnd: number;
             comment: string;
+            position?: number;
+        } | {
+            type: 'data-cradle-intent';
+            intentId: 'review' | 'commit' | 'push';
+            name: string;
+            label: string;
+            prompt: string;
             position?: number;
         }>;
         providerTargetId?: string;
@@ -23012,6 +21216,13 @@ export type PatchChatSessionsBySessionIdQueueByQueueItemIdResponses = {
             lineStart: number;
             lineEnd: number;
             comment: string;
+            position?: number;
+        } | {
+            type: 'data-cradle-intent';
+            intentId: 'review' | 'commit' | 'push';
+            name: string;
+            label: string;
+            prompt: string;
             position?: number;
         }>;
         providerTargetId: string | null;
@@ -23234,6 +21445,13 @@ export type PostChatSessionsBySessionIdResponseData = {
             lineEnd: number;
             comment: string;
             position?: number;
+        } | {
+            type: 'data-cradle-intent';
+            intentId: 'review' | 'commit' | 'push';
+            name: string;
+            label: string;
+            prompt: string;
+            position?: number;
         }>;
         messages?: Array<{
             id: string;
@@ -23250,6 +21468,12 @@ export type PostChatSessionsBySessionIdResponseData = {
         thinkingEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
         runtimeSettings?: {
             [key: string]: string | number | boolean | null;
+        };
+        reviewTarget?: {
+            type: 'uncommittedChanges';
+        } | {
+            type: 'baseBranch';
+            branch: string;
         };
     };
     path: {
@@ -23314,6 +21538,13 @@ export type PostChatSideConversationsBySideConversationIdResponseData = {
             lineEnd: number;
             comment: string;
             position?: number;
+        } | {
+            type: 'data-cradle-intent';
+            intentId: 'review' | 'commit' | 'push';
+            name: string;
+            label: string;
+            prompt: string;
+            position?: number;
         }>;
         messages?: Array<{
             id: string;
@@ -23330,6 +21561,12 @@ export type PostChatSideConversationsBySideConversationIdResponseData = {
         thinkingEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
         runtimeSettings?: {
             [key: string]: string | number | boolean | null;
+        };
+        reviewTarget?: {
+            type: 'uncommittedChanges';
+        } | {
+            type: 'baseBranch';
+            branch: string;
         };
     };
     path: {
@@ -23388,6 +21625,85 @@ export type PostChatSessionsBySessionIdBangCommandResponses = {
 };
 
 export type PostChatSessionsBySessionIdBangCommandResponse = PostChatSessionsBySessionIdBangCommandResponses[keyof PostChatSessionsBySessionIdBangCommandResponses];
+
+export type PostChatSessionsBySessionIdBangTranscriptData = {
+    body: {
+        transcript: string;
+        command?: string;
+        durationMs?: number;
+        exitCode?: number | null;
+    };
+    path: {
+        sessionId: string;
+    };
+    query?: never;
+    url: '/chat/sessions/{sessionId}/bang-transcript';
+};
+
+export type PostChatSessionsBySessionIdBangTranscriptResponses = {
+    /**
+     * Response for status 200
+     */
+    200: {
+        command: string;
+        stdout: string;
+        stderr: string;
+        exitCode: number | null;
+        durationMs: number;
+        timedOut: boolean;
+        truncated: boolean;
+        userMessageId: string;
+        resultMessageId: string;
+        userMessage: {
+            id: string;
+            role: 'system' | 'user' | 'assistant';
+            parts: Array<{
+                type: string;
+                [key: string]: unknown;
+            }>;
+            metadata?: unknown;
+            [key: string]: unknown;
+        };
+        resultMessage: {
+            id: string;
+            role: 'system' | 'user' | 'assistant';
+            parts: Array<{
+                type: string;
+                [key: string]: unknown;
+            }>;
+            metadata?: unknown;
+            [key: string]: unknown;
+        };
+    };
+};
+
+export type PostChatSessionsBySessionIdBangTranscriptResponse = PostChatSessionsBySessionIdBangTranscriptResponses[keyof PostChatSessionsBySessionIdBangTranscriptResponses];
+
+export type PostChatSessionsBySessionIdObservationsData = {
+    body: {
+        text: string;
+        entity?: string;
+        entityType?: string;
+        durationMs?: number;
+        endReason?: string;
+    };
+    path: {
+        sessionId: string;
+    };
+    query?: never;
+    url: '/chat/sessions/{sessionId}/observations';
+};
+
+export type PostChatSessionsBySessionIdObservationsResponses = {
+    /**
+     * Response for status 200
+     */
+    200: {
+        messageId: string;
+    };
+};
+
+export type PostChatSessionsBySessionIdObservationsResponse = PostChatSessionsBySessionIdObservationsResponses[keyof PostChatSessionsBySessionIdObservationsResponses];
 
 export type PostChatSessionsBySessionIdSideChatData = {
     body: {
@@ -23607,6 +21923,52 @@ export type GetChatSessionsBySessionIdMessagesResponses = {
 };
 
 export type GetChatSessionsBySessionIdMessagesResponse = GetChatSessionsBySessionIdMessagesResponses[keyof GetChatSessionsBySessionIdMessagesResponses];
+
+export type GetChatSessionsBySessionIdMessagePreviewsData = {
+    body?: never;
+    path: {
+        sessionId: string;
+    };
+    query?: {
+        cursor?: string;
+        limit?: number;
+    };
+    url: '/chat/sessions/{sessionId}/message-previews';
+};
+
+export type GetChatSessionsBySessionIdMessagePreviewsResponses = {
+    /**
+     * Response for status 200
+     */
+    200: {
+        revision: number;
+        rows: Array<{
+            messageId: string;
+            role: 'user' | 'assistant';
+            status: 'streaming' | 'complete' | 'aborted' | 'failed';
+            errorText?: string;
+            preview: string;
+            previewTruncated: boolean;
+            parentMessageId: string | null;
+            parentToolCallId: string | null;
+            taskId: string | null;
+            depth: number;
+            message: {
+                id: string;
+                role: 'system' | 'user' | 'assistant';
+                parts: Array<{
+                    type: string;
+                    [key: string]: unknown;
+                }>;
+                metadata?: unknown;
+                [key: string]: unknown;
+            };
+        }>;
+        nextCursor: string | null;
+    };
+};
+
+export type GetChatSessionsBySessionIdMessagePreviewsResponse = GetChatSessionsBySessionIdMessagePreviewsResponses[keyof GetChatSessionsBySessionIdMessagePreviewsResponses];
 
 export type GetChatSessionsBySessionIdMessagesByMessageIdData = {
     body?: never;
@@ -27340,7 +25702,8 @@ export type GetOpencodeServerResourcesResponses = {
     /**
      * Response for status 200
      */
-    200: {
+    200: Array<{
+        hostId: string;
         running: boolean;
         pid: number | null;
         url: string | null;
@@ -27348,7 +25711,7 @@ export type GetOpencodeServerResourcesResponses = {
         uptimeSeconds: number | null;
         rssMB: number | null;
         cpuPercent: number | null;
-    };
+    }>;
 };
 
 export type GetOpencodeServerResourcesResponse = GetOpencodeServerResourcesResponses[keyof GetOpencodeServerResourcesResponses];
@@ -27364,13 +25727,16 @@ export type GetKimiServerResourcesResponses = {
     /**
      * Response for status 200
      */
-    200: {
+    200: Array<{
+        hostId: string;
+        providerTargetId: string;
+        scopeId: string;
         running: boolean;
         pid: number | null;
         rssMB: number | null;
         cpuPercent: number | null;
         url: string | null;
-    };
+    }>;
 };
 
 export type GetKimiServerResourcesResponse = GetKimiServerResourcesResponses[keyof GetKimiServerResourcesResponses];
@@ -27386,12 +25752,15 @@ export type GetCodexAppServerResourcesResponses = {
     /**
      * Response for status 200
      */
-    200: {
+    200: Array<{
+        hostId: string;
+        providerTargetId: string;
+        scopeId: string;
         running: boolean;
         pid: number | null;
         rssMB: number | null;
         cpuPercent: number | null;
-    };
+    }>;
 };
 
 export type GetCodexAppServerResourcesResponse = GetCodexAppServerResourcesResponses[keyof GetCodexAppServerResourcesResponses];

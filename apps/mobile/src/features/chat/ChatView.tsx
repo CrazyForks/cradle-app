@@ -1,15 +1,12 @@
 import type { UIMessage } from 'ai'
 import { ArrowUp, Square } from 'lucide-react-native'
 import { useRef, useState } from 'react'
-import type {
-  NativeScrollEvent,
-  NativeSyntheticEvent,
-} from 'react-native'
+import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native'
 import {
   ActivityIndicator,
+  FlatList,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -18,9 +15,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import type {
-  GetChatSessionsBySessionIdMessagesResponse,
-  GetChatSessionsBySessionIdRunSnapshotsResponse,
-  GetSessionsResponse,
+  GetChatSessionsBySessionIdMessagePreviewsResponse,
+  GetChatSessionsBySessionIdRuntimeStatusResponse,
 } from '@/api-gen'
 import { PressableScale } from '@/components/ui/pressable-scale'
 import { durationLabel } from '@/lib/format'
@@ -29,14 +25,22 @@ import { useTheme } from '@/theme/use-theme'
 
 import { ChatMessage } from './ChatMessage'
 
-type Session = GetSessionsResponse[number]
-type MessageRow = GetChatSessionsBySessionIdMessagesResponse['rows'][number]
-type RunSnapshot = GetChatSessionsBySessionIdRunSnapshotsResponse['snapshots'][number]
+type MessageRow = GetChatSessionsBySessionIdMessagePreviewsResponse['rows'][number]
+type ActiveRun = NonNullable<GetChatSessionsBySessionIdRuntimeStatusResponse['activeRun']>
+type MessageItem = { kind: 'message', row: MessageRow }
+type PendingItem = { kind: 'pending', id: string, message: UIMessage }
+type LiveItem = { kind: 'live', id: string, message: UIMessage }
+type TranscriptItem = MessageItem | PendingItem | LiveItem
 
 export interface ChatViewProps {
-  session: Session
   messages: MessageRow[]
-  activeRun?: RunSnapshot
+  activeRun?: ActiveRun
+  hasEarlier: boolean
+  isLoadingEarlier?: boolean
+  detailMessage?: UIMessage
+  detailMessageId?: string | null
+  isLoadingMessageDetail?: boolean
+  messageDetailError?: string | null
   isCancelling?: boolean
   isSending?: boolean
   isStreaming?: boolean
@@ -45,12 +49,20 @@ export interface ChatViewProps {
   queuedCount?: number
   sendError?: string | null
   onCancel: () => void
+  onLoadEarlier: () => void
+  onRequestMessageDetail: (messageId: string) => void
   onSend: (text: string) => void
 }
 
 export function ChatView({
   messages,
   activeRun,
+  hasEarlier,
+  isLoadingEarlier = false,
+  detailMessage,
+  detailMessageId = null,
+  isLoadingMessageDetail = false,
+  messageDetailError = null,
   isCancelling = false,
   isSending = false,
   isStreaming = false,
@@ -59,10 +71,12 @@ export function ChatView({
   queuedCount = 0,
   sendError = null,
   onCancel,
+  onLoadEarlier,
+  onRequestMessageDetail,
   onSend,
 }: ChatViewProps) {
   const theme = useTheme()
-  const scrollRef = useRef<ScrollView>(null)
+  const scrollRef = useRef<FlatList<TranscriptItem>>(null)
   const shouldFollowStreamRef = useRef(true)
   const [text, setText] = useState('')
 
@@ -76,7 +90,23 @@ export function ChatView({
   const showPendingUser = pendingUser
     && (!pendingUser.id || !durableIds.has(pendingUser.id))
   const showLiveMessage = liveMessage && !durableIds.has(liveMessage.id)
-  const messageCount = messages.length + (showPendingUser ? 1 : 0) + (showLiveMessage ? 1 : 0)
+  const items: TranscriptItem[] = [
+    ...messages.map(row => ({ kind: 'message' as const, row })),
+    ...(showPendingUser && pendingUser
+      ? [{
+          kind: 'pending' as const,
+          id: pendingUser.id ?? 'pending-user',
+          message: {
+            id: pendingUser.id ?? 'pending-user',
+            parts: [{ text: pendingUser.text, type: 'text' as const }],
+            role: 'user' as const,
+          },
+        }]
+      : []),
+    ...(showLiveMessage && liveMessage
+      ? [{ kind: 'live' as const, id: liveMessage.id, message: liveMessage }]
+      : []),
+  ]
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent
@@ -97,52 +127,59 @@ export function ChatView({
         style={styles.keyboard}
       >
         <View style={[styles.surface, { backgroundColor: theme.surfaceInset }]}>
-          <ScrollView
+          <FlatList
             contentContainerStyle={[
               styles.messages,
-              messageCount === 0 && styles.emptyMessages,
+              items.length === 0 && styles.emptyMessages,
             ]}
+            data={items}
             keyboardDismissMode="interactive"
             keyboardShouldPersistTaps="handled"
+            keyExtractor={item => `${item.kind}-${item.kind === 'message' ? item.row.messageId : item.id}`}
+            ListEmptyComponent={(
+              <Text style={[styles.emptyText, { color: theme.mutedForeground }]}>Start the conversation</Text>
+            )}
+            ListHeaderComponent={hasEarlier
+              ? (
+                  <View style={styles.earlierHeader}>
+                    {isLoadingEarlier && <ActivityIndicator color={theme.mutedForeground} size="small" />}
+                  </View>
+                )
+              : null}
+            maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+            onStartReached={onLoadEarlier}
+            onStartReachedThreshold={0.2}
             onContentSizeChange={followStream}
             onScroll={handleScroll}
             ref={scrollRef}
-            scrollEventThrottle={32}
-          >
-            {messageCount === 0 && (
-              <Text style={[styles.emptyText, { color: theme.mutedForeground }]}>
-                Start the conversation
-              </Text>
-            )}
-
-            {messages.map((row) => {
-              const message = liveMessage?.id === row.messageId
-                ? liveMessage
-                : row.message as UIMessage
+            renderItem={({ item }) => {
+              if (item.kind === 'message') {
+                const message = liveMessage?.id === item.row.messageId
+                  ? liveMessage
+                  : detailMessage?.id === item.row.messageId
+                    ? detailMessage
+                    : item.row.message as UIMessage
+                return (
+                  <ChatMessage
+                    errorText={item.row.errorText}
+                    isToolDetailLoading={detailMessageId === item.row.messageId && isLoadingMessageDetail}
+                    message={message}
+                    onToolPress={() => onRequestMessageDetail(item.row.messageId)}
+                    showToolDetails={detailMessageId === item.row.messageId}
+                    status={liveMessage?.id === item.row.messageId ? 'streaming' : item.row.status}
+                    toolDetailError={detailMessageId === item.row.messageId ? messageDetailError : null}
+                  />
+                )
+              }
               return (
                 <ChatMessage
-                  errorText={row.errorText}
-                  key={row.messageId}
-                  message={message}
-                  status={liveMessage?.id === row.messageId ? 'streaming' : row.status}
+                  message={item.message}
+                  status={item.kind === 'live' ? (isStreaming ? 'streaming' : 'complete') : undefined}
                 />
               )
-            })}
-
-            {showPendingUser && (
-              <ChatMessage
-                message={{
-                  id: pendingUser.id ?? 'pending-user',
-                  parts: [{ text: pendingUser.text, type: 'text' }],
-                  role: 'user',
-                }}
-              />
-            )}
-
-            {showLiveMessage && (
-              <ChatMessage message={liveMessage} status={isStreaming ? 'streaming' : 'complete'} />
-            )}
-          </ScrollView>
+            }}
+            scrollEventThrottle={32}
+          />
 
           <View
             style={[
@@ -158,7 +195,7 @@ export function ChatView({
                 <View style={[styles.progressDot, { backgroundColor: theme.success }]} />
                 <Text style={[styles.progressText, { color: theme.tertiaryForeground }]}>
                   {activeRun
-                    ? `Working ${durationLabel(activeRun.startedAt, activeRun.completedAt)}`
+                    ? `Working ${durationLabel(activeRun.startedAt, activeRun.finishedAt)}`
                     : 'Working'}
                 </Text>
                 {queuedCount > 0 && (
@@ -257,6 +294,11 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 13,
     lineHeight: 18,
+  },
+  earlierHeader: {
+    alignItems: 'center',
+    minHeight: 24,
+    paddingBottom: spacing.xs,
   },
   input: {
     flex: 1,

@@ -32,7 +32,7 @@ import { useTheme } from '@/theme/use-theme'
 import { WorkspacePickerSheet } from './WorkspacePickerSheet'
 
 type Workspace = GetWorkspacesResponse[number]
-type BaseStrategy = NonNullable<PostWorksData['body']['baseStrategy']>
+type BaseStrategy = 'source-head' | 'remote-default'
 
 interface WorkComposerProps {
   initialWorkspaceId?: string
@@ -124,7 +124,6 @@ export const WorkComposer = forwardRef<WorkComposerHandle, WorkComposerProps>(({
     const objective = text.trim()
     if (!workspace || !objective || isCreating) { return }
     onCreate({
-      baseStrategy,
       objective,
       title: objective,
       workspaceId: workspace.id,
