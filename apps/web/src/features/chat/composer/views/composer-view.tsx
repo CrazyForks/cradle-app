@@ -1242,8 +1242,8 @@ export function ComposerView({
           </div>
 
           {!inputCollapsed && !bangPtyActive && pastedTexts.length > 0 && (
-            <div className={cn('px-3 py-2 pb-0', isUltraDecoration && 'relative')}>
-              <div className="flex gap-2">
+            <div className={cn('overflow-x-auto px-3 py-2 pb-0', isUltraDecoration && 'relative')}>
+              <div className="flex min-w-full w-max gap-2">
                 <AnimatePresence mode="popLayout" initial={false}>
                   {pastedTexts.map(pastedText => (
                     <ComposerPastedTextCard
