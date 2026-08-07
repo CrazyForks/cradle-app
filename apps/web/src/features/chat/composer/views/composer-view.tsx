@@ -373,27 +373,21 @@ export function ComposerView({
   const handleAttachmentPaste = attachmentController.handlePaste
   const promptEditorRef = useRef<PromptEditorController>(null)
   const [pastedTexts, setPastedTexts] = useState<ComposerPastedText[]>([])
-  const preserveDraftOnPendingSubmitRef = useRef(false)
   const historyIndexRef = useRef<number | null>(null)
   const historyDraftRef = useRef<ComposerDraft | null>(null)
   const historyAppliedTextRef = useRef<string | null>(null)
   const actionTargetRef = useRef<HTMLDivElement>(null)
   const handleSubmitResult = useCallback((outcome: ComposerSubmitOutcome) => {
-    preserveDraftOnPendingSubmitRef.current = false
-
     if (!outcome.accepted && !outcome.restored) {
       return
     }
 
-    if (outcome.accepted && surfaceId) {
-      clearSyncedDraft()
-    }
     if (outcome.accepted || outcome.restored) {
       setPastedTexts([])
       historyIndexRef.current = null
       historyDraftRef.current = null
     }
-  }, [clearSyncedDraft, surfaceId])
+  }, [])
   const setActionTargetElement = useCallback(
     (element: HTMLDivElement | null) => {
       actionTargetRef.current = element
@@ -651,8 +645,7 @@ export function ComposerView({
         }
 
         dispatch({ type: 'slash/selected', inputValue: currentState.inputValue, command: null })
-        preserveDraftOnPendingSubmitRef.current = true
-        submitAndClearDraft({
+        const submissionStarted = submitAndClearDraft({
           appendFileParts: appendComposerFileParts,
           clearAttachments: clearComposerAttachments,
           contextParts: [],
@@ -663,6 +656,9 @@ export function ComposerView({
           text: submitText,
           onResult: handleSubmitResult,
         })
+        if (submissionStarted && surfaceId) {
+          clearSyncedDraft()
+        }
         requestAnimationFrame(() => promptEditorRef.current?.focus())
         return
       }
@@ -694,10 +690,12 @@ export function ComposerView({
       clearComposerAttachments,
       composerAttachments,
       disabled,
+      clearSyncedDraft,
       handleSubmitResult,
       isSending,
       onSlashCommandAction,
       sendDisabled,
+      surfaceId,
       submit,
     ],
   )
@@ -755,8 +753,7 @@ export function ComposerView({
         }
       }
 
-      preserveDraftOnPendingSubmitRef.current = true
-      submitAndClearDraft({
+      const submissionStarted = submitAndClearDraft({
         appendFileParts: appendComposerFileParts,
         clearAttachments: clearComposerAttachments,
         contextParts,
@@ -768,6 +765,9 @@ export function ComposerView({
         text,
         onResult: handleSubmitResult,
       })
+      if (submissionStarted && surfaceId) {
+        clearSyncedDraft()
+      }
     },
     [
       allowEmptySend,
@@ -775,6 +775,7 @@ export function ComposerView({
       bangPty,
       bangPtyActive,
       clearComposerAttachments,
+      clearSyncedDraft,
       composerAttachments,
       disabled,
       inputCollapsed,
@@ -785,6 +786,7 @@ export function ComposerView({
       submit,
       handleSubmitResult,
       pastedTexts,
+      surfaceId,
     ],
   )
 
@@ -1016,7 +1018,7 @@ export function ComposerView({
   useEffect(() => {
     onDraftChange?.(state.inputValue)
     onDraftPartsChange?.(state.inputValue, state.contextParts)
-    if (!suspendDraftPersistence && !preserveDraftOnPendingSubmitRef.current) {
+    if (!suspendDraftPersistence) {
       handleDraftPartsChange(state.inputValue, state.contextParts, composerAttachments, pastedTexts)
     }
   }, [

@@ -39,8 +39,8 @@ function submitDraft({
   onResult: (outcome: { accepted: boolean, restored: boolean }) => void
   promptEditor: PromptEditorController
   submit: () => Promise<boolean>
-}) {
-  submitAndClearDraft({
+}): boolean {
+  return submitAndClearDraft({
     appendFileParts: vi.fn<(fileParts: FileUIPart[]) => void>(),
     clearAttachments: vi.fn(),
     contextParts: [],
@@ -58,12 +58,13 @@ describe('submitAndClearDraft', () => {
     const promptEditor = createPromptEditor('Keep this objective')
     const onResult = vi.fn()
 
-    submitDraft({
+    const submissionStarted = submitDraft({
       onResult,
       promptEditor,
       submit: async () => false,
     })
 
+    expect(submissionStarted).toBe(true)
     expect(promptEditor.getText()).toBe('')
     await vi.waitFor(() => expect(promptEditor.getText()).toBe('Keep this objective'))
     expect(onResult).toHaveBeenCalledWith({ accepted: false, restored: true })
@@ -73,13 +74,35 @@ describe('submitAndClearDraft', () => {
     const promptEditor = createPromptEditor('Keep this objective')
     const onResult = vi.fn()
 
-    submitDraft({
+    const submissionStarted = submitDraft({
       onResult,
       promptEditor,
       submit: async () => true,
     })
 
+    expect(submissionStarted).toBe(true)
     await vi.waitFor(() => expect(onResult).toHaveBeenCalledWith({ accepted: true, restored: false }))
     expect(promptEditor.getText()).toBe('')
+  })
+
+  it('does not start a submission when the sender rejects it synchronously', () => {
+    const promptEditor = createPromptEditor('Keep this objective')
+    const onResult = vi.fn()
+
+    const submissionStarted = submitAndClearDraft({
+      appendFileParts: vi.fn<(fileParts: FileUIPart[]) => void>(),
+      clearAttachments: vi.fn(),
+      contextParts: [],
+      dispatch: vi.fn<(action: ComposerAction) => void>(),
+      files: [],
+      onResult,
+      promptEditor,
+      submit: () => false,
+      text: 'Keep this objective',
+    })
+
+    expect(submissionStarted).toBe(false)
+    expect(promptEditor.getText()).toBe('Keep this objective')
+    expect(onResult).toHaveBeenCalledWith({ accepted: false, restored: false })
   })
 })

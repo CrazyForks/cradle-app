@@ -111,7 +111,7 @@ export function submitAndClearDraft({
   submit: ComposerSendHandler
   text: string
   onResult?: (outcome: ComposerSubmitOutcome) => void
-}) {
+}): boolean {
   let result: ComposerSendResult | Promise<ComposerSendResult>
   try {
     result = options
@@ -121,18 +121,18 @@ export function submitAndClearDraft({
   catch (error) {
     reportComposerSubmitError(error)
     onResult?.({ accepted: false, restored: false })
-    return
+    return false
   }
 
   if (result === false) {
     onResult?.({ accepted: false, restored: false })
-    return
+    return false
   }
 
   clearSubmittedDraft({ clearAttachments, dispatch, promptEditor })
   if (!isComposerSendPromise(result)) {
     onResult?.({ accepted: true, restored: false })
-    return
+    return true
   }
 
   void result
@@ -147,6 +147,8 @@ export function submitAndClearDraft({
       restoreSubmittedDraft({ appendFileParts, contextParts, dispatch, files, promptEditor, text })
       onResult?.({ accepted: false, restored: true })
     })
+
+  return true
 }
 
 export function readBangCommandDraft(text: string): string | null {
