@@ -441,7 +441,7 @@ function mapRawResponseItemCompleted(rawParams: unknown, state: CodexAppServerMa
         responseItems: [{
           threadId: params.threadId,
           turnId: params.turnId,
-          item: params.item,
+          item: sanitizeRawResponseItem(params.item),
         }],
       },
     },
@@ -457,6 +457,16 @@ function mapRawResponseItemCompleted(rawParams: unknown, state: CodexAppServerMa
     }
   }
   return chunks
+}
+
+function sanitizeRawResponseItem(item: CodexResponseItem): CodexResponseItem {
+  if (item.type !== 'image_generation_call') {
+    return item
+  }
+
+  // The image is emitted as a separate file chunk. Keeping the base64 result
+  // in metadata duplicates megabytes in the message and every checkpoint.
+  return { ...item, result: '' }
 }
 
 function mapTurnModerationMetadata(rawParams: unknown): UIMessageChunk[] {

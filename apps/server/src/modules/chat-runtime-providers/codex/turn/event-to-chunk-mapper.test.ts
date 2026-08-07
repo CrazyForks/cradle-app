@@ -154,7 +154,7 @@ describe('mapCodexAppServerNotificationToChunks', () => {
             responseItems: [{
               threadId: 'thread-1',
               turnId: 'turn-1',
-              item,
+              item: { ...item, result: '' },
             }],
           },
         },
@@ -232,7 +232,6 @@ describe('mapCodexAppServerNotificationToChunks', () => {
           result: {
             status: 'completed',
             revisedPrompt: 'A calm interface',
-            result: imageUrl,
             savedPath: null,
           },
         },

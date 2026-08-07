@@ -1,8 +1,10 @@
+import { isInlineDataUrl } from '@cradle/chat-runtime-contracts'
 import type { UIMessageChunk } from 'ai'
 
 import { readPositiveIntegerEnv } from '../../../helpers/env'
 import { currentUnixSeconds } from '../../../helpers/time'
 import { db } from '../../../infra'
+import { externalizeMessageBlobs } from '../message-blob-externalization'
 import { toDurableMessagePayload } from '../message-durable-payload'
 import {
   flushFinalMessageProjection,
@@ -236,7 +238,11 @@ export function createActiveRunStreamController(
     chunk: UIMessageChunk,
     terminal: boolean,
   ): void {
-    if (chunk.type === 'start') {
+    const publishedChunk = !terminal && chunk.type === 'file'
+      ? externalizeLiveFileChunk(activeRun, chunk)
+      : chunk
+
+    if (publishedChunk.type === 'start') {
       activeRun.startChunkPublished = true
     }
 
@@ -247,10 +253,10 @@ export function createActiveRunStreamController(
         messageId: activeRun.messageId,
         runtimeKind: activeRun.runtimeSession.runtimeKind,
         providerSessionId: activeRun.runtimeSession.providerSessionId,
-        toolCallId: readChunkTraceToolCallId(chunk),
+        toolCallId: readChunkTraceToolCallId(publishedChunk),
         phase: 'sse_emit',
         payload: {
-          chunk,
+          chunk: publishedChunk,
           terminal,
           subscriberCount: runSubscribers.size(activeRun.runId),
         },
@@ -258,10 +264,50 @@ export function createActiveRunStreamController(
     }
 
     if (!terminal) {
-      projectFinalMessageChunk(activeRun, chunk)
+      if (publishedChunk.type !== 'file') {
+        projectFinalMessageChunk(activeRun, publishedChunk)
+      }
     }
-    activeRun.runChunkSequencer.publish(chunk, terminal)
-    runSubscribers.publish(activeRun.runId, chunk, terminal)
+    activeRun.runChunkSequencer.publish(publishedChunk, terminal)
+    runSubscribers.publish(activeRun.runId, publishedChunk, terminal)
+  }
+
+  function externalizeLiveFileChunk(
+    activeRun: ActiveRun,
+    chunk: Extract<UIMessageChunk, { type: 'file' }>,
+  ): Extract<UIMessageChunk, { type: 'file' }> {
+    projectFinalMessageChunk(activeRun, chunk)
+
+    if (!isInlineDataUrl(chunk.url)) {
+      return chunk
+    }
+
+    try {
+      const externalized = externalizeMessageBlobs({
+        sessionId: activeRun.sessionId,
+        message: activeRun.finalMessage,
+      })
+      activeRun.finalMessage = externalized
+
+      const filePart = [...externalized.parts].reverse().find(part => part.type === 'file')
+      if (filePart?.type === 'file') {
+        return {
+          ...chunk,
+          mediaType: filePart.mediaType,
+          url: filePart.url,
+        }
+      }
+    }
+    catch (error) {
+      deps.error('failed to externalize live file chunk', {
+        error,
+        sessionId: activeRun.sessionId,
+        runId: activeRun.runId,
+        messageId: activeRun.messageId,
+      })
+    }
+
+    return chunk
   }
 
   function publishRunStartChunk(activeRun: ActiveRun): void {
