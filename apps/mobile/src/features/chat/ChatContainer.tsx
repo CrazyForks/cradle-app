@@ -1,12 +1,14 @@
 import type { InfiniteData } from '@tanstack/react-query'
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query'
 import type { UIMessage } from 'ai'
 import { Stack } from 'expo-router'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import type {
+  GetChatSessionsBySessionIdCapabilitiesResponse,
   GetChatSessionsBySessionIdMessagePreviewsResponse,
   GetChatSessionsBySessionIdMessagesByMessageIdResponse,
+  GetChatSessionsBySessionIdRuntimeSettingsResponse,
   GetChatSessionsBySessionIdRuntimeStatusResponse,
   GetSessionsResponse,
 } from '@/api-gen'
@@ -20,11 +22,11 @@ import {
   writeChatHistoryCache,
 } from './chat-history-cache'
 import { consumeChatMessageStream } from './chat-stream'
+import type { ChatSubmitInput } from './ChatComposer'
 import { ChatView } from './ChatView'
 
 export function ChatContainer({ sessionId }: { sessionId: string }) {
   const { connection } = useConnection()
-  const queryClient = useQueryClient()
   const activeStreamRef = useRef<AbortController | null>(null)
   const streamingMessageIdRef = useRef<string | null>(null)
   const [isLiveStreaming, setIsLiveStreaming] = useState(false)
@@ -44,6 +46,7 @@ export function ChatContainer({ sessionId }: { sessionId: string }) {
       connection!,
       `/sessions/${encodeURIComponent(sessionId)}`,
     ),
+    refetchOnMount: 'always',
   })
   const historyQuery = useInfiniteQuery({
     enabled: Boolean(connection),
@@ -57,6 +60,7 @@ export function ChatContainer({ sessionId }: { sessionId: string }) {
       )
     },
     getNextPageParam: lastPage => lastPage.nextCursor ?? undefined,
+    refetchOnMount: 'always',
   })
   const runtimeStatusQuery = useQuery({
     enabled: Boolean(connection),
@@ -66,6 +70,22 @@ export function ChatContainer({ sessionId }: { sessionId: string }) {
       `/chat/sessions/${encodeURIComponent(sessionId)}/runtime-status`,
     ),
     refetchInterval: data => data.state.data?.status === 'idle' ? false : 5_000,
+  })
+  const capabilitiesQuery = useQuery({
+    enabled: Boolean(connection),
+    queryKey: ['chat-capabilities', connection?.url, sessionId],
+    queryFn: () => cradleRequest<GetChatSessionsBySessionIdCapabilitiesResponse>(
+      connection!,
+      `/chat/sessions/${encodeURIComponent(sessionId)}/capabilities`,
+    ),
+  })
+  const runtimeSettingsQuery = useQuery({
+    enabled: Boolean(connection),
+    queryKey: ['chat-runtime-settings', connection?.url, sessionId],
+    queryFn: () => cradleRequest<GetChatSessionsBySessionIdRuntimeSettingsResponse>(
+      connection!,
+      `/chat/sessions/${encodeURIComponent(sessionId)}/runtime-settings`,
+    ),
   })
   const detailQuery = useQuery({
     enabled: Boolean(connection && detailMessageId),
@@ -85,24 +105,20 @@ export function ChatContainer({ sessionId }: { sessionId: string }) {
     }
     let active = true
     void readChatHistoryCache(connection.url, sessionId).then((data) => {
-      if (!active || !data) {
-        return
+      if (active) {
+        setCachedHistory(data)
       }
-      setCachedHistory(data)
-      queryClient.setQueryData(historyQueryKey, data)
     })
     return () => {
       active = false
     }
-  }, [connection, historyQueryKey, queryClient, sessionId])
+  }, [connection, sessionId])
 
   useEffect(() => {
     const queryHistoryData = historyQuery.data as InfiniteData<GetChatSessionsBySessionIdMessagePreviewsResponse, string | null> | undefined
-    if (!connection || !queryHistoryData) {
-      return
+    if (connection && queryHistoryData) {
+      void writeChatHistoryCache(connection.url, sessionId, queryHistoryData)
     }
-    setCachedHistory(queryHistoryData)
-    void writeChatHistoryCache(connection.url, sessionId, queryHistoryData)
   }, [connection, historyQuery.data, sessionId])
 
   const queryHistoryData = historyQuery.data as InfiniteData<GetChatSessionsBySessionIdMessagePreviewsResponse, string | null> | undefined
@@ -172,7 +188,7 @@ export function ChatContainer({ sessionId }: { sessionId: string }) {
   }, [connection, refetchHistory, refetchRuntimeStatus, sessionId, sessionStatus])
 
   const send = useMutation({
-    mutationFn: async (text: string) => {
+    mutationFn: async ({ files, text }: ChatSubmitInput) => {
       setSendError(null)
       const controller = new AbortController()
       activeStreamRef.current = controller
@@ -185,7 +201,7 @@ export function ChatContainer({ sessionId }: { sessionId: string }) {
           connection!,
           `/chat/sessions/${encodeURIComponent(sessionId)}/response`,
           {
-            body: { text },
+            body: { files, text },
             method: 'POST',
             signal: controller.signal,
           },
@@ -223,16 +239,39 @@ export function ChatContainer({ sessionId }: { sessionId: string }) {
   })
 
   const queue = useMutation({
-    mutationFn: (text: string) => cradleRequest(
+    mutationFn: ({ files, text }: ChatSubmitInput) => cradleRequest(
       connection!,
       `/chat/sessions/${encodeURIComponent(sessionId)}/queue`,
-      { method: 'POST', body: { text } },
+      { method: 'POST', body: { files, text } },
     ),
     onError: error => setSendError(errorMessage(error)),
     onSuccess: () => {
       void refetchRuntimeStatus()
       void refetchHistory()
     },
+  })
+
+  const steer = useMutation({
+    mutationFn: ({ files, text }: ChatSubmitInput) => cradleRequest(
+      connection!,
+      `/chat/sessions/${encodeURIComponent(sessionId)}/steer`,
+      { method: 'POST', body: { files, text } },
+    ),
+    onError: error => setSendError(errorMessage(error)),
+    onSuccess: () => {
+      void refetchRuntimeStatus()
+      void refetchHistory()
+    },
+  })
+
+  const updateRuntimeSettings = useMutation({
+    mutationFn: (interactionMode: 'default' | 'plan') => cradleRequest(
+      connection!,
+      `/chat/sessions/${encodeURIComponent(sessionId)}/runtime-settings`,
+      { method: 'PATCH', body: { interactionMode } },
+    ),
+    onError: error => setSendError(errorMessage(error)),
+    onSuccess: () => void runtimeSettingsQuery.refetch(),
   })
 
   const cancel = useMutation({
@@ -247,9 +286,9 @@ export function ChatContainer({ sessionId }: { sessionId: string }) {
     },
   })
 
-  if (sessionQuery.isPending || (!historyData && historyQuery.isPending)) { return <LoadingState /> }
-  const error = sessionQuery.error ?? historyQuery.error
+  const error = sessionQuery.error ?? (!historyData ? historyQuery.error : null)
   if (error) { return <ErrorState title="Could not open conversation" description={errorMessage(error)} /> }
+  if (sessionQuery.isPending || (!historyData && historyQuery.isPending)) { return <LoadingState /> }
   if (!sessionQuery.data) { return <ErrorState title="Conversation not found" /> }
   const activeRun = runtimeStatusQuery.data?.activeRun ?? undefined
   const hasEarlier = Boolean(historyQuery.hasNextPage ?? historyData?.pages.at(-1)?.nextCursor)
@@ -264,15 +303,28 @@ export function ChatContainer({ sessionId }: { sessionId: string }) {
       <ChatView
         activeRun={activeRun}
         isCancelling={cancel.isPending}
-        isSending={send.isPending || queue.isPending}
+        capabilities={capabilitiesQuery.data}
+        isSending={send.isPending || queue.isPending || steer.isPending}
         isStreaming={isStreaming}
         liveMessage={liveMessage}
         messages={messages}
         onCancel={() => cancel.mutate()}
-        onSend={text => isStreaming ? queue.mutate(text) : send.mutate(text)}
+        onModeChange={mode => updateRuntimeSettings.mutate(mode === 'plan' ? 'plan' : 'default')}
+        onSend={(input) => {
+          if (!isStreaming) {
+            send.mutate(input)
+          }
+ else if (input.continuationMode === 'steer') {
+            steer.mutate(input)
+          }
+ else {
+            queue.mutate(input)
+          }
+        }}
         pendingUser={pendingUser}
         queuedCount={queuedCount}
         sendError={sendError}
+        runtimeSettings={runtimeSettingsQuery.data}
         hasEarlier={hasEarlier}
         isLoadingEarlier={historyQuery.isFetchingNextPage}
         detailMessage={detailQuery.data?.message as UIMessage | undefined}

@@ -1,6 +1,5 @@
 import type { UIMessage } from 'ai'
 import {
-  getToolName,
   isReasoningUIPart,
   isTextUIPart,
   isToolUIPart,
@@ -15,24 +14,30 @@ import { PressableScale } from '@/components/ui/pressable-scale'
 import { radius, spacing } from '@/theme/tokens'
 import { useTheme } from '@/theme/use-theme'
 
+import { ChatActivitySheet } from './ChatActivitySheet'
+
 interface ChatMessageProps {
   errorText?: string | null
-  isToolDetailLoading?: boolean
+  activityError?: string | null
+  activityMessage?: UIMessage
+  isActivityLoading?: boolean
   message: UIMessage
-  onToolPress?: () => void
-  showToolDetails?: boolean
+  onActivityClose?: () => void
+  onActivityPress?: () => void
   status?: 'streaming' | 'complete' | 'aborted' | 'failed'
-  toolDetailError?: string | null
+  showActivitySheet?: boolean
 }
 
 function ChatMessageContent({
+  activityError = null,
+  activityMessage,
   errorText = null,
-  isToolDetailLoading = false,
+  isActivityLoading = false,
   message,
-  onToolPress,
-  showToolDetails = false,
+  onActivityClose,
+  onActivityPress,
   status = 'complete',
-  toolDetailError = null,
+  showActivitySheet = false,
 }: ChatMessageProps) {
   const theme = useTheme()
 
@@ -47,6 +52,13 @@ function ChatMessageContent({
       </View>
     )
   }
+
+  const activityParts = message.parts.filter(part => isReasoningUIPart(part) || isToolUIPart(part))
+  const toolParts = message.parts.filter(isToolUIPart)
+  const running = toolParts.some(part => part.state === 'input-streaming'
+    || part.state === 'input-available'
+    || part.state === 'approval-requested')
+  const failed = toolParts.some(part => part.state === 'output-error' || part.state === 'output-denied')
 
   return (
     <View style={styles.assistantMessage}>
@@ -122,77 +134,38 @@ function ChatMessageContent({
         }
 
         if (isReasoningUIPart(part)) {
-          if (!part.text) { return null }
-          return (
-            <View
-              // Reasoning parts have no protocol id; their position is stable for the life of a message.
-              // eslint-disable-next-line react/no-array-index-key
-              key={`reasoning-${index}`}
-              style={[styles.reasoning, { borderLeftColor: theme.border }]}
-            >
-              <Text selectable style={[styles.reasoningText, { color: theme.mutedForeground }]}>
-                {part.text}
-              </Text>
-            </View>
-          )
+          return null
         }
 
         if (isToolUIPart(part)) {
-          const running = part.state === 'input-streaming'
-            || part.state === 'input-available'
-            || part.state === 'approval-requested'
-          const failed = part.state === 'output-error' || part.state === 'output-denied'
-          const payload = showToolDetails
-            ? ('output' in part && part.output !== undefined ? part.output : 'input' in part ? part.input : undefined)
-            : undefined
-          const payloadText = payload === undefined ? null : JSON.stringify(payload, null, 2)
-          return (
-            <PressableScale
-              key={part.toolCallId}
-              accessibilityLabel={`Open ${part.title ?? getToolName(part)} details`}
-              accessibilityRole="button"
-              disabled={!onToolPress}
-              onPress={onToolPress}
-              style={[
-                styles.tool,
-                {
-                  backgroundColor: theme.surface,
-                  borderColor: theme.border,
-                },
-              ]}
-            >
-              <View style={styles.toolHeader}>
-                <View style={styles.toolIcon}>
-                  {running
-                    ? <ActivityIndicator color={theme.tertiaryForeground} size="small" />
-                    : failed
-                      ? <CircleAlert color={theme.destructive} size={15} />
-                      : <Check color={theme.success} size={15} />}
-                </View>
-                <Wrench color={theme.tertiaryForeground} size={14} />
-                <Text numberOfLines={1} style={[styles.toolName, { color: theme.tertiaryForeground }]}>
-                  {part.title ?? getToolName(part)}
-                </Text>
-              </View>
-              {payloadText && (
-                <Text selectable style={[styles.toolPayload, { color: theme.mutedForeground }]}>
-                  {payloadText}
-                </Text>
-              )}
-              {showToolDetails && isToolDetailLoading && (
-                <ActivityIndicator color={theme.mutedForeground} size="small" />
-              )}
-              {showToolDetails && toolDetailError && (
-                <Text style={[styles.toolPayload, { color: theme.destructive }]}>
-                  {toolDetailError}
-                </Text>
-              )}
-            </PressableScale>
-          )
+          return null
         }
 
         return null
       })}
+
+      {activityParts.length > 0 && (
+        <PressableScale
+          accessibilityLabel="Open activity feed"
+          accessibilityRole="button"
+          disabled={!onActivityPress}
+          onPress={onActivityPress}
+          style={[styles.activitySummary, { backgroundColor: theme.surfaceInset }]}
+        >
+          <View style={styles.activityIcon}>
+            {running
+              ? <ActivityIndicator color={theme.tertiaryForeground} size="small" />
+              : failed
+                ? <CircleAlert color={theme.destructive} size={15} />
+                : <Check color={theme.success} size={15} />}
+          </View>
+          <Wrench color={theme.tertiaryForeground} size={14} />
+          <Text style={[styles.activityLabel, { color: theme.tertiaryForeground }]}>
+            {running ? 'Working' : `${toolParts.length || activityParts.length} activities`}
+          </Text>
+          <Text style={[styles.activityHint, { color: theme.mutedForeground }]}>Tap to view</Text>
+        </PressableScale>
+      )}
 
       {status === 'streaming' && (
         <Text accessibilityLabel="Streaming response" style={[styles.cursor, { color: theme.foreground }]}>
@@ -205,6 +178,14 @@ function ChatMessageContent({
       {status === 'failed' && errorText && (
         <Text style={[styles.terminalStatus, { color: theme.destructive }]}>{errorText}</Text>
       )}
+
+      <ChatActivitySheet
+        error={activityError}
+        isLoading={isActivityLoading}
+        message={activityMessage ?? message}
+        onClose={onActivityClose ?? (() => {})}
+        visible={showActivitySheet}
+      />
     </View>
   )
 }
@@ -216,53 +197,36 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     gap: spacing.sm,
   },
+  activityHint: {
+    flex: 1,
+    fontSize: 11,
+  },
+  activityIcon: {
+    alignItems: 'center',
+    height: 16,
+    justifyContent: 'center',
+    width: 16,
+  },
+  activityLabel: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  activitySummary: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderRadius: radius.lg,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    minHeight: 32,
+    paddingHorizontal: spacing.sm,
+  },
   cursor: {
     fontSize: 13,
     lineHeight: 16,
   },
-  reasoning: {
-    borderLeftWidth: 2,
-    paddingLeft: spacing.sm,
-  },
-  reasoningText: {
-    fontSize: 12,
-    lineHeight: 18,
-  },
   terminalStatus: {
     fontSize: 12,
     lineHeight: 18,
-  },
-  tool: {
-    alignSelf: 'flex-start',
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    maxWidth: '100%',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-  },
-  toolHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.xs,
-    minHeight: 22,
-  },
-  toolIcon: {
-    alignItems: 'center',
-    height: 18,
-    justifyContent: 'center',
-    width: 18,
-  },
-  toolName: {
-    flexShrink: 1,
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  toolPayload: {
-    fontFamily: 'GeistMono_400Regular',
-    fontSize: 11,
-    lineHeight: 16,
-    maxWidth: 300,
-    paddingTop: spacing.xs,
   },
   userBubble: {
     alignSelf: 'flex-end',

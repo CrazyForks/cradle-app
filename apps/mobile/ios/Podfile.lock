@@ -41,6 +41,8 @@ PODS:
     - ExpoModulesCore
   - ExpoHaptics (57.0.1):
     - ExpoModulesCore
+  - ExpoImagePicker (57.0.7):
+    - ExpoModulesCore
   - ExpoKeepAwake (57.0.1):
     - ExpoModulesCore
   - ExpoLinking (57.0.5):
@@ -2326,6 +2328,7 @@ DEPENDENCIES:
   - "ExpoFont (from `../../../../../Library/pnpm/store/v11/links/@/expo-font/57.0.1/4c51d8fe60c3f3abfc6fddb9a1fe055b44b40366aab63ceeac7cbb3b203c7cd7/node_modules/expo-font/ios/ExpoFont.podspec`)"
   - "ExpoGlassEffect (from `../../../../../Library/pnpm/store/v11/links/@/expo-glass-effect/57.0.1/53db50714fea0de65181ab05ec0f766ab8091f9b3e24b46095e8b68d5fa08db5/node_modules/expo-glass-effect/ios`)"
   - "ExpoHaptics (from `../../../../../Library/pnpm/store/v11/links/@/expo-haptics/57.0.1/c31367060702bd6c3ad99d0efa29fdf23a0ff18fb43a125ddb957908ab51d3d5/node_modules/expo-haptics/ios`)"
+  - "ExpoImagePicker (from `../../../../../Library/pnpm/store/v11/links/@/expo-image-picker/57.0.7/9f00fd6a5ca5cac6ba1bd27fe6bfd61204403f51650c6f0afe12654986715c66/node_modules/expo-image-picker/ios`)"
   - "ExpoKeepAwake (from `../../../../../Library/pnpm/store/v11/links/@/expo-keep-awake/57.0.1/60fc3553dc3c5b80b2f42e9bd151136f5d0a4aa638a2907dae491965a47153d5/node_modules/expo-keep-awake/ios`)"
   - "ExpoLinking (from `../../../../../Library/pnpm/store/v11/links/@/expo-linking/57.0.5/0a2521732779e84876e2dfc6cb5b1288ae3086573d7b100653ca119be7bcdc0a/node_modules/expo-linking/ios`)"
   - "ExpoLogBox (from `../../../../../Library/pnpm/store/v11/links/@expo/log-box/57.0.2/16c227526394b58b312fd12518a9a441018f7765cb36e58af0e89ae742b61b75/node_modules/@expo/log-box`)"
@@ -2441,6 +2444,8 @@ EXTERNAL SOURCES:
     :path: "../../../../../Library/pnpm/store/v11/links/@/expo-glass-effect/57.0.1/53db50714fea0de65181ab05ec0f766ab8091f9b3e24b46095e8b68d5fa08db5/node_modules/expo-glass-effect/ios"
   ExpoHaptics:
     :path: "../../../../../Library/pnpm/store/v11/links/@/expo-haptics/57.0.1/c31367060702bd6c3ad99d0efa29fdf23a0ff18fb43a125ddb957908ab51d3d5/node_modules/expo-haptics/ios"
+  ExpoImagePicker:
+    :path: "../../../../../Library/pnpm/store/v11/links/@/expo-image-picker/57.0.7/9f00fd6a5ca5cac6ba1bd27fe6bfd61204403f51650c6f0afe12654986715c66/node_modules/expo-image-picker/ios"
   ExpoKeepAwake:
     :path: "../../../../../Library/pnpm/store/v11/links/@/expo-keep-awake/57.0.1/60fc3553dc3c5b80b2f42e9bd151136f5d0a4aa638a2907dae491965a47153d5/node_modules/expo-keep-awake/ios"
   ExpoLinking:
@@ -2641,6 +2646,7 @@ SPEC CHECKSUMS:
   ExpoFont: 59e1faf66ba9bcd232ae1e2ce58d202a48b6f65e
   ExpoGlassEffect: 4b62afb489e6b84357701737ce002137c9d5fdbc
   ExpoHaptics: 4503d2da51ff7109712ccdfe0e4939f66818183e
+  ExpoImagePicker: 53793977b6f686c3f1230739a1dbe7178a9cef80
   ExpoKeepAwake: c26f14275017370cc8a4b7b43a0e23361f2053a5
   ExpoLinking: a516e12e2cb5af6eaeea32809c6a6ede1a7da8bb
   ExpoLogBox: 6bb73c341aca22e699bd4da6cc61afc844e1a648

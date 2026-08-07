@@ -1,16 +1,12 @@
 import type { MenuAction } from '@expo/ui/community/menu'
 import { MenuView } from '@expo/ui/community/menu'
-import {
-  GlassView,
-  isGlassEffectAPIAvailable,
-  isLiquidGlassAvailable,
-} from 'expo-glass-effect'
 import { ArrowUp, ChevronDown, GitBranch, Plus } from 'lucide-react-native'
 import {
   forwardRef,
   useCallback,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
 } from 'react'
@@ -18,13 +14,18 @@ import {
   ActivityIndicator,
   Animated,
   Keyboard,
+  PanResponder,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import type { GetWorkspacesResponse, PostWorksData } from '@/api-gen'
+import { NativeMaterialView } from '@/components/ui/native-material-view'
 import { PressableScale } from '@/components/ui/pressable-scale'
 import { radius, spacing } from '@/theme/tokens'
 import { useTheme } from '@/theme/use-theme'
@@ -33,6 +34,7 @@ import { WorkspacePickerSheet } from './WorkspacePickerSheet'
 
 type Workspace = GetWorkspacesResponse[number]
 type BaseStrategy = 'source-head' | 'remote-default'
+type ComposerSnap = 0 | 0.5 | 1
 
 interface WorkComposerProps {
   initialWorkspaceId?: string
@@ -55,8 +57,6 @@ const baseStrategies: Array<{
   { image: 'cloud', label: 'Remote default branch', value: 'remote-default' },
 ]
 
-const supportsLiquidGlass = isGlassEffectAPIAvailable() && isLiquidGlassAvailable()
-
 export const WorkComposer = forwardRef<WorkComposerHandle, WorkComposerProps>(({
   initialWorkspaceId,
   isCreating,
@@ -65,10 +65,16 @@ export const WorkComposer = forwardRef<WorkComposerHandle, WorkComposerProps>(({
   workspaces,
 }, ref) => {
   const theme = useTheme()
+  const insets = useSafeAreaInsets()
+  const { height: windowHeight } = useWindowDimensions()
   const inputRef = useRef<TextInput>(null)
   const initialWorkspaceIdRef = useRef(initialWorkspaceId)
   const isClosingRef = useRef(false)
   const workspacePickerOpenRef = useRef(false)
+  const dragStartRef = useRef(0.5)
+  const isDraggingRef = useRef(false)
+  const gestureCandidateRef = useRef(false)
+  const blurGuardUntilRef = useRef(0)
   const expansion = useRef(new Animated.Value(0)).current
   const [expanded, setExpanded] = useState(false)
   const [workspaceId, setWorkspaceId] = useState(
@@ -77,8 +83,30 @@ export const WorkComposer = forwardRef<WorkComposerHandle, WorkComposerProps>(({
   const [workspacePickerOpen, setWorkspacePickerOpen] = useState(false)
   const [baseStrategy, setBaseStrategy] = useState<BaseStrategy>('source-head')
   const [text, setText] = useState('')
+  const [keyboardTop, setKeyboardTop] = useState<number | null>(() => Keyboard.metrics()?.screenY ?? null)
   const workspace = workspaces.find(item => item.id === workspaceId) ?? workspaces[0]
   const base = baseStrategies.find(item => item.value === baseStrategy) ?? baseStrategies[0]!
+  const composerMaxHeight = keyboardTop === null
+    ? Math.min(windowHeight * 0.74, 620)
+    : Math.max(
+        218,
+        Math.min(windowHeight * 0.74, keyboardTop - insets.top - spacing.md),
+      )
+
+  useEffect(() => {
+    const changeEvent = Platform.OS === 'ios' ? 'keyboardWillChangeFrame' : 'keyboardDidShow'
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
+    const change = Keyboard.addListener(changeEvent, (event) => {
+      setKeyboardTop(event.endCoordinates.screenY)
+    })
+    const hide = Keyboard.addListener(hideEvent, () => {
+      setKeyboardTop(null)
+    })
+    return () => {
+      change.remove()
+      hide.remove()
+    }
+  }, [])
 
   useEffect(() => {
     const nextWorkspaceId = initialWorkspaceId ?? workspaces[0]?.id ?? ''
@@ -89,36 +117,80 @@ export const WorkComposer = forwardRef<WorkComposerHandle, WorkComposerProps>(({
     initialWorkspaceIdRef.current = initialWorkspaceId
   }, [initialWorkspaceId, workspaceId, workspaces])
 
+  const animateTo = useCallback((target: ComposerSnap, focus = false) => {
+    if (target === 0) {
+      isClosingRef.current = true
+      inputRef.current?.blur()
+      Keyboard.dismiss()
+    }
+    else {
+      setExpanded(true)
+    }
+    expansion.stopAnimation()
+    Animated.spring(expansion, {
+      damping: 34,
+      mass: 1,
+      stiffness: 520,
+      toValue: target,
+      useNativeDriver: false,
+    }).start(({ finished }) => {
+      if (!finished) { return }
+      if (target === 0) {
+        setExpanded(false)
+        isClosingRef.current = false
+      }
+      else if (focus) {
+        inputRef.current?.focus()
+      }
+    })
+  }, [expansion])
+
   const open = () => {
     if (expanded || isClosingRef.current) { return }
-    setExpanded(true)
-    Animated.spring(expansion, {
-      damping: 40,
-      mass: 1,
-      stiffness: 600,
-      toValue: 1,
-      useNativeDriver: false,
-    }).start(() => inputRef.current?.focus())
+    animateTo(0.5, true)
   }
 
   const close = useCallback(() => {
     if (!expanded || isClosingRef.current) { return }
-    isClosingRef.current = true
-    inputRef.current?.blur()
-    Keyboard.dismiss()
-    Animated.spring(expansion, {
-      damping: 40,
-      mass: 1,
-      stiffness: 600,
-      toValue: 0,
-      useNativeDriver: false,
-    }).start(() => {
-      setExpanded(false)
-      isClosingRef.current = false
-    })
-  }, [expanded, expansion])
+    animateTo(0)
+  }, [animateTo, expanded])
 
   useImperativeHandle(ref, () => ({ collapse: close }), [close])
+
+  const panResponder = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_, gesture) =>
+      Math.abs(gesture.dy) > 6 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+    onPanResponderGrant: () => {
+      isDraggingRef.current = true
+      expansion.stopAnimation((value) => {
+        dragStartRef.current = value
+      })
+    },
+    onPanResponderMove: (_, gesture) => {
+      const next = Math.max(0, Math.min(1, dragStartRef.current - gesture.dy / 320))
+      expansion.setValue(next)
+    },
+    onPanResponderRelease: (_, gesture) => {
+      isDraggingRef.current = false
+      blurGuardUntilRef.current = Date.now() + 260
+      gestureCandidateRef.current = false
+      const current = Math.max(0, Math.min(1, dragStartRef.current - gesture.dy / 320))
+      const projected = Math.max(0, Math.min(1, current - gesture.vy * 0.16))
+      const target: ComposerSnap = projected < 0.25
+        ? 0
+        : projected < 0.75
+          ? 0.5
+          : 1
+      animateTo(target, target > 0 && dragStartRef.current === 0)
+    },
+    onPanResponderTerminate: () => {
+      isDraggingRef.current = false
+      blurGuardUntilRef.current = Date.now() + 260
+      gestureCandidateRef.current = false
+      animateTo(dragStartRef.current < 0.25 ? 0 : dragStartRef.current < 0.75 ? 0.5 : 1)
+    },
+    onPanResponderTerminationRequest: () => false,
+  }), [animateTo, expansion])
 
   const submit = () => {
     const objective = text.trim()
@@ -194,8 +266,8 @@ export const WorkComposer = forwardRef<WorkComposerHandle, WorkComposerProps>(({
             borderColor: theme.input,
             borderRadius: frameRadius,
             height: expansion.interpolate({
-              inputRange: [0, 1],
-              outputRange: [58, 218],
+              inputRange: [0, 0.5, 1],
+              outputRange: [58, 218, composerMaxHeight],
             }),
             shadowColor: theme.shadow,
             shadowOpacity: theme.shadowOpacity,
@@ -210,23 +282,27 @@ export const WorkComposer = forwardRef<WorkComposerHandle, WorkComposerProps>(({
           style={[
             styles.composerSurface,
             {
-              backgroundColor: supportsLiquidGlass ? 'transparent' : theme.surface,
+              backgroundColor: 'transparent',
               borderRadius: surfaceRadius,
             },
           ]}
         >
-          {supportsLiquidGlass && (
-            <GlassView
-              colorScheme={theme.isDark ? 'dark' : 'light'}
-              glassEffectStyle="regular"
-              pointerEvents="none"
-              style={styles.glass}
-              tintColor={theme.glassTint}
-            />
-          )}
+          <NativeMaterialView
+            glassStyle="regular"
+            pointerEvents="none"
+            style={styles.glass}
+            tintColor={theme.glassTint}
+          />
 
           <Animated.View
             pointerEvents={expanded ? 'none' : 'auto'}
+            onTouchStart={() => {
+              gestureCandidateRef.current = true
+            }}
+            onTouchEnd={() => {
+              gestureCandidateRef.current = false
+              blurGuardUntilRef.current = Date.now() + 260
+            }}
             style={[
               styles.collapsedStage,
               {
@@ -240,31 +316,45 @@ export const WorkComposer = forwardRef<WorkComposerHandle, WorkComposerProps>(({
               },
             ]}
           >
-            <PressableScale
-              accessibilityLabel="Open Work Composer"
-              accessibilityRole="button"
-              haptic
-              onPress={open}
-              style={styles.collapsedPressable}
-            >
-              <View style={[styles.collapsedAdd, { backgroundColor: theme.muted }]}>
-                <Plus color={theme.tertiaryForeground} size={22} />
-              </View>
-              <Text numberOfLines={1} style={[styles.placeholder, { color: theme.mutedForeground }]}>
-                Plan, ask, build...
-              </Text>
-            </PressableScale>
+            <View {...panResponder.panHandlers} style={styles.collapsedGesture}>
+              <PressableScale
+                accessibilityLabel="Open Work Composer"
+                accessibilityRole="button"
+                haptic
+                onPress={open}
+                style={styles.collapsedPressable}
+              >
+                <View style={[styles.collapsedAdd, { backgroundColor: theme.muted }]}>
+                  <Plus color={theme.tertiaryForeground} size={22} />
+                </View>
+                <Text numberOfLines={1} style={[styles.placeholder, { color: theme.mutedForeground }]}>
+                  Plan, ask, build...
+                </Text>
+              </PressableScale>
+            </View>
           </Animated.View>
 
           <View pointerEvents={expanded ? 'auto' : 'none'} style={styles.expandedStage}>
-            <PressableScale
-              accessibilityLabel="Collapse Work Composer"
-              accessibilityRole="button"
-              onPress={close}
-              style={styles.handleButton}
+            <View
+              {...panResponder.panHandlers}
+              onTouchStart={() => {
+                gestureCandidateRef.current = true
+              }}
+              onTouchEnd={() => {
+                gestureCandidateRef.current = false
+                blurGuardUntilRef.current = Date.now() + 260
+              }}
+              style={styles.handleGesture}
             >
-              <View style={[styles.handle, { backgroundColor: theme.muted }]} />
-            </PressableScale>
+              <PressableScale
+                accessibilityLabel="Resize Work Composer"
+                accessibilityRole="adjustable"
+                onPress={close}
+                style={styles.handleButton}
+              >
+                <View style={[styles.handle, { backgroundColor: theme.muted }]} />
+              </PressableScale>
+            </View>
 
             <Animated.View
               style={[
@@ -328,7 +418,14 @@ export const WorkComposer = forwardRef<WorkComposerHandle, WorkComposerProps>(({
                 maxLength={12_000}
                 multiline
                 onBlur={() => {
-                  if (!workspacePickerOpenRef.current) { close() }
+                  if (
+                    !workspacePickerOpenRef.current
+                    && !isDraggingRef.current
+                    && !gestureCandidateRef.current
+                    && Date.now() > blurGuardUntilRef.current
+                  ) {
+                    close()
+                  }
                 }}
                 onChangeText={setText}
                 placeholder="Plan, ask, build..."
@@ -441,6 +538,9 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     zIndex: 2,
   },
+  collapsedGesture: {
+    flex: 1,
+  },
   composerFrame: {
     borderWidth: 1,
     shadowOffset: { height: 1, width: 0 },
@@ -490,9 +590,12 @@ const styles = StyleSheet.create({
     height: 4,
     width: 40,
   },
+  handleGesture: {
+    height: 32,
+  },
   handleButton: {
     alignItems: 'center',
-    height: 20,
+    height: 32,
     justifyContent: 'center',
   },
   input: {

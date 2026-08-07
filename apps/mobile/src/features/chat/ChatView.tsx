@@ -1,28 +1,32 @@
 import type { UIMessage } from 'ai'
-import { ArrowUp, Square } from 'lucide-react-native'
-import { useRef, useState } from 'react'
-import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native'
+import { Square } from 'lucide-react-native'
+import { useRef } from 'react'
+import type { NativeSyntheticEvent, NativeTouchEvent } from 'react-native'
 import {
   ActivityIndicator,
+  Animated,
   FlatList,
-  KeyboardAvoidingView,
-  Platform,
+  Keyboard,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import type {
+  GetChatSessionsBySessionIdCapabilitiesResponse,
   GetChatSessionsBySessionIdMessagePreviewsResponse,
+  GetChatSessionsBySessionIdRuntimeSettingsResponse,
   GetChatSessionsBySessionIdRuntimeStatusResponse,
 } from '@/api-gen'
 import { PressableScale } from '@/components/ui/pressable-scale'
+import { useKeyboardOffset } from '@/hooks/use-keyboard-offset'
 import { durationLabel } from '@/lib/format'
-import { radius, spacing } from '@/theme/tokens'
+import { spacing } from '@/theme/tokens'
 import { useTheme } from '@/theme/use-theme'
 
+import type { ChatSubmitInput } from './ChatComposer'
+import { ChatComposer } from './ChatComposer'
 import { ChatMessage } from './ChatMessage'
 
 type MessageRow = GetChatSessionsBySessionIdMessagePreviewsResponse['rows'][number]
@@ -33,6 +37,7 @@ type LiveItem = { kind: 'live', id: string, message: UIMessage }
 type TranscriptItem = MessageItem | PendingItem | LiveItem
 
 export interface ChatViewProps {
+  capabilities?: GetChatSessionsBySessionIdCapabilitiesResponse
   messages: MessageRow[]
   activeRun?: ActiveRun
   hasEarlier: boolean
@@ -50,11 +55,14 @@ export interface ChatViewProps {
   sendError?: string | null
   onCancel: () => void
   onLoadEarlier: () => void
-  onRequestMessageDetail: (messageId: string) => void
-  onSend: (text: string) => void
+  onModeChange: (mode: 'build' | 'plan') => void
+  onRequestMessageDetail: (messageId: string | null) => void
+  onSend: (input: ChatSubmitInput) => void
+  runtimeSettings?: GetChatSessionsBySessionIdRuntimeSettingsResponse
 }
 
 export function ChatView({
+  capabilities,
   messages,
   activeRun,
   hasEarlier,
@@ -72,20 +80,20 @@ export function ChatView({
   sendError = null,
   onCancel,
   onLoadEarlier,
+  onModeChange,
   onRequestMessageDetail,
   onSend,
+  runtimeSettings,
 }: ChatViewProps) {
   const theme = useTheme()
-  const scrollRef = useRef<FlatList<TranscriptItem>>(null)
-  const shouldFollowStreamRef = useRef(true)
-  const [text, setText] = useState('')
-
-  const submit = () => {
-    const next = text.trim()
-    if (!next || isSending) { return }
-    setText('')
-    onSend(next)
-  }
+  const keyboardOffset = useKeyboardOffset(true, spacing.xs)
+  const keyboardInset = keyboardOffset.interpolate({
+    inputRange: [-600, 0],
+    outputRange: [600, 0],
+    extrapolate: 'clamp',
+  })
+  const listTouchStartRef = useRef({ pageX: 0, pageY: 0 })
+  const listTouchMovedRef = useRef(false)
   const durableIds = new Set(messages.map(row => row.messageId))
   const showPendingUser = pendingUser
     && (!pendingUser.id || !durableIds.has(pendingUser.id))
@@ -108,50 +116,60 @@ export function ChatView({
       : []),
   ]
 
-  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent
-    shouldFollowStreamRef.current = contentSize.height - layoutMeasurement.height - contentOffset.y < 72
+  const displayItems = [...items].reverse()
+  const handleEndReached = () => {
+    if (hasEarlier && !isLoadingEarlier) { onLoadEarlier() }
   }
-
-  const followStream = () => {
-    if (shouldFollowStreamRef.current) {
-      scrollRef.current?.scrollToEnd({ animated: false })
+  const handleListTouchStart = (event: NativeSyntheticEvent<NativeTouchEvent>) => {
+    listTouchStartRef.current = {
+      pageX: event.nativeEvent.pageX,
+      pageY: event.nativeEvent.pageY,
     }
+    listTouchMovedRef.current = false
+  }
+  const handleListTouchMove = (event: NativeSyntheticEvent<NativeTouchEvent>) => {
+    const dx = event.nativeEvent.pageX - listTouchStartRef.current.pageX
+    const dy = event.nativeEvent.pageY - listTouchStartRef.current.pageY
+    if (Math.hypot(dx, dy) > 8) { listTouchMovedRef.current = true }
+  }
+  const handleListTouchEnd = () => {
+    if (!listTouchMovedRef.current) { Keyboard.dismiss() }
+    listTouchMovedRef.current = false
   }
 
   return (
     <SafeAreaView edges={['bottom']} style={[styles.safeArea, { backgroundColor: theme.chrome }]}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={0}
-        style={styles.keyboard}
-      >
+      <View style={styles.keyboard}>
         <View style={[styles.surface, { backgroundColor: theme.surfaceInset }]}>
           <FlatList
             contentContainerStyle={[
               styles.messages,
-              items.length === 0 && styles.emptyMessages,
+              displayItems.length === 0 && styles.emptyMessages,
             ]}
-            data={items}
-            keyboardDismissMode="interactive"
-            keyboardShouldPersistTaps="handled"
+            data={displayItems}
+            inverted
+            keyboardDismissMode="none"
+            keyboardShouldPersistTaps="always"
+            ListHeaderComponent={(
+              <Animated.View pointerEvents="none" style={[styles.keyboardSpacer, { height: keyboardInset }]} />
+            )}
             keyExtractor={item => `${item.kind}-${item.kind === 'message' ? item.row.messageId : item.id}`}
             ListEmptyComponent={(
               <Text style={[styles.emptyText, { color: theme.mutedForeground }]}>Start the conversation</Text>
             )}
-            ListHeaderComponent={hasEarlier
+            ListFooterComponent={hasEarlier
               ? (
                   <View style={styles.earlierHeader}>
                     {isLoadingEarlier && <ActivityIndicator color={theme.mutedForeground} size="small" />}
                   </View>
-                )
+              )
               : null}
             maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
-            onStartReached={onLoadEarlier}
-            onStartReachedThreshold={0.2}
-            onContentSizeChange={followStream}
-            onScroll={handleScroll}
-            ref={scrollRef}
+            onEndReached={handleEndReached}
+            onEndReachedThreshold={0.2}
+            onTouchEnd={handleListTouchEnd}
+            onTouchMove={handleListTouchMove}
+            onTouchStart={handleListTouchStart}
             renderItem={({ item }) => {
               if (item.kind === 'message') {
                 const message = liveMessage?.id === item.row.messageId
@@ -161,32 +179,41 @@ export function ChatView({
                     : item.row.message as UIMessage
                 return (
                   <ChatMessage
+                    activityError={detailMessageId === item.row.messageId ? messageDetailError : null}
+                    activityMessage={detailMessageId === item.row.messageId ? detailMessage : undefined}
                     errorText={item.row.errorText}
-                    isToolDetailLoading={detailMessageId === item.row.messageId && isLoadingMessageDetail}
+                    isActivityLoading={detailMessageId === item.row.messageId && isLoadingMessageDetail}
                     message={message}
-                    onToolPress={() => onRequestMessageDetail(item.row.messageId)}
-                    showToolDetails={detailMessageId === item.row.messageId}
+                    onActivityClose={() => onRequestMessageDetail(null)}
+                    onActivityPress={() => onRequestMessageDetail(item.row.messageId)}
+                    showActivitySheet={detailMessageId === item.row.messageId}
                     status={liveMessage?.id === item.row.messageId ? 'streaming' : item.row.status}
-                    toolDetailError={detailMessageId === item.row.messageId ? messageDetailError : null}
                   />
                 )
               }
               return (
                 <ChatMessage
+                  activityError={detailMessageId === item.id ? messageDetailError : null}
+                  activityMessage={detailMessageId === item.id ? detailMessage : undefined}
+                  isActivityLoading={detailMessageId === item.id && isLoadingMessageDetail}
                   message={item.message}
+                  onActivityClose={() => onRequestMessageDetail(null)}
+                  onActivityPress={item.kind === 'live' ? () => onRequestMessageDetail(item.id) : undefined}
                   status={item.kind === 'live' ? (isStreaming ? 'streaming' : 'complete') : undefined}
+                  showActivitySheet={detailMessageId === item.id}
                 />
               )
             }}
             scrollEventThrottle={32}
           />
 
-          <View
+          <Animated.View
             style={[
               styles.composerFrame,
               {
-                backgroundColor: theme.chrome,
+                backgroundColor: 'transparent',
                 borderTopColor: theme.chromeBorder,
+                transform: [{ translateY: keyboardOffset }],
               },
             ]}
           >
@@ -222,65 +249,22 @@ export function ChatView({
               <Text style={[styles.sendError, { color: theme.destructive }]}>{sendError}</Text>
             )}
 
-            <View
-              style={[
-                styles.composer,
-                {
-                  backgroundColor: theme.surface,
-                  borderColor: theme.input,
-                },
-              ]}
-            >
-              <TextInput
-                maxLength={12_000}
-                multiline
-                onChangeText={setText}
-                placeholder={isStreaming ? 'Add to queue' : 'Message'}
-                placeholderTextColor={theme.mutedForeground}
-                selectionColor={theme.info}
-                style={[styles.input, { color: theme.foreground }]}
-                value={text}
-              />
-              <PressableScale
-                accessibilityLabel={isStreaming ? 'Queue message' : 'Send message'}
-                accessibilityRole="button"
-                disabled={!text.trim() || isSending}
-                haptic
-                onPress={submit}
-                style={[
-                  styles.sendButton,
-                  { backgroundColor: text.trim() ? theme.primary : theme.muted },
-                ]}
-              >
-                {isSending
-                  ? <ActivityIndicator color={theme.primaryForeground} size="small" />
-                  : (
-                      <ArrowUp
-                        color={text.trim() ? theme.primaryForeground : theme.mutedForeground}
-                        size={18}
-                        strokeWidth={2.3}
-                      />
-                    )}
-              </PressableScale>
-            </View>
-          </View>
+            <ChatComposer
+              capabilities={capabilities}
+              isSending={isSending}
+              isStreaming={isStreaming}
+              onModeChange={onModeChange}
+              onSend={onSend}
+              runtimeSettings={runtimeSettings}
+            />
+          </Animated.View>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
-  composer: {
-    alignItems: 'flex-end',
-    borderRadius: radius.xxl,
-    borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    minHeight: 46,
-    padding: 4,
-    paddingLeft: 12,
-  },
   composerFrame: {
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: spacing.sm,
@@ -300,17 +284,11 @@ const styles = StyleSheet.create({
     minHeight: 24,
     paddingBottom: spacing.xs,
   },
-  input: {
-    flex: 1,
-    fontSize: 14,
-    lineHeight: 20,
-    maxHeight: 112,
-    minHeight: 36,
-    paddingBottom: 8,
-    paddingTop: 8,
-  },
   keyboard: {
     flex: 1,
+  },
+  keyboardSpacer: {
+    width: '100%',
   },
   messages: {
     flexGrow: 1,
@@ -342,13 +320,6 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
-  },
-  sendButton: {
-    alignItems: 'center',
-    borderRadius: 19,
-    height: 38,
-    justifyContent: 'center',
-    width: 38,
   },
   sendError: {
     fontSize: 12,

@@ -1,11 +1,7 @@
 import type { PropsWithChildren, ReactNode } from 'react'
-import { useEffect, useRef } from 'react'
 import {
   Animated,
-  Dimensions,
-  Easing,
   Keyboard,
-  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -13,8 +9,9 @@ import {
   Text,
   View,
 } from 'react-native'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { SafeAreaView } from 'react-native-safe-area-context'
 
+import { useKeyboardOffset } from '@/hooks/use-keyboard-offset'
 import { spacing } from '@/theme/tokens'
 import { useTheme } from '@/theme/use-theme'
 
@@ -47,53 +44,7 @@ export function Screen({
   insetTop = true,
 }: ScreenProps) {
   const theme = useTheme()
-  const insets = useSafeAreaInsets()
-  const keyboardOffset = useRef(new Animated.Value(0)).current
-
-  useEffect(() => {
-    if (!avoidKeyboard) {
-      keyboardOffset.setValue(0)
-      return
-    }
-
-    const moveToKeyboard = (screenY: number, duration = 250) => {
-      const overlap = Math.max(0, Dimensions.get('window').height - screenY - insets.bottom)
-      Animated.timing(keyboardOffset, {
-        duration,
-        easing: Easing.bezier(0.22, 1, 0.36, 1),
-        toValue: -overlap,
-        useNativeDriver: true,
-      }).start()
-    }
-
-    const moveToRest = (duration = 250) => {
-      Animated.timing(keyboardOffset, {
-        duration,
-        easing: Easing.bezier(0.22, 1, 0.36, 1),
-        toValue: 0,
-        useNativeDriver: true,
-      }).start()
-    }
-
-    const metrics = Keyboard.metrics()
-    if (metrics) {
-      moveToKeyboard(metrics.screenY, 0)
-    }
-
-    const changeEvent = Platform.OS === 'ios' ? 'keyboardWillChangeFrame' : 'keyboardDidShow'
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
-    const change = Keyboard.addListener(changeEvent, event => {
-      moveToKeyboard(event.endCoordinates.screenY, event.duration)
-    })
-    const hide = Keyboard.addListener(hideEvent, event => {
-      moveToRest(event.duration)
-    })
-
-    return () => {
-      change.remove()
-      hide.remove()
-    }
-  }, [avoidKeyboard, insets.bottom, keyboardOffset])
+  const keyboardOffset = useKeyboardOffset(avoidKeyboard)
   const content = (
     <>
       {(title || action) && (
@@ -137,7 +88,7 @@ export function Screen({
             <ScrollView
               contentContainerStyle={styles.content}
               contentInsetAdjustmentBehavior="automatic"
-              keyboardDismissMode="interactive"
+              keyboardDismissMode="none"
               keyboardShouldPersistTaps="handled"
               refreshControl={onRefresh
                 ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.foreground} />

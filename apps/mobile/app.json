@@ -39,6 +39,12 @@
       "expo-router",
       "expo-secure-store",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Cradle needs access to your photos so you can attach them to a chat."
+        }
+      ],
+      [
         "expo-build-properties",
         {
           "android": {

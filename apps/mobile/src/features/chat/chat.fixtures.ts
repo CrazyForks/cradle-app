@@ -5,6 +5,7 @@ export const chatFixture: ChatViewProps = {
   messages: [],
   onCancel: () => {},
   onLoadEarlier: () => {},
+  onModeChange: () => {},
   onRequestMessageDetail: () => {},
   onSend: () => {},
 }
