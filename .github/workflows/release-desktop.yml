@@ -410,7 +410,7 @@ jobs:
           while IFS= read -r tag; do
             [ -n "$tag" ] || continue
             if gh release view "$tag" --repo "$GH_REPO" --json assets \
-              --jq '.assets[].name' | rg -qx 'Cradle-mac-arm64\.zip'; then
+              --jq '.assets[].name' | /usr/bin/grep -Fxq 'Cradle-mac-arm64.zip'; then
               echo "Removing legacy Sparkle alias from $tag"
               gh release delete-asset "$tag" Cradle-mac-arm64.zip --repo "$GH_REPO" --yes
             fi
