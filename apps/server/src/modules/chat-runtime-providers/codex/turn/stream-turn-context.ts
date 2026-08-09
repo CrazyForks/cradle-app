@@ -19,6 +19,7 @@ import { buildCradleCodexAppServerEnv } from '../app-server/client'
 import type { ReasoningEffort } from '../app-server-protocol/ReasoningEffort'
 import type { ThreadForkParams } from '../app-server-protocol/v2/ThreadForkParams'
 import {
+  bindCodexCradleMcpInvocation,
   buildCodexAuthEnvironment,
   buildCodexConfig,
   codexConfigRequiresApiKey,
@@ -108,7 +109,7 @@ export function resolveCodexStreamTurnContext(
       })
     : null
   const skillExtraRoots = resolveCodexSkillExtraRoots(config, workspacePath, deps.resolveSkillPaths)
-  const codexConfig = buildCodexConfig(
+  const projectedCodexConfig = buildCodexConfig(
     config,
     workspacePath,
     deps.resolveSkillPaths,
@@ -116,8 +117,8 @@ export function resolveCodexStreamTurnContext(
     auth,
   )
   if (runtimeAccess) {
-    codexConfig.approval_policy = runtimeAccess.approvalPolicy
-    codexConfig.sandbox_mode = runtimeAccess.sandbox
+    projectedCodexConfig.approval_policy = runtimeAccess.approvalPolicy
+    projectedCodexConfig.sandbox_mode = runtimeAccess.sandbox
   }
   const codexEnv = {
     ...buildCradleCodexAppServerEnv({
@@ -129,6 +130,7 @@ export function resolveCodexStreamTurnContext(
     }),
     ...buildCodexAuthEnvironment(auth),
   }
+  const codexConfig = bindCodexCradleMcpInvocation(projectedCodexConfig, codexEnv)
 
   return {
     config,

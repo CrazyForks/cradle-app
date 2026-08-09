@@ -5,6 +5,8 @@ import { join } from 'node:path'
 import type { UIMessage, UIMessageChunk } from 'ai'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { addHostMcpServer, removeHostMcpServer } from '../../../plugins/mcp-registry'
+import { AGENT_TOOLS_MCP_SERVER_NAME } from '../../agent-tools/server'
 import type {
   RuntimeProviderTargetProfile,
   RuntimeSession,
@@ -5152,6 +5154,67 @@ describe('codexProvider app-server integration', () => {
       },
     })
     await drainStream(stream)
+  })
+
+  it('binds Cradle session context into the thread MCP configuration', async () => {
+    addHostMcpServer({
+      transport: 'stdio',
+      name: AGENT_TOOLS_MCP_SERVER_NAME,
+      command: 'node',
+      args: ['/agent-tools/mcp-entry.mjs'],
+      env: { CRADLE_SERVER_URL: 'http://127.0.0.1:21423' },
+    })
+
+    try {
+      const clients: FakeCodexAppServerClient[] = []
+      const provider = new CodexProvider({
+        readSecret: () => 'sk-secret',
+        resolveSkillPaths: () => ['/tmp/cradle-skill'],
+        recordObservability: vi.fn(),
+        createAppServerClient: (options) => {
+          const client = new FakeCodexAppServerClient(options)
+          clients.push(client)
+          return client
+        },
+      })
+      const stream = provider.streamTurn({
+        runId: 'run-codex-mcp-invocation',
+        runtimeSession: createRuntimeSession(),
+        profile: createProfile(),
+        message: createUserMessage('Use Recall'),
+        workspaceId: 'workspace-1',
+      })
+      const drainPromise = drainStream(stream)
+
+      await vi.waitFor(() => {
+        expect(clients[0]?.requests.map(request => request.method)).toEqual(['thread/start', 'turn/start'])
+      })
+
+      const threadConfig = (clients[0]?.requests[0]?.params as {
+        config?: {
+          mcp_servers?: Record<string, { env?: Record<string, string> }>
+        }
+      }).config
+      expect(threadConfig?.mcp_servers?.[AGENT_TOOLS_MCP_SERVER_NAME]?.env).toEqual({
+        CRADLE_SERVER_URL: 'http://127.0.0.1:21423',
+        CRADLE_CHAT_SESSION_ID: 'chat-session-1',
+        CRADLE_WORKSPACE_ID: 'workspace-1',
+        CRADLE_WORKSPACE_PATH: '/tmp/cradle-workspace',
+      })
+      expect(JSON.stringify(threadConfig?.mcp_servers)).not.toContain('sk-test')
+
+      clients[0]?.pushNotification({
+        method: 'turn/completed',
+        params: {
+          threadId: 'codex-thread-1',
+          turn: { id: 'codex-turn-1', status: 'completed' },
+        },
+      })
+      await drainPromise
+    }
+    finally {
+      removeHostMcpServer(AGENT_TOOLS_MCP_SERVER_NAME)
+    }
   })
 
   it('projects Codex identity preferences into app-server client options', async () => {
