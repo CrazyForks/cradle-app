@@ -195,41 +195,54 @@ export async function readCodexAccountDiagnostics(
     }
   }
 
-  const { target, config, auth } = resolved
-  const chatgptAuth = readCodexChatgptAuth(auth)!
-  const hostLease = await acquireDiagnosticsHostLease({
-    providerTargetId: target.id,
-    config,
-    auth,
-    deps,
-  })
-  const client = hostLease.resource.client
-
   try {
-    const [accountResponse, rateLimitsResponse, usageResponse] = await Promise.all([
-      client.request('account/read', { refreshToken: false }) as Promise<GetAccountResponse>,
-      client.request('account/rateLimits/read', {}) as Promise<GetAccountRateLimitsResponse>,
-      client.request('account/usage/read', {}) as Promise<GetAccountTokenUsageResponse>,
-    ])
-
-    return {
+    const { target, config, auth } = resolved
+    const chatgptAuth = readCodexChatgptAuth(auth)!
+    const hostLease = await acquireDiagnosticsHostLease({
       providerTargetId: target.id,
-      supported: true,
-      unavailableReason: null,
-      refreshedAt: Date.now(),
-      account: projectAccountDiagnostics(accountResponse, chatgptAuth),
-      rateLimitsByLimitId: projectRateLimitsByLimitId(rateLimitsResponse.rateLimitsByLimitId),
-      rateLimitResetCredits: rateLimitsResponse.rateLimitResetCredits
-        ? {
-            availableCount: formatCounter(rateLimitsResponse.rateLimitResetCredits.availableCount),
-            credits: rateLimitsResponse.rateLimitResetCredits.credits,
-          }
-        : null,
-      tokenUsage: projectTokenUsage(usageResponse),
+      config,
+      auth,
+      deps,
+    })
+    const client = hostLease.resource.client
+
+    try {
+      const [accountResponse, rateLimitsResponse, usageResponse] = await Promise.all([
+        client.request('account/read', { refreshToken: false }) as Promise<GetAccountResponse>,
+        client.request('account/rateLimits/read', {}) as Promise<GetAccountRateLimitsResponse>,
+        client.request('account/usage/read', {}) as Promise<GetAccountTokenUsageResponse>,
+      ])
+
+      return {
+        providerTargetId: target.id,
+        supported: true,
+        unavailableReason: null,
+        refreshedAt: Date.now(),
+        account: projectAccountDiagnostics(accountResponse, chatgptAuth),
+        rateLimitsByLimitId: projectRateLimitsByLimitId(rateLimitsResponse.rateLimitsByLimitId),
+        rateLimitResetCredits: rateLimitsResponse.rateLimitResetCredits
+          ? {
+              availableCount: formatCounter(rateLimitsResponse.rateLimitResetCredits.availableCount),
+              credits: rateLimitsResponse.rateLimitResetCredits.credits,
+            }
+          : null,
+        tokenUsage: projectTokenUsage(usageResponse),
+      }
+    }
+    finally {
+      hostLease.release()
     }
   }
-  finally {
-    hostLease.release()
+  catch (error) {
+    if (error instanceof AppError) {
+      throw error
+    }
+    throw new AppError({
+      code: 'codex_account_diagnostics_read_failed',
+      status: 502,
+      message: error instanceof Error ? error.message : String(error),
+      details: { providerTargetId: input.providerTargetId },
+    })
   }
 }
 

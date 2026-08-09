@@ -169,6 +169,33 @@ describe('codex account diagnostics', () => {
     expect(client.close).toHaveBeenCalled()
   })
 
+  it('returns the app-server failure message as a typed diagnostics error', async () => {
+    const client = new FakeCodexAccountClient()
+    vi.spyOn(client, 'request').mockImplementation(async (method, params) => {
+      if (method === 'account/usage/read') {
+        throw new Error('token usage profile fetch timed out')
+      }
+      return FakeCodexAccountClient.prototype.request.call(client, method, params)
+    })
+
+    const result = readCodexAccountDiagnostics({
+      providerTargetId: 'codex-chatgpt-timeout-target',
+    }, createDiagnosticsDeps({
+      providerTargetId: 'codex-chatgpt-timeout-target',
+      providerKind: 'openai-compatible',
+      credentialRef: 'credential-chatgpt',
+      client,
+    }))
+
+    await expect(result).rejects.toMatchObject({
+      code: 'codex_account_diagnostics_read_failed',
+      status: 502,
+      message: 'token usage profile fetch timed out',
+      details: { providerTargetId: 'codex-chatgpt-timeout-target' },
+    })
+    expect(client.close).toHaveBeenCalled()
+  })
+
   it('uses a provider-target diagnostics host scope while account reads are active', async () => {
     const client = new FakeCodexAccountClient()
     const accountReadStarted: {
