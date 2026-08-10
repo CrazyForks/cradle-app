@@ -27,6 +27,7 @@ import { createFinalMessageProjectionState } from '../src/modules/chat-runtime/r
 import type { ActiveRun } from '../src/modules/chat-runtime/run-registry'
 import {
   COMPACTED_SUCCESS_PAYLOAD_SCHEMA,
+  finalizeRunSnapshot,
   getRunSnapshot,
   getRunSnapshots,
   maintainRunSnapshots,
@@ -158,6 +159,44 @@ function setUpRun(sessionId: string, runId: string): ActiveRun {
 }
 
 describe('run snapshot recording', () => {
+  it('defers event inserts until a snapshot read requires read-your-writes', async () => {
+    await withTempDataDir(() => {
+      const sessionId = `session-${randomUUID()}`
+      const runId = `run-${randomUUID()}`
+      setUpRun(sessionId, runId)
+
+      expect(db().select().from(backendRunSnapshotEvents).all()).toHaveLength(0)
+
+      const snapshot = getRunSnapshot(runId)
+      expect(snapshot?.events.map(event => event.phase)).toContain('run_started')
+      expect(db().select().from(backendRunSnapshotEvents).all()).toHaveLength(1)
+    })
+  })
+
+  it('finalizes one snapshot without flushing events for concurrent runs', async () => {
+    await withTempDataDir(() => {
+      const firstRunId = `run-${randomUUID()}`
+      const secondRunId = `run-${randomUUID()}`
+      const first = setUpRun(`session-${randomUUID()}`, firstRunId)
+      const second = setUpRun(`session-${randomUUID()}`, secondRunId)
+
+      finalizeRunSnapshot({
+        snapshotId: first.runSnapshotId!,
+        status: 'complete',
+        completionReason: 'stop',
+      })
+
+      expect(db().select().from(backendRunSnapshotEvents)
+        .where(eq(backendRunSnapshotEvents.snapshotId, first.runSnapshotId!)).all())
+        .toHaveLength(1)
+      expect(db().select().from(backendRunSnapshotEvents)
+        .where(eq(backendRunSnapshotEvents.snapshotId, second.runSnapshotId!)).all())
+        .toHaveLength(0)
+
+      expect(getRunSnapshot(secondRunId)?.events).toHaveLength(1)
+    })
+  })
+
   it('coalesces repeated tool-output-available chunks for the same toolCallId onto one row', async () => {
     await withTempDataDir(() => {
       const sessionId = `session-${randomUUID()}`
@@ -312,6 +351,56 @@ describe('run snapshot recording', () => {
         coalescedCount: 1,
       }))
       expect(JSON.stringify(toolEvent?.payload)).not.toContain('large successful output')
+    })
+  })
+
+  it('compacts successful payloads that were flushed before finalization', async () => {
+    await withTempDataDir(() => {
+      const sessionId = `session-${randomUUID()}`
+      const runId = `run-${randomUUID()}`
+      const activeRun = setUpRun(sessionId, runId)
+
+      recordActiveRunSnapshotEvent(activeRun, {
+        phase: 'tool_call_output_available',
+        chunk: {
+          type: 'tool-output-available',
+          toolCallId: 'toolu_preflushed',
+          output: { stdout: 'payload flushed before completion' },
+        },
+      })
+      expect(getRunSnapshot(runId)?.events).toHaveLength(2)
+
+      finalizeActiveRunSnapshot(
+        activeRun,
+        { type: 'finish', finishReason: 'stop' },
+        {
+          modelId: 'gpt-4o-mini',
+          diagnostics: {
+            emittedEventCount: 1,
+            assistantBoundaryCount: 0,
+            assistantTextCharCount: 0,
+            reasoningTextCharCount: 0,
+            toolInputDeltaCharCount: 0,
+            toolEventCount: 1,
+            otherOutputEventCount: 0,
+          },
+          profile: {
+            enabled: false,
+            streamStartedAtMs: 0,
+            streamFinishedAtMs: null,
+            finalizeStartedAtMs: null,
+            finalizeFinishedAtMs: null,
+            finalMessageJsonBytes: null,
+          },
+        },
+      )
+
+      const toolEvent = getRunSnapshot(runId)?.events.find(event => event.toolCallId === 'toolu_preflushed')
+      expect(toolEvent?.payload).toEqual(expect.objectContaining({
+        schema: COMPACTED_SUCCESS_PAYLOAD_SCHEMA,
+        originalLength: expect.any(Number),
+      }))
+      expect(JSON.stringify(toolEvent?.payload)).not.toContain('payload flushed before completion')
     })
   })
 
