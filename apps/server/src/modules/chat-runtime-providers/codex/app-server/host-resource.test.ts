@@ -20,9 +20,17 @@ class FakeHostClient implements CodexAppServerClientLike {
 
   private readonly notifications: CodexAppServerMessage[] = []
   private waiter: ((message: CodexAppServerMessage | null) => void) | null = null
+  threadStartResponse: Promise<unknown> | null = null
+
+  get bufferedNotificationCount(): number {
+    return this.notifications.length
+  }
 
   async request(method: string, params?: unknown): Promise<unknown> {
     if (method === 'thread/start' || method === 'thread/resume') {
+      if (method === 'thread/start' && this.threadStartResponse) {
+        return await this.threadStartResponse
+      }
       const threadId = (params as { threadId?: string } | undefined)?.threadId ?? 'thread-a'
       return { thread: { id: threadId } }
     }
@@ -70,44 +78,81 @@ function notification(threadId: string, delta: string): CodexAppServerMessage {
 }
 
 describe('codex provider app-server host routing', () => {
-  it('buffers early notifications until thread binding and keeps concurrent threads isolated', async () => {
+  it('holds one early notification until thread binding and keeps concurrent threads isolated', async () => {
     const fake = new FakeHostClient()
     const resource = createResource(fake)
     let firstThreadId: string | null = null
     const first = createCodexAppServerLeaseClient(resource, () => firstThreadId)
     const second = createCodexAppServerLeaseClient(resource, () => 'thread-b')
+    let resolveThreadStart!: (value: unknown) => void
+    fake.threadStartResponse = new Promise((resolve) => {
+      resolveThreadStart = resolve
+    })
+    const firstRequest = first.request('thread/start', {})
+    const firstNotification = first.nextNotification()
+    const secondNotification = second.nextNotification()
 
     fake.push(notification('thread-a', 'first'))
     fake.push(notification('thread-b', 'second'))
-
-    await expect(second.nextNotification()).resolves.toMatchObject({
-      params: { threadId: 'thread-b', delta: 'second' },
-    })
-
-    const firstResult = (await first.request('thread/start', {})) as { thread: { id: string } }
+    resolveThreadStart({ thread: { id: 'thread-a' } })
+    const firstResult = (await firstRequest) as { thread: { id: string } }
     firstThreadId = firstResult.thread.id
-    await expect(first.nextNotification()).resolves.toMatchObject({
+    await expect(firstNotification).resolves.toMatchObject({
       params: { threadId: 'thread-a', delta: 'first' },
+    })
+    first.nextNotification()
+    await expect(secondNotification).resolves.toMatchObject({
+      params: { threadId: 'thread-b', delta: 'second' },
     })
 
     await disposeCodexAppServerHostResource(resource)
   })
 
-  it('keeps the host pump alive between leases and delivers buffered notifications to the next lease', async () => {
+  it('does not subscribe request-only leases or replay idle events into a future operation', async () => {
     const fake = new FakeHostClient()
     const resource = createResource(fake)
     const first = createCodexAppServerLeaseClient(resource, () => 'thread-a')
+    await first.request('config/read')
+
+    expect(resource.notificationSubscribers).toHaveLength(0)
+    expect(resource.notificationPump).toBeInstanceOf(Promise)
     await first.close()
+    resource.loadedThreadIds.add('thread-a')
 
     fake.push(notification('thread-a', 'while-idle'))
     await vi.waitFor(() => {
-      expect(resource.pendingNotificationsByThreadId.get('thread-a')).toHaveLength(1)
+      expect(resource.discardedNotificationCount).toBe(1)
+    })
+    const second = createCodexAppServerLeaseClient(resource, () => 'thread-a')
+    const next = second.nextNotification()
+    fake.push(notification('thread-a', 'current-operation'))
+
+    await expect(next).resolves.toMatchObject({
+      params: { threadId: 'thread-a', delta: 'current-operation' },
     })
 
-    const second = createCodexAppServerLeaseClient(resource, () => 'thread-a')
-    await expect(second.nextNotification()).resolves.toMatchObject({
-      params: { threadId: 'thread-a', delta: 'while-idle' },
-    })
+    await second.close()
+    expect(resource.notificationOwnershipWaiters.size).toBe(0)
+
+    await disposeCodexAppServerHostResource(resource)
+  })
+
+  it('pulls at most one notification ahead of a slow operation consumer', async () => {
+    const fake = new FakeHostClient()
+    const resource = createResource(fake)
+    const client = createCodexAppServerLeaseClient(resource, () => 'thread-a')
+
+    const first = client.nextNotification()
+    fake.push(notification('thread-a', 'first'))
+    await expect(first).resolves.toMatchObject({ params: { delta: 'first' } })
+
+    fake.push(notification('thread-a', 'second'))
+    fake.push(notification('thread-a', 'third'))
+    expect(fake.bufferedNotificationCount).toBe(2)
+
+    const second = client.nextNotification()
+    await expect(second).resolves.toMatchObject({ params: { delta: 'second' } })
+    expect(fake.bufferedNotificationCount).toBe(1)
 
     await disposeCodexAppServerHostResource(resource)
   })
@@ -141,6 +186,13 @@ describe('codex provider app-server host routing', () => {
         params: { threadId: 'thread-c' },
       }),
     ).rejects.toThrow('has no handler')
+
+    await expect(
+      dispatchCodexAppServerHostRequest(resource, {
+        ...request,
+        params: {},
+      }),
+    ).rejects.toThrow('cannot route server request without an exact thread owner')
 
     await disposeCodexAppServerHostResource(resource)
   })

@@ -79,6 +79,9 @@ export async function acquireCodexAppServerHostLease(
     }),
     disposeResource: disposeCodexAppServerHostResource,
   })
+  lease.resource.onTerminated = () => {
+    void invalidateProviderProcessHostResource(lease.hostId, lease.resource)
+  }
   let inferredThreadId: string | null = null
   const releaseRequestHandler = serverRequestHandler
     ? addCodexAppServerHostRequestHandler(lease.resource, Object.assign(serverRequestHandler, {

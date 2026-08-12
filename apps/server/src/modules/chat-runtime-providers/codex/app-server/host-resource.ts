@@ -7,9 +7,6 @@ import type {
 } from '../types'
 import type { CodexAppServerClientOptions, CodexAppServerMessage, CodexAppServerServerRequest } from './client'
 
-const MAX_PENDING_NOTIFICATIONS_PER_THREAD = 100
-const MAX_PENDING_NOTIFICATION_THREADS = 100
-
 function readMessageThreadId(message: CodexAppServerMessage): string | null {
   const params = message.params
   if (!params || typeof params !== 'object' || !('threadId' in params)) {
@@ -26,6 +23,11 @@ export function createCodexAppServerHostResource(input: {
   let resource: CodexAppServerHostResource | null = null
   const client = input.createClient({
     ...input.clientOptions,
+    onTerminated: (error) => {
+      if (!resource?.disposing) {
+        resource?.onTerminated?.(error)
+      }
+    },
     serverRequestHandler: (request) => {
       if (!resource) {
         throw new Error('Codex app-server host received a request before resource initialization')
@@ -37,10 +39,13 @@ export function createCodexAppServerHostResource(input: {
     client,
     serverRequestHandlers: new Set<CodexAppServerResourceRequestHandler>(),
     notificationSubscribers: new Set<CodexAppServerNotificationSubscriber>(),
-    pendingNotificationsByThreadId: new Map<string, CodexAppServerMessage[]>(),
+    notificationOwnershipWaiters: new Set(),
+    pendingThreadBinderCount: 0,
+    discardedNotificationCount: 0,
     loadedThreadIds: new Set<string>(),
     threadBindPromises: new Map<string, Promise<ThreadResponse>>(),
     skillExtraRoots: new Set<string>(),
+    uiSlotThreadFacts: new Map(),
   }
   return resource
 }
@@ -68,13 +73,10 @@ export async function dispatchCodexAppServerHostRequest(
   if (handlers.length === 0) {
     throw new Error(`Codex app-server host has no handler for server request: ${request.method}`)
   }
-
-  const [firstHandler, ...sideEffectHandlers] = handlers
-  const result = await firstHandler(request)
-  for (const handler of sideEffectHandlers) {
-    await Promise.resolve(handler(request)).catch(() => undefined)
+  if (handlers.length !== 1) {
+    throw new Error(`Codex app-server host cannot route server request without an exact thread owner: ${request.method}`)
   }
-  return result
+  return await handlers[0]!(request)
 }
 
 function selectCodexAppServerHostRequestHandlers(
@@ -103,7 +105,7 @@ export function subscribeCodexAppServerHostNotifications(
   subscriber: CodexAppServerNotificationSubscriber,
 ): () => void {
   resource.notificationSubscribers.add(subscriber)
-  flushPendingCodexAppServerNotifications(resource, subscriber)
+  signalCodexNotificationOwnershipChange(resource)
   startCodexAppServerHostNotificationPump(resource)
 
   let released = false
@@ -113,6 +115,7 @@ export function subscribeCodexAppServerHostNotifications(
     }
     released = true
     resource.notificationSubscribers.delete(subscriber)
+    signalCodexNotificationOwnershipChange(resource)
   }
 }
 
@@ -121,37 +124,81 @@ export function createCodexAppServerLeaseClient(
   readThreadId?: () => string | null,
   onThreadId?: (threadId: string) => void,
 ): CodexAppServerClientLike {
-  const queue: CodexAppServerMessage[] = []
   const waiters: Array<(message: CodexAppServerMessage | null) => void> = []
   let inferredThreadId: string | null = null
   let closed = false
+  let unsubscribe: (() => void) | null = null
+  let acknowledgeDelivery: (() => void) | null = null
+  let wakeMessageConsumer: (() => void) | null = null
   const currentThreadId = () => inferredThreadId ?? readThreadId?.() ?? null
-  const unsubscribe = subscribeCodexAppServerHostNotifications(resource, {
-    readThreadId: currentThreadId,
-    onMessage: (message) => {
-      const waiter = waiters.shift()
-      if (waiter) {
+  let bindingPending = currentThreadId() === null
+  if (bindingPending) {
+    resource.pendingThreadBinderCount += 1
+  }
+  startCodexAppServerHostNotificationPump(resource)
+  const finishBinding = () => {
+    if (!bindingPending) {
+      return
+    }
+    bindingPending = false
+    resource.pendingThreadBinderCount -= 1
+    signalCodexNotificationOwnershipChange(resource)
+  }
+  const ensureSubscribed = () => {
+    if (unsubscribe || closed) {
+      return
+    }
+    unsubscribe = subscribeCodexAppServerHostNotifications(resource, {
+      readThreadId: currentThreadId,
+      onMessage: async (message) => {
+        if (waiters.length === 0) {
+          await new Promise<void>((resolve) => {
+            wakeMessageConsumer = resolve
+          })
+          wakeMessageConsumer = null
+        }
+        if (closed) {
+          return true
+        }
+        const waiter = waiters.shift()
+        if (!waiter) {
+          return false
+        }
+        const consumed = new Promise<void>((resolve) => {
+          acknowledgeDelivery = resolve
+        })
         waiter(message)
-      }
-      else {
-        queue.push(message)
-      }
-      return false
-    },
-    onClose: () => {
-      closed = true
-      for (const waiter of waiters.splice(0)) {
-        waiter(null)
-      }
-    },
-  })
+        await consumed
+        return closed
+      },
+      onClose: () => {
+        closed = true
+        wakeMessageConsumer?.()
+        wakeMessageConsumer = null
+        acknowledgeDelivery?.()
+        acknowledgeDelivery = null
+        for (const waiter of waiters.splice(0)) {
+          waiter(null)
+        }
+      },
+    })
+  }
+  if (bindingPending) {
+    ensureSubscribed()
+  }
 
   const close = () => {
     if (closed) {
       return
     }
     closed = true
-    unsubscribe()
+    finishBinding()
+    unsubscribe?.()
+    unsubscribe = null
+    wakeMessageConsumer?.()
+    wakeMessageConsumer = null
+    acknowledgeDelivery?.()
+    acknowledgeDelivery = null
     for (const waiter of waiters.splice(0)) {
       waiter(null)
     }
@@ -163,24 +210,27 @@ export function createCodexAppServerLeaseClient(
     },
     initialize: resource.client.initialize.bind(resource.client),
     request: async (method, params) => {
+      if (startsCodexNotificationStream(method)) {
+        ensureSubscribed()
+      }
       const result = await resource.client.request(method, params)
       if (method === 'thread/start' || method === 'thread/resume' || method === 'thread/fork') {
         const threadId = readResponseThreadId(result)
         if (threadId) {
           inferredThreadId = threadId
+          finishBinding()
           onThreadId?.(threadId)
-          flushPendingCodexAppServerNotifications(resource)
+          signalCodexNotificationOwnershipChange(resource)
         }
       }
       return result
     },
     nextNotification: async (signal?: AbortSignal) => {
-      if (queue.length > 0) {
-        return queue.shift() ?? null
-      }
       if (closed || signal?.aborted) {
         return null
       }
+      acknowledgeDelivery?.()
+      acknowledgeDelivery = null
       return await new Promise<CodexAppServerMessage | null>((resolve) => {
         let waiter: ((message: CodexAppServerMessage | null) => void) | null = null
         const onAbort = () => {
@@ -196,10 +246,22 @@ export function createCodexAppServerLeaseClient(
           resolve(message)
         }
         waiters.push(waiter)
+        ensureSubscribed()
+        wakeMessageConsumer?.()
       })
     },
     close,
   }
+}
+
+function startsCodexNotificationStream(method: string): boolean {
+  if (method === 'turn/start'
+    || method === 'review/start'
+    || method === 'thread/compact/start'
+    || method === 'thread/shellCommand') {
+    return true
+  }
+  return method === 'thread/goal/set'
 }
 
 function readResponseThreadId(result: unknown): string | null {
@@ -239,24 +301,20 @@ export function startCodexAppServerHostNotificationPump(resource: CodexAppServer
         }
 
         const threadId = readMessageThreadId(message)
-        const subscribers = selectCodexAppServerNotificationSubscribers(resource, threadId)
+        let subscribers = selectCodexAppServerNotificationSubscribers(resource, threadId)
         if (threadId && subscribers.length === 0) {
-          const pending = resource.pendingNotificationsByThreadId.get(threadId) ?? []
-          if (!resource.pendingNotificationsByThreadId.has(threadId)
-            && resource.pendingNotificationsByThreadId.size >= MAX_PENDING_NOTIFICATION_THREADS) {
-            const oldestThreadId = resource.pendingNotificationsByThreadId.keys().next().value
-            if (oldestThreadId) {
-              resource.pendingNotificationsByThreadId.delete(oldestThreadId)
-            }
+          const hasInFlightBinder = resource.pendingThreadBinderCount > 0 || [...resource.notificationSubscribers]
+            .some(subscriber => !subscriber.readThreadId?.())
+          if (hasInFlightBinder) {
+            await waitForCodexNotificationOwnershipChange(resource, abortController.signal)
+            subscribers = selectCodexAppServerNotificationSubscribers(resource, threadId)
           }
-          pending.push(message)
-          if (pending.length > MAX_PENDING_NOTIFICATIONS_PER_THREAD) {
-            pending.shift()
+          if (subscribers.length === 0) {
+            resource.discardedNotificationCount += 1
+            continue
           }
-          resource.pendingNotificationsByThreadId.set(threadId, pending)
-          continue
         }
-        deliverCodexAppServerNotification(resource, subscribers, message)
+        await deliverCodexAppServerNotification(resource, subscribers, message)
       }
     }
     finally {
@@ -281,15 +339,15 @@ function selectCodexAppServerNotificationSubscribers(
     : [...resource.notificationSubscribers]
 }
 
-function deliverCodexAppServerNotification(
+async function deliverCodexAppServerNotification(
   resource: CodexAppServerHostResource,
   subscribers: CodexAppServerNotificationSubscriber[],
   message: CodexAppServerMessage,
-): void {
+): Promise<void> {
   for (const subscriber of subscribers) {
     let shouldUnsubscribe = false
     try {
-      shouldUnsubscribe = subscriber.onMessage(message)
+      shouldUnsubscribe = await subscriber.onMessage(message)
     }
     catch {
       shouldUnsubscribe = true
@@ -300,34 +358,41 @@ function deliverCodexAppServerNotification(
   }
 }
 
-function flushPendingCodexAppServerNotifications(
-  resource: CodexAppServerHostResource,
-  onlySubscriber?: CodexAppServerNotificationSubscriber,
-): void {
-  const threadIds = onlySubscriber
-    ? [onlySubscriber.readThreadId?.() ?? null]
-    : [...new Set(Array.from(resource.notificationSubscribers, subscriber => subscriber.readThreadId?.() ?? null))]
-  for (const threadId of threadIds) {
-    if (!threadId) {
-      continue
-    }
-    const pending = resource.pendingNotificationsByThreadId.get(threadId)
-    if (!pending?.length) {
-      continue
-    }
-    const subscribers = onlySubscriber
-      ? [onlySubscriber]
-      : selectCodexAppServerNotificationSubscribers(resource, threadId)
-    resource.pendingNotificationsByThreadId.delete(threadId)
-    for (const message of pending) {
-      deliverCodexAppServerNotification(resource, subscribers, message)
-    }
+function signalCodexNotificationOwnershipChange(resource: CodexAppServerHostResource): void {
+  for (const waiter of resource.notificationOwnershipWaiters) {
+    waiter()
   }
+  resource.notificationOwnershipWaiters.clear()
+}
+
+async function waitForCodexNotificationOwnershipChange(
+  resource: CodexAppServerHostResource,
+  signal: AbortSignal,
+): Promise<void> {
+  if (signal.aborted) {
+    return
+  }
+  await new Promise<void>((resolve) => {
+    const finish = () => {
+      signal.removeEventListener('abort', finish)
+      resource.notificationOwnershipWaiters.delete(finish)
+      resolve()
+    }
+    resource.notificationOwnershipWaiters.add(finish)
+    signal.addEventListener('abort', finish, { once: true })
+  })
 }
 
 export async function disposeCodexAppServerHostResource(
   resource: CodexAppServerHostResource,
 ): Promise<void> {
+  resource.disposing = true
+  for (const subscriber of [...resource.notificationSubscribers]) {
+    subscriber.onClose()
+  }
+  resource.notificationSubscribers.clear()
+  signalCodexNotificationOwnershipChange(resource)
+  resource.uiSlotThreadFacts.clear()
   resource.notificationAbortController?.abort()
   await resource.client.close()
   await resource.notificationPump?.catch(() => undefined)

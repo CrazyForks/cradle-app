@@ -13,14 +13,13 @@ import type {
   RuntimeTokenUsageBreakdown,
   RuntimeToolActivityStatus,
 } from '../../../chat-runtime/runtime-provider-types'
+import { replaceRuntimeSessionProviderCheckpoint } from '../../../chat-runtime/runtime-session-checkpoint'
 import type { TokenUsage } from '../../../chat-runtime-engine/ai-sdk-engine'
-import type { WorkspaceProviderStateSnapshot } from '../../kit/state-snapshot'
 import {
   readWorkspaceProviderStateSnapshot,
 } from '../../kit/state-snapshot'
 import type { CodexAppServerMessage } from '../app-server/client'
 import { isCodexAppServerToolApprovalRequest } from '../app-server/server-request-methods'
-import type { Turn } from '../app-server-protocol/v2/Turn'
 import type {
   AccountRateLimitsUpdatedNotificationParams,
   CodexApprovalsSnapshot,
@@ -60,83 +59,11 @@ import type {
   TurnPlanUpdatedNotificationParams,
 } from '../types'
 
-export interface CodexNativeHistorySnapshot {
-  threadId: string
-  itemsView: 'full'
-  fetchedAt: number
-  complete: boolean
-  turns: Turn[]
-  turnCount: number
-  itemCount: number
-  nextCursor: string | null
-  error: string | null
-}
-
 interface ServerRequestBridgeNotificationParams {
   id?: number
   method?: string
   params?: unknown
   result?: unknown
-}
-
-interface CodexProviderStateSnapshot extends WorkspaceProviderStateSnapshot {
-  codex?: CodexProviderState
-}
-
-interface CodexProviderState extends Record<string, unknown> {
-  nativeHistory?: CodexNativeHistorySnapshot
-  previousNativeHistory?: CodexNativeHistorySnapshot
-}
-
-export function writeCodexNativeHistorySnapshot(
-  runtimeSession: RuntimeSession,
-  nativeHistory: CodexNativeHistorySnapshot,
-): void {
-  const snapshot = readWorkspaceProviderStateSnapshot(runtimeSession.providerStateSnapshot) as CodexProviderStateSnapshot
-  runtimeSession.providerStateSnapshot = JSON.stringify({
-    ...snapshot,
-    codex: {
-      ...readCodexState(snapshot),
-      nativeHistory,
-    },
-  })
-}
-
-export function readRestorableCodexNativeHistory(raw: string | null | undefined): CodexNativeHistorySnapshot | undefined {
-  try {
-    const snapshot = readWorkspaceProviderStateSnapshot(raw) as CodexProviderStateSnapshot
-    const nativeHistory = snapshot.codex?.nativeHistory
-    if (isRestorableCodexNativeHistory(nativeHistory)) {
-      return nativeHistory
-    }
-    const previousNativeHistory = snapshot.codex?.previousNativeHistory
-    if (isRestorableCodexNativeHistory(previousNativeHistory)) {
-      return previousNativeHistory
-    }
-    return undefined
-  }
-  catch {
-    return undefined
-  }
-}
-
-export function hasCompleteCurrentCodexNativeHistory(
-  raw: string | null | undefined,
-  threadId: string,
-): boolean {
-  try {
-    const snapshot = readWorkspaceProviderStateSnapshot(raw) as CodexProviderStateSnapshot
-    const nativeHistory = snapshot.codex?.nativeHistory
-    return nativeHistory?.threadId === threadId
-      && nativeHistory.itemsView === 'full'
-      && nativeHistory.complete
-      && Array.isArray(nativeHistory.turns)
-      && nativeHistory.nextCursor === null
-      && nativeHistory.error === null
-  }
-  catch {
-    return false
-  }
 }
 
 export function projectCodexProviderStateSnapshot(
@@ -156,19 +83,6 @@ export function projectCodexProviderStateSnapshot(
   projectCodexSearchSnapshot(runtimeSession, notification, fallbackThreadId)
   projectCodexUsageSnapshot(runtimeSession, notification, fallbackThreadId)
   projectCodexGoalSnapshot(runtimeSession, notification)
-}
-
-function isRestorableCodexNativeHistory(value: CodexNativeHistorySnapshot | undefined): value is CodexNativeHistorySnapshot {
-  return value?.itemsView === 'full'
-    && value.complete
-    && Array.isArray(value.turns)
-    && value.turns.length > 0
-}
-
-function readCodexState(snapshot: CodexProviderStateSnapshot): Record<string, unknown> {
-  return snapshot.codex && typeof snapshot.codex === 'object' && !Array.isArray(snapshot.codex)
-    ? snapshot.codex
-    : {}
 }
 
 export function hasActiveGoal(goal: CodexGoalSnapshot | null | undefined): boolean {
@@ -193,7 +107,7 @@ export function projectCodexGoalSnapshotFromGoal(goal: ThreadGoalGetResponse['go
 
 export function writeCodexGoalSnapshot(runtimeSession: RuntimeSession, goal: CodexGoalSnapshot): void {
   const snapshot = readCodexProviderSnapshot(runtimeSession.providerStateSnapshot)
-  runtimeSession.providerStateSnapshot = JSON.stringify({
+  writeRuntimeSessionProviderSnapshot(runtimeSession, {
     ...snapshot,
     codex: {
       ...snapshot.codex,
@@ -210,7 +124,7 @@ export function clearCodexGoalSnapshot(
   if (options.preserveCompletedGoal === true && snapshot.codex?.goal?.status === 'complete') {
     return
   }
-  runtimeSession.providerStateSnapshot = JSON.stringify({
+  writeRuntimeSessionProviderSnapshot(runtimeSession, {
     ...snapshot,
     codex: {
       ...snapshot.codex,
@@ -222,10 +136,10 @@ export function clearCodexGoalSnapshot(
 export function pauseCodexGoalSnapshot(runtimeSession: RuntimeSession): void {
   const snapshot = readCodexProviderSnapshot(runtimeSession.providerStateSnapshot)
   const goal = snapshot.codex?.goal
-  if (!hasActiveGoal(goal)) {
+  if (!goal || !hasActiveGoal(goal)) {
     return
   }
-  runtimeSession.providerStateSnapshot = JSON.stringify({
+  writeRuntimeSessionProviderSnapshot(runtimeSession, {
     ...snapshot,
     codex: {
       ...snapshot.codex,
@@ -269,7 +183,7 @@ export function writeCodexThreadSnapshot(
 ): void {
   const snapshot = readCodexProviderSnapshot(runtimeSession.providerStateSnapshot)
   const now = Date.now()
-  runtimeSession.providerStateSnapshot = JSON.stringify({
+  writeRuntimeSessionProviderSnapshot(runtimeSession, {
     ...snapshot,
     codex: {
       ...snapshot.codex,
@@ -333,7 +247,7 @@ function writeCodexStatusSnapshot(
   status: NonNullable<CodexProviderSnapshot['codex']>['status'],
 ): void {
   const snapshot = readCodexProviderSnapshot(runtimeSession.providerStateSnapshot)
-  runtimeSession.providerStateSnapshot = JSON.stringify({
+  writeRuntimeSessionProviderSnapshot(runtimeSession, {
     ...snapshot,
     codex: {
       ...snapshot.codex,
@@ -349,7 +263,7 @@ function writeCodexSettingsSnapshot(
 ): void {
   const snapshot = readCodexProviderSnapshot(runtimeSession.providerStateSnapshot)
   const now = Date.now()
-  runtimeSession.providerStateSnapshot = JSON.stringify({
+  writeRuntimeSessionProviderSnapshot(runtimeSession, {
     ...snapshot,
     codex: {
       ...snapshot.codex,
@@ -441,7 +355,7 @@ function projectCodexCompactSnapshot(
 
 function writeCodexCompactSnapshot(runtimeSession: RuntimeSession, compact: CodexCompactSnapshot): void {
   const snapshot = readCodexProviderSnapshot(runtimeSession.providerStateSnapshot)
-  runtimeSession.providerStateSnapshot = JSON.stringify({
+  writeRuntimeSessionProviderSnapshot(runtimeSession, {
     ...snapshot,
     codex: {
       ...snapshot.codex,
@@ -534,7 +448,7 @@ function projectCodexPlanSnapshot(
 
 function writeCodexPlanSnapshot(runtimeSession: RuntimeSession, plan: CodexPlanSnapshot): void {
   const snapshot = readCodexProviderSnapshot(runtimeSession.providerStateSnapshot)
-  runtimeSession.providerStateSnapshot = JSON.stringify({
+  writeRuntimeSessionProviderSnapshot(runtimeSession, {
     ...snapshot,
     codex: {
       ...snapshot.codex,
@@ -547,7 +461,7 @@ function clearCodexPlanSnapshot(runtimeSession: RuntimeSession): void {
   const snapshot = readCodexProviderSnapshot(runtimeSession.providerStateSnapshot)
   const codex = { ...snapshot.codex }
   delete codex.plan
-  runtimeSession.providerStateSnapshot = JSON.stringify({
+  writeRuntimeSessionProviderSnapshot(runtimeSession, {
     ...snapshot,
     codex,
   })
@@ -628,7 +542,7 @@ function writeCodexToolActivityItem(
     nextItem,
     ...existingItems.filter(item => item.id !== itemId),
   ].slice(0, 12)
-  runtimeSession.providerStateSnapshot = JSON.stringify({
+  writeRuntimeSessionProviderSnapshot(runtimeSession, {
     ...snapshot,
     codex: {
       ...snapshot.codex,
@@ -707,7 +621,7 @@ function mergeCodexMcpSnapshot(
 ): void {
   const snapshot = readCodexProviderSnapshot(runtimeSession.providerStateSnapshot)
   const existing = snapshot.codex?.mcp
-  runtimeSession.providerStateSnapshot = JSON.stringify({
+  writeRuntimeSessionProviderSnapshot(runtimeSession, {
     ...snapshot,
     codex: {
       ...snapshot.codex,
@@ -754,7 +668,7 @@ function projectCodexDiffSnapshot(
 
 function writeCodexDiffSnapshot(runtimeSession: RuntimeSession, diff: CodexDiffSnapshot): void {
   const snapshot = readCodexProviderSnapshot(runtimeSession.providerStateSnapshot)
-  runtimeSession.providerStateSnapshot = JSON.stringify({
+  writeRuntimeSessionProviderSnapshot(runtimeSession, {
     ...snapshot,
     codex: {
       ...snapshot.codex,
@@ -870,7 +784,7 @@ function writeCodexTerminalCommand(
     outputPreview: trimPreview([current?.outputPreview, input.outputPreview].filter(Boolean).join('')),
     updatedAt: Date.now(),
   }
-  runtimeSession.providerStateSnapshot = JSON.stringify({
+  writeRuntimeSessionProviderSnapshot(runtimeSession, {
     ...snapshot,
     codex: {
       ...snapshot.codex,
@@ -976,7 +890,7 @@ function writeCodexApprovalItem(
     startedAt: input.item.startedAt ?? current?.startedAt ?? null,
     completedAt: input.item.completedAt ?? current?.completedAt ?? null,
   }
-  runtimeSession.providerStateSnapshot = JSON.stringify({
+  writeRuntimeSessionProviderSnapshot(runtimeSession, {
     ...snapshot,
     codex: {
       ...snapshot.codex,
@@ -1006,7 +920,7 @@ function updateResolvedApproval(
   const items = approvals.items.map(item => item.id === requestId && item.status === 'pending'
     ? { ...item, status, completedAt: Date.now() }
     : item)
-  runtimeSession.providerStateSnapshot = JSON.stringify({
+  writeRuntimeSessionProviderSnapshot(runtimeSession, {
     ...snapshot,
     codex: {
       ...snapshot.codex,
@@ -1034,7 +948,7 @@ function projectCodexFilesystemSnapshot(
   }
   const snapshot = readCodexProviderSnapshot(runtimeSession.providerStateSnapshot)
   const existing = snapshot.codex?.filesystem
-  runtimeSession.providerStateSnapshot = JSON.stringify({
+  writeRuntimeSessionProviderSnapshot(runtimeSession, {
     ...snapshot,
     codex: {
       ...snapshot.codex,
@@ -1058,7 +972,7 @@ function projectCodexSearchSnapshot(
   const params = notification.params as FuzzyFileSearchSessionNotificationParams | undefined
   const snapshot = readCodexProviderSnapshot(runtimeSession.providerStateSnapshot)
   const existing = snapshot.codex?.search
-  runtimeSession.providerStateSnapshot = JSON.stringify({
+  writeRuntimeSessionProviderSnapshot(runtimeSession, {
     ...snapshot,
     codex: {
       ...snapshot.codex,
@@ -1086,7 +1000,7 @@ function projectCodexUsageSnapshot(
     return
   }
   const snapshot = readCodexProviderSnapshot(runtimeSession.providerStateSnapshot)
-  runtimeSession.providerStateSnapshot = JSON.stringify({
+  writeRuntimeSessionProviderSnapshot(runtimeSession, {
     ...snapshot,
     codex: {
       ...snapshot.codex,
@@ -1357,12 +1271,31 @@ export function normalizeMcpAuthStatus(value: unknown): RuntimeMcpAuthStatus {
   }
 }
 
+function writeRuntimeSessionProviderSnapshot(
+  runtimeSession: RuntimeSession,
+  snapshot: CodexProviderSnapshot,
+): void {
+  replaceRuntimeSessionProviderCheckpoint(runtimeSession, JSON.stringify(snapshot))
+}
+
 export function readCodexProviderSnapshot(raw: string | null | undefined): CodexProviderSnapshot {
   return readWorkspaceProviderStateSnapshot(raw) as CodexProviderSnapshot
 }
 
 export function readCodexCompactSnapshot(raw: string | null | undefined): CodexCompactSnapshot | null {
-  const compact = readCodexProviderSnapshot(raw).codex?.compact
+  const codex = readCodexProviderSnapshot(raw).codex
+  const compact = codex?.compact ?? (codex?.contextUsage
+    ? {
+        threadId: codex.contextUsage.threadId,
+        turnId: null,
+        tokenUsage: {
+          total: codex.contextUsage.total,
+          last: codex.contextUsage.last,
+          modelContextWindow: codex.contextUsage.modelContextWindow,
+        },
+        updatedAt: codex.contextUsage.updatedAt,
+      }
+    : null)
   if (!compact || typeof compact.threadId !== 'string') {
     return null
   }

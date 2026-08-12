@@ -505,6 +505,7 @@ export interface CodexUiSlotStateProjectionInput {
   apps: CodexAppsListResponse | null
   collaborationModes: CodexCollaborationModeListResponse | null
   backgroundTerminals: RuntimeBackgroundTerminal[]
+  crewState?: RuntimeCrewUiSlotState | null
 }
 
 export async function projectCodexUiSlotStates(
@@ -512,12 +513,9 @@ export async function projectCodexUiSlotStates(
 ): Promise<RuntimeUiSlotState[]> {
   const snapshot = readCodexProviderSnapshot(input.providerStateSnapshot)
   const states: RuntimeUiSlotState[] = []
-  const crewState = await readCodexCrewState(
-    input.client,
-    input.threadId,
-    snapshot,
-    input.collaborationModes,
-  )
+  const crewState = input.crewState === undefined
+    ? await readCodexCrewState(input.client, input.threadId, snapshot, input.collaborationModes)
+    : input.crewState
   const slotStates = [
     projectCodexStatusState(input.threadId, snapshot),
     projectCodexModelState(
@@ -730,7 +728,7 @@ function projectCodexCompactState(
   const autoCompactTokenLimit = readConfigNumber(
     configResponse?.config?.model_auto_compact_token_limit,
   )
-  const currentWindowTokens = last.totalTokens > 0 ? last.totalTokens : total.totalTokens
+  const currentWindowTokens = last.totalTokens
   const usagePercent = modelContextWindow
     ? readPercent(currentWindowTokens, modelContextWindow)
     : null
@@ -1030,7 +1028,7 @@ function projectCodexSearchState(
   }
 }
 
-async function readCodexCrewState(
+export async function readCodexCrewState(
   client: CodexAppServerClientLike,
   parentThreadId: string,
   snapshot: CodexProviderSnapshot,

@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { delimiter, isAbsolute, join } from 'node:path'
-import type { Writable } from 'node:stream'
+import type { Readable, Writable } from 'node:stream'
 
 import { jsonrepair } from 'jsonrepair'
 
@@ -48,6 +48,7 @@ export interface CodexAppServerClientOptions {
   cliCompatibleIdentity?: boolean
   serverRequestHandler?: (request: CodexAppServerServerRequest) => Promise<unknown> | unknown
   exposeServerRequestsAsNotifications?: boolean
+  onTerminated?: (error: Error) => void
 }
 
 const CODEX_NATIVE_CLIENT_INFO_FALLBACK_VERSION = '0.0.0'
@@ -75,6 +76,7 @@ export function buildCradleCodexAppServerEnv(input: {
 export class CodexAppServerClient {
   private readonly child: ManagedChildProcess
   private readonly childStdin: Writable
+  private readonly childStdout: Readable
   private readonly pendingRequests = new Map<RequestId, {
     resolve: (value: unknown) => void
     reject: (error: Error) => void
@@ -88,6 +90,7 @@ export class CodexAppServerClient {
   private readonly executablePath: string
   private readonly userAgentMode: CodexUserAgentMode
   private readonly cliCompatibleIdentity: boolean
+  private readonly onTerminated?: (error: Error) => void
   private nextRequestId = 1
   private closed = false
   private stderrText = ''
@@ -100,6 +103,7 @@ export class CodexAppServerClient {
   constructor(options: CodexAppServerClientOptions = {}) {
     this.serverRequestHandler = options.serverRequestHandler
     this.exposeServerRequestsAsNotifications = options.exposeServerRequestsAsNotifications ?? true
+    this.onTerminated = options.onTerminated
     const env = { ...process.env, ...options.env }
     const launch = resolveCodexAppServerLaunch({
       env,
@@ -148,6 +152,7 @@ export class CodexAppServerClient {
       throw new Error('Codex app-server process did not expose stdio pipes')
     }
     this.childStdin = childStdin
+    this.childStdout = childStdout
     childStderr.on('data', (chunk: Buffer) => {
       this.stderrText = `${this.stderrText}${chunk.toString('utf8')}`.slice(-MAX_STDERR_BUFFER_LENGTH)
     })
@@ -205,6 +210,7 @@ export class CodexAppServerClient {
       : { jsonrpc: '2.0' as const, id, method, params }
     return new Promise((resolve, reject) => {
       this.pendingRequests.set(id, { resolve, reject })
+      this.childStdout.resume()
       this.writeMessage(payload).catch((error) => {
         this.pendingRequests.delete(id)
         reject(error)
@@ -238,6 +244,7 @@ export class CodexAppServerClient {
         resolve(message)
       }
       this.notificationWaiters.push(waiter)
+      this.childStdout.resume()
     })
   }
 
@@ -264,6 +271,7 @@ export class CodexAppServerClient {
     }
     this.closed = true
     this.failAll(error)
+    this.onTerminated?.(error)
   }
 
   private handleLine(line: string): void {
@@ -316,6 +324,7 @@ export class CodexAppServerClient {
       else {
         pending.resolve(message.result)
       }
+      this.pauseStdoutWithoutDemand()
       return
     }
 
@@ -337,9 +346,11 @@ export class CodexAppServerClient {
     let response: CodexAppServerMessage
     try {
       if (this.exposeServerRequestsAsNotifications && isCodexAppServerInteractiveServerRequest(message.method)) {
+        const threadId = readServerRequestThreadId(message)
         this.pushNotification({
           method: 'serverRequest/pending',
           params: {
+            ...(threadId ? { threadId } : {}),
             id: message.id,
             method: message.method,
             params: message.params,
@@ -349,9 +360,11 @@ export class CodexAppServerClient {
       const result = await this.serverRequestHandler(message)
       response = { id: message.id, result }
       if (this.exposeServerRequestsAsNotifications) {
+        const threadId = readServerRequestThreadId(message)
         this.pushNotification({
           method: 'serverRequest/handled',
           params: {
+            ...(threadId ? { threadId } : {}),
             id: message.id,
             method: message.method,
             params: message.params,
@@ -377,9 +390,17 @@ export class CodexAppServerClient {
     const waiter = this.notificationWaiters.shift()
     if (waiter) {
       waiter(message)
+      this.pauseStdoutWithoutDemand()
       return
     }
     this.notificationQueue.push(message)
+    this.pauseStdoutWithoutDemand()
+  }
+
+  private pauseStdoutWithoutDemand(): void {
+    if (this.pendingRequests.size === 0 && this.notificationWaiters.length === 0) {
+      this.childStdout.pause()
+    }
   }
 
   private failAll(error: Error): void {
@@ -418,6 +439,15 @@ export class CodexAppServerClient {
       }
     })
   }
+}
+
+function readServerRequestThreadId(message: CodexAppServerServerRequest): string | null {
+  const params = message.params
+  if (!params || typeof params !== 'object' || !('threadId' in params)) {
+    return null
+  }
+  const threadId = (params as { threadId?: unknown }).threadId
+  return typeof threadId === 'string' ? threadId : null
 }
 
 /**

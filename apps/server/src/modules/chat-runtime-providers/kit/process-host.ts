@@ -27,8 +27,8 @@ export async function acquireProviderProcessHostResource<Resource>(
   return await providerRuntimeHostManager.acquireResource(input)
 }
 
-export function invalidateProviderProcessHostResource(hostId: string): Promise<void> {
-  return providerRuntimeHostManager.invalidateResource(hostId)
+export function invalidateProviderProcessHostResource(hostId: string, expectedResource?: unknown): Promise<void> {
+  return providerRuntimeHostManager.invalidateResource(hostId, expectedResource)
 }
 
 export function listProviderProcessHosts(): ProviderProcessHostSnapshot[] {

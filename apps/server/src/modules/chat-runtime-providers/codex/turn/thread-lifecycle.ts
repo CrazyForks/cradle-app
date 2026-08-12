@@ -8,13 +8,7 @@ import type { CodexConfig } from '../../../provider-contracts/provider-base'
 import { isCodexAppServerUnknownMethodError } from '../app-server/client'
 import type { ThreadForkParams } from '../app-server-protocol/v2/ThreadForkParams'
 import type { ThreadInjectItemsParams } from '../app-server-protocol/v2/ThreadInjectItemsParams'
-import type { ThreadTurnsListResponse } from '../app-server-protocol/v2/ThreadTurnsListResponse'
-import type { Turn } from '../app-server-protocol/v2/Turn'
-import type { CodexNativeHistorySnapshot } from '../projection/state-projector'
-import {
-  readCodexProviderSnapshot,
-  writeCodexNativeHistorySnapshot,
-} from '../projection/state-projector'
+import { readCodexProviderSnapshot } from '../projection/state-projector'
 import { codexRequestError, formatUnknownError } from '../provider-errors'
 import type {
   CodexAppServerClientLike,
@@ -22,11 +16,9 @@ import type {
   CodexThreadStatus,
   ThreadResponse,
 } from '../types'
-import { projectCodexNativeTurnsToCodexItems } from './native-history-projector'
 import { readCodexThreadDisplayTitle } from './stream-diagnostics'
 import { projectCradleTranscriptToCodexItems } from './transcript-projector'
 
-const CODEX_THREAD_TURNS_LIST_LIMIT = 100
 const CODEX_SIDE_BOUNDARY_PROMPT = [
   'You are in a Cradle side conversation.',
   '',
@@ -274,93 +266,4 @@ export async function injectCodexSideBoundary(
     }],
   }
   await client.request('thread/inject_items', params)
-}
-
-export async function injectCodexNativeHistory(
-  client: CodexAppServerClientLike,
-  threadId: string,
-  nativeHistory: CodexNativeHistorySnapshot | undefined,
-): Promise<void> {
-  if (!nativeHistory?.turns.length) {
-    return
-  }
-
-  const items = projectCodexNativeTurnsToCodexItems(nativeHistory.turns)
-  if (items.length === 0) {
-    return
-  }
-
-  const params: ThreadInjectItemsParams = {
-    threadId,
-    items: items as ThreadInjectItemsParams['items'],
-  }
-  await client.request('thread/inject_items', params)
-}
-
-export async function hydrateCodexNativeHistory(
-  client: CodexAppServerClientLike,
-  runtimeSession: RuntimeSession,
-  threadId: string,
-): Promise<void> {
-  try {
-    const turns = await listFullCodexTurns(client, threadId)
-    writeCodexNativeHistorySnapshot(runtimeSession, {
-      threadId,
-      itemsView: 'full',
-      fetchedAt: Date.now(),
-      complete: true,
-      turns,
-      turnCount: turns.length,
-      itemCount: countCodexTurnItems(turns),
-      nextCursor: null,
-      error: null,
-    })
-  }
-  catch (error) {
-    writeCodexNativeHistorySnapshot(runtimeSession, {
-      threadId,
-      itemsView: 'full',
-      fetchedAt: Date.now(),
-      complete: false,
-      turns: [],
-      turnCount: 0,
-      itemCount: 0,
-      nextCursor: null,
-      error: error instanceof Error ? error.message : String(error),
-    })
-  }
-}
-
-async function listFullCodexTurns(
-  client: CodexAppServerClientLike,
-  threadId: string,
-): Promise<Turn[]> {
-  const turns: Turn[] = []
-  let cursor: string | null = null
-  const seenCursors = new Set<string>()
-  do {
-    const response = await client.request('thread/turns/list', {
-      threadId,
-      cursor,
-      limit: CODEX_THREAD_TURNS_LIST_LIMIT,
-      sortDirection: 'asc',
-      itemsView: 'full',
-    }) as ThreadTurnsListResponse
-    turns.push(...(Array.isArray(response.data) ? response.data : []))
-    const nextCursor = typeof response.nextCursor === 'string' && response.nextCursor.length > 0
-      ? response.nextCursor
-      : null
-    if (nextCursor && seenCursors.has(nextCursor)) {
-      throw codexRequestError('hydrateCodexNativeHistory', `Codex thread/turns/list returned a repeated cursor: ${nextCursor}`)
-    }
-    if (nextCursor) {
-      seenCursors.add(nextCursor)
-    }
-    cursor = nextCursor
-  } while (cursor)
-  return turns
-}
-
-function countCodexTurnItems(turns: Turn[]): number {
-  return turns.reduce((count, turn) => count + turn.items.length, 0)
 }

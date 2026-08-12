@@ -2,6 +2,7 @@ import type { AccountInfo, SDKAuthStatusMessage, SDKRateLimitInfo } from '@anthr
 
 import { readObjectRecord as readRecord } from '../../../helpers/json-record'
 import type { RuntimeCrewAgentItem, RuntimeCrewCallItem, RuntimeCrewUiSlotState, RuntimePlanStepStatus, RuntimePlanUiSlotState, RuntimeProgressUiSlotState, RuntimeSession, RuntimeToolActivityItem, RuntimeToolActivityUiSlotState, RuntimeUsageUiSlotState } from '../../chat-runtime/runtime-provider-types'
+import { replaceRuntimeSessionProviderCheckpoint } from '../../chat-runtime/runtime-session-checkpoint'
 import type { WorkspaceProviderStateSnapshot } from '../kit/state-snapshot'
 import { readWorkspaceProviderStateSnapshot } from '../kit/state-snapshot'
 import type { ClaudeAgentCapturedPlan, ClaudeAgentCapturedTaskActivity, ClaudeAgentCapturedTodos } from './event-to-chunk-mapper'
@@ -54,6 +55,13 @@ const CLAUDE_AGENT_RECENT_CREW_CALL_LIMIT = 24
 const CLAUDE_AGENT_RECENT_WORKFLOW_EXECUTION_LIMIT = 12
 const CLAUDE_AGENT_RECENT_TASK_ACTIVITY_LIMIT = 24
 const CLAUDE_AGENT_CREW_PROMPT_SNAPSHOT_LIMIT = 2_000
+
+function writeClaudeAgentProviderSnapshot(
+  runtimeSession: RuntimeSession,
+  snapshot: WorkspaceProviderStateSnapshot,
+): void {
+  replaceRuntimeSessionProviderCheckpoint(runtimeSession, JSON.stringify(snapshot))
+}
 
 function retainRecentClaudeActivity<T extends { status: string, startedAt: number | null }>(
   items: T[],
@@ -112,7 +120,7 @@ export function writeClaudeAgentPendingModelSwitch(
 
 export function clearClaudeAgentPendingModelSwitch(runtimeSession: RuntimeSession): void {
   const snapshot = readWorkspaceProviderStateSnapshot(runtimeSession.providerStateSnapshot)
-  runtimeSession.providerStateSnapshot = JSON.stringify(writeClaudeAgentPendingModelSwitch(snapshot, null))
+  writeClaudeAgentProviderSnapshot(runtimeSession, writeClaudeAgentPendingModelSwitch(snapshot, null))
 }
 
 export function clearClaudeAgentCapturedPlan(runtimeSession: RuntimeSession): void {
@@ -127,7 +135,7 @@ export function clearClaudeAgentCapturedPlan(runtimeSession: RuntimeSession): vo
   else {
     delete nextSnapshot.claudeAgent
   }
-  runtimeSession.providerStateSnapshot = JSON.stringify(nextSnapshot)
+  writeClaudeAgentProviderSnapshot(runtimeSession, nextSnapshot)
 }
 
 export function clearClaudeAgentProgress(runtimeSession: RuntimeSession): void {
@@ -142,7 +150,7 @@ export function clearClaudeAgentProgress(runtimeSession: RuntimeSession): void {
   else {
     delete nextSnapshot.claudeAgent
   }
-  runtimeSession.providerStateSnapshot = JSON.stringify(nextSnapshot)
+  writeClaudeAgentProviderSnapshot(runtimeSession, nextSnapshot)
 }
 
 export function writeClaudeAgentCapturedPlan(runtimeSession: RuntimeSession, plan: ClaudeAgentCapturedPlan, updatedAt: number = Date.now()): void {
@@ -157,7 +165,7 @@ export function writeClaudeAgentCapturedPlan(runtimeSession: RuntimeSession, pla
       updatedAt,
     } satisfies ClaudeAgentPlanSnapshot,
   }
-  runtimeSession.providerStateSnapshot = JSON.stringify({
+  writeClaudeAgentProviderSnapshot(runtimeSession, {
     ...snapshot,
     claudeAgent: claudeAgentState,
   })
@@ -175,7 +183,7 @@ export function writeClaudeAgentProgress(runtimeSession: RuntimeSession, progres
       updatedAt,
     } satisfies ClaudeAgentProgressSnapshot,
   }
-  runtimeSession.providerStateSnapshot = JSON.stringify({
+  writeClaudeAgentProviderSnapshot(runtimeSession, {
     ...snapshot,
     claudeAgent: claudeAgentState,
   })
@@ -259,7 +267,7 @@ export function writeClaudeAgentAccountSnapshot(
       updatedAt,
     } satisfies ClaudeAgentAccountSnapshot,
   }
-  runtimeSession.providerStateSnapshot = JSON.stringify({
+  writeClaudeAgentProviderSnapshot(runtimeSession, {
     ...snapshot,
     claudeAgent: claudeAgentState,
   })
@@ -281,7 +289,7 @@ export function writeClaudeAgentAuthStatusSnapshot(
       updatedAt,
     } satisfies ClaudeAgentAuthStatusSnapshot,
   }
-  runtimeSession.providerStateSnapshot = JSON.stringify({
+  writeClaudeAgentProviderSnapshot(runtimeSession, {
     ...snapshot,
     claudeAgent: claudeAgentState,
   })
@@ -301,7 +309,7 @@ export function writeClaudeAgentRateLimitSnapshot(
       updatedAt,
     } satisfies ClaudeAgentRateLimitSnapshot,
   }
-  runtimeSession.providerStateSnapshot = JSON.stringify({
+  writeClaudeAgentProviderSnapshot(runtimeSession, {
     ...snapshot,
     claudeAgent: claudeAgentState,
   })
@@ -535,7 +543,7 @@ export function writeClaudeAgentCrewCall(
   }
 
   claudeAgentState.crewCalls = retainRecentClaudeActivity(existingCalls, CLAUDE_AGENT_RECENT_CREW_CALL_LIMIT)
-  runtimeSession.providerStateSnapshot = JSON.stringify({
+  writeClaudeAgentProviderSnapshot(runtimeSession, {
     ...snapshot,
     claudeAgent: claudeAgentState,
   })
@@ -561,7 +569,7 @@ export function writeClaudeAgentWorkflowExecution(
     existingExecutions,
     CLAUDE_AGENT_RECENT_WORKFLOW_EXECUTION_LIMIT,
   )
-  runtimeSession.providerStateSnapshot = JSON.stringify({
+  writeClaudeAgentProviderSnapshot(runtimeSession, {
     ...snapshot,
     claudeAgent: claudeAgentState,
   })
@@ -797,7 +805,7 @@ export function writeClaudeAgentTaskActivity(
   }
 
   claudeAgentState.taskActivity = retainRecentClaudeActivity(existingItems, CLAUDE_AGENT_RECENT_TASK_ACTIVITY_LIMIT)
-  runtimeSession.providerStateSnapshot = JSON.stringify({
+  writeClaudeAgentProviderSnapshot(runtimeSession, {
     ...snapshot,
     claudeAgent: claudeAgentState,
   })

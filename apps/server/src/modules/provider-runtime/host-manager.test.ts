@@ -91,4 +91,33 @@ describe('provider runtime host manager', () => {
     secondLease.release()
     await manager.clear()
   })
+
+  it('does not let a stale process generation invalidate its replacement', async () => {
+    const manager = new ProviderRuntimeHostManager()
+    let generation = 0
+    const input = {
+      runtimeKind: 'codex',
+      providerTargetId: 'target-1',
+      scopeId: 'provider-host',
+      retainOnRelease: true,
+      createResource: () => ({ generation: ++generation }),
+      disposeResource: vi.fn(),
+    }
+
+    const first = await manager.acquireResource(input)
+    const hostId = first.hostId
+    const firstResource = first.resource
+    first.release()
+    await manager.invalidateResource(hostId, firstResource)
+
+    const second = await manager.acquireResource(input)
+    expect(second.resource).toEqual({ generation: 2 })
+    await manager.invalidateResource(hostId, firstResource)
+    expect(manager.listHosts()).toEqual([
+      expect.objectContaining({ hostId, hasResource: true }),
+    ])
+
+    second.release()
+    await manager.clear()
+  })
 })

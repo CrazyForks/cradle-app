@@ -8,6 +8,15 @@ security, performance, tech-debt/architecture, and test coverage.
 identity + kill kind→auth + dual-endpoint first-class（DeepSeek/Moonshot 等）+
 显式 Bind + Import suggest 确认写入。**明确不做** Kimi OAuth。聚焦 `/improve plan`。
 
+2026-08-12 在 commit `4b092246` 上补充 Plan 074（XL）：把 Codex 的 durable checkpoint、
+host-owned live projection、native rollout 与 active-operation notification delivery 分开。
+删除完整 `Turn[]` snapshot 与估算型 Context Usage；当前窗口只使用 native
+`last.totalTokens`，详细 breakdown 不可用时返回 `null`。旧大 snapshot 首次 resume 时通过
+provider-owned value migration 压缩并由现有 Drizzle directory 回写；同时用 dirty revision
+替换 whole-snapshot signature，并把 shared host 的 pinned subscription、无界 mailbox、
+stale tail replay、routing 与 dead-generation reuse 收敛成 operation-owned backpressure。
+不改 DB schema，不用 transcript/tokenizer heuristic 冒充 Codex prompt composition。
+
 Supplemented on 2026-07-14 against commit `e3d008c` from the five-direction
 web/server architecture review. Plans 042-046 were independently audited and
 then vetted against current source; they do not reopen completed Plans 024,
@@ -225,6 +234,7 @@ Ordered by leverage (security/correctness first, structural refactors last).
 | 072  | Move chat message bytes into a content-addressed blob store, losslessly | P0 | XL | — | TODO (Step 0 is a standalone web-only bug fix; Step 9 backfill is what shrinks existing sessions) |
 | 073  | Cradle Platform Constitution — Jarvis as Agent Kind | P0 | — | 061, 062 (conceptual) | FINAL — awaiting human accept / amend / reject (direction only; not an implementation plan) |
 | 073  | Provider first-class identity + dual-endpoint platform (no Kimi OAuth) | P1 | XL | — | TODO |
+| 074  | Bound Codex runtime state, native Context Usage, and shared-host pressure | P0 | XL | 052 | DONE (scoped implementation/tests pass; repository typechecks remain red on unrelated plugin-SDK drift) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED (one-line rationale).
 
@@ -346,6 +356,7 @@ splitting until this track is stable.
 - 050 follows 040 and repairs the concrete snapshot-gap stale-cache bug before consolidating all Session projection semantics. It must land before association cache work.
 - 051 follows 050 so Issue association mutations reuse the Session projection gateway. Server-side workspace invariants and participant-owned writes are mandatory before Web cache reconciliation.
 - 052 follows completed Plan 041's lifecycle ownership rules and is independent of Plans 042-051. Its internal order is mandatory: characterize isolation -> retain idle hosts -> establish the provider host/router -> move session env to thread config -> bind/resume threads -> migrate all callers -> ratchet docs/tests. Do not land a rollback-only resume patch first.
+- 074 follows completed Plan 052 and repairs its warm-host pressure, routing, and generation-lifecycle gaps while removing Codex's history-bearing snapshot. Blocked Plan 069 is precedent for the durable/live ownership boundary but is not a dependency: 074 must not use provider transcript or Cradle transcript as exact cold prompt reconstruction.
 - 054 follows completed Plans 024 and 040: chat-runtime owns the run cursor/log, while persisted Session projections remain the recovery authority when exact in-memory replay is impossible. It does not depend on unfinished Plans 044 or 050, but those plans must preserve its terminal-publication and snapshot-recovery contracts.
 - 056 consumes Plan 047's already-landed thin Download Center but adds a separate declaration/dispatch layer: Managed Resources owns catalog projection and exact-key command routing; each adapter keeps discovery, versions, installation truth, storage, activation, rollback, and uninstall; Download Center keeps bytes/cancel/resume/history. Chronicle model manifests are the first adapter. Reconcile 047's stale TODO row and execute from a clean worktree because current Server composition, Chronicle, navigation, locale, and generated-client paths overlap operator work.
 - 057 follows 056 and declares `{ opencode, runtime, cli }` through the shared catalog. OpenCode owns release identity, archive extraction, executable verification, installation truth, process leases, and uninstall; its archive transfer uses the same exact resource identity. It must not add an OpenCode-only Settings installer or parallel HTTP command surface.

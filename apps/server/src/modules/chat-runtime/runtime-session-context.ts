@@ -6,6 +6,7 @@ import { AppError } from '../../errors/app-error'
 import { parseJsonObject } from '../../helpers/json-record'
 import { db } from '../../infra'
 import { createChildLogger } from '../../logging/logger'
+import { decodeCodexDurableCheckpoint } from '../chat-runtime-providers/codex/state/durable-checkpoint'
 import { readProviderStateSnapshot } from '../chat-runtime-providers/kit/state-snapshot'
 import * as ModelRegistry from '../model-registry/service'
 import {
@@ -36,10 +37,16 @@ import type {
   RuntimeProviderTargetProfile,
   RuntimeSession,
 } from './runtime-provider-types'
+import { readRuntimeSessionProviderCheckpointRevision } from './runtime-session-checkpoint'
 
 const runtimeSessionLogger = createChildLogger({ module: 'chat-runtime.runtime-session' })
 const bindingByRuntimeSession = new WeakMap<RuntimeSession, {
-  signature: string
+  sessionId: string
+  providerTargetId: string | null
+  runtimeKind: RuntimeKind
+  providerSessionId: string | null
+  providerCheckpointRevision: number
+  requestedModelId: string | null
   binding: BackendSessionBinding | undefined
 }>()
 
@@ -229,27 +236,41 @@ export function attachBinding(input: {
   runtimeSession: RuntimeSession
   requestedModelId: string | null
 }): BackendSessionBinding | undefined {
-  const signature = JSON.stringify([
-    input.sessionId,
-    input.providerTargetId,
-    input.runtimeKind,
-    input.runtimeSession.providerSessionId,
-    input.runtimeSession.providerStateSnapshot,
-    input.requestedModelId,
-  ])
   const cached = bindingByRuntimeSession.get(input.runtimeSession)
-  if (cached?.signature === signature) {
+  const providerCheckpointRevision = readRuntimeSessionProviderCheckpointRevision(input.runtimeSession)
+  if (
+    cached?.sessionId === input.sessionId
+    && cached.providerTargetId === input.providerTargetId
+    && cached.runtimeKind === input.runtimeKind
+    && cached.providerSessionId === input.runtimeSession.providerSessionId
+    && cached.providerCheckpointRevision === providerCheckpointRevision
+    && cached.requestedModelId === input.requestedModelId
+  ) {
     return cached.binding
   }
+  const durableRuntimeSession = input.runtimeKind === 'codex'
+    ? {
+        ...input.runtimeSession,
+        providerStateSnapshot: decodeCodexDurableCheckpoint(input.runtimeSession.providerStateSnapshot).serialized,
+      }
+    : input.runtimeSession
   const binding = persistProviderRuntimeResolution({
     chatSessionId: input.sessionId,
     providerTargetId: input.providerTargetId,
     runtimeKind: input.runtimeKind,
-    runtimeSession: input.runtimeSession,
+    runtimeSession: durableRuntimeSession,
     requestedModelId: input.requestedModelId,
     durable: true,
   })
-  bindingByRuntimeSession.set(input.runtimeSession, { signature, binding })
+  bindingByRuntimeSession.set(input.runtimeSession, {
+    sessionId: input.sessionId,
+    providerTargetId: input.providerTargetId,
+    runtimeKind: input.runtimeKind,
+    providerSessionId: input.runtimeSession.providerSessionId,
+    providerCheckpointRevision,
+    requestedModelId: input.requestedModelId,
+    binding,
+  })
   return binding
 }
 

@@ -31,7 +31,7 @@ export function ContextUsageDetailPanelContainer({
     queryFn: ({ signal }) => getChatRuntimeContextUsage(sessionId!, signal),
     enabled: Boolean(sessionId),
     staleTime: 5_000,
-    refetchInterval: compactState?.isCompactRelevant ? 5_000 : false,
+    refetchInterval: query => compactState?.isCompactRelevant && query.state.data?.usage !== null ? 5_000 : false,
     retry: false,
   })
 

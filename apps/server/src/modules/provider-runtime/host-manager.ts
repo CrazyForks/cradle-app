@@ -158,9 +158,12 @@ export class ProviderRuntimeHostManager {
     }
   }
 
-  invalidateResource(hostId: string): Promise<void> {
+  invalidateResource(hostId: string, expectedResource?: unknown): Promise<void> {
     const entry = this.hosts.get(hostId)
     if (!entry) {
+      return Promise.resolve()
+    }
+    if (expectedResource !== undefined && entry.resource !== expectedResource) {
       return Promise.resolve()
     }
     return this.disposeHostResource(entry)

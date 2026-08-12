@@ -1361,7 +1361,6 @@ describe('codexProvider app-server integration', () => {
     ])
     expect(clients[0]!.requests.map(request => request.method)).toEqual([
       'thread/resume',
-      'thread/turns/list',
       'turn/start',
       'thread/goal/clear',
     ])
@@ -1560,6 +1559,14 @@ describe('codexProvider app-server integration', () => {
     // Only one app-server client should be created
     expect(clients).toHaveLength(1)
     expect(clients[0]?.requests.map(request => request.method)).toContain('config/read')
+    const requestCountAfterHydration = clients[0]!.requests.length
+    await provider.getUiSlotStates({
+      runtimeSession,
+      profile: createProfile(),
+      workspaceId: 'workspace-1',
+      workspacePath: '/tmp/cradle-workspace',
+    })
+    expect(clients[0]!.requests).toHaveLength(requestCountAfterHydration)
 
     clients[0]!.pushNotification({
       method: 'item/agentMessage/delta',
@@ -1651,7 +1658,7 @@ describe('codexProvider app-server integration', () => {
       timedOut: false,
       truncated: false,
     })
-    expect(client.requests.map(request => request.method)).toContain('thread/turns/list')
+    expect(client.requests.map(request => request.method)).not.toContain('thread/turns/list')
     expect(client.close).not.toHaveBeenCalled()
   })
 
@@ -2134,7 +2141,6 @@ describe('codexProvider app-server integration', () => {
     })
     expect(client.requests.map(request => request.method)).toEqual([
       'thread/resume',
-      'thread/turns/list',
       'thread/goal/set',
     ])
     expect(client.requests).not.toContainEqual({
@@ -2428,7 +2434,7 @@ describe('codexProvider app-server integration', () => {
     ]))
   })
 
-  it('projects estimated Codex context usage from compact usage and native history snapshots', async () => {
+  it('does not project detailed Context Usage from aggregate native usage', async () => {
     const client = new FakeCodexAppServerClient({})
     const provider = createProvider(client)
     const runtimeSession = createRuntimeSession('codex-thread-1')
@@ -2526,40 +2532,7 @@ describe('codexProvider app-server integration', () => {
       systemPrompt: 'Cradle system workflow for tests.',
     })
 
-    expect(usage).toEqual(expect.objectContaining({
-      runtimeKind: 'codex',
-      providerSessionId: 'codex-thread-1',
-      source: 'codex-native-history-estimate',
-      model: 'gpt-5-codex',
-      totalTokens: 2_000,
-      maxTokens: 200_000,
-      percentage: 1,
-    }))
-    expect(usage?.apiUsage).toEqual(expect.objectContaining({
-      inputTokens: 2_000,
-      cachedInputTokens: 1_200,
-      cacheWriteInputTokens: 125,
-      outputTokens: 500,
-      reasoningOutputTokens: 100,
-      lifetimeInputTokens: 8_000,
-      lifetimeCacheWriteInputTokens: 500,
-    }))
-
-    const sections = new Map(usage!.sections.map(section => [section.kind, section]))
-    expect(sections.get('system-prompt')).toEqual(expect.objectContaining({ label: 'System prompt' }))
-    expect(sections.get('messages')?.items).toEqual(expect.arrayContaining([
-      expect.objectContaining({ kind: 'user-message' }),
-      expect.objectContaining({ kind: 'assistant-message' }),
-    ]))
-    expect(sections.get('reasoning')?.items).toEqual(expect.arrayContaining([
-      expect.objectContaining({ kind: 'reasoning-item' }),
-    ]))
-    expect(sections.get('tools')?.items).toEqual(expect.arrayContaining([
-      expect.objectContaining({ kind: 'command-execution' }),
-    ]))
-    expect(sections.get('codex-runtime-context')).toEqual(expect.objectContaining({
-      label: 'Codex runtime context',
-    }))
+    expect(usage).toBeNull()
   })
 
   it('projects Codex status, model, and reasoning into UI slot state', async () => {
@@ -3952,7 +3925,7 @@ describe('codexProvider app-server integration', () => {
     expect(reportSessionTitle).toHaveBeenCalledWith('Final Codex preview')
   })
 
-  it('reconstructs Cradle transcript into Codex thread history before starting a fresh turn', async () => {
+  it('does not replay the Cradle transcript as native history for a fresh thread', async () => {
     const client = new FakeCodexAppServerClient({})
     const provider = createProvider(client)
     const history: UIMessage[] = [
@@ -4044,10 +4017,10 @@ describe('codexProvider app-server integration', () => {
     const firstChunkPromise = stream.next()
 
     await vi.waitFor(() => {
-      expect(client.requests.map(request => request.method)).toEqual(['thread/start', 'thread/inject_items', 'turn/start'])
+      expect(client.requests.map(request => request.method)).toEqual(['thread/start', 'turn/start'])
     })
 
-    expect(client.requests[1]).toEqual({
+    expect(client.requests).not.toContainEqual({
       method: 'thread/inject_items',
       params: {
         threadId: 'codex-thread-1',
@@ -4126,7 +4099,7 @@ describe('codexProvider app-server integration', () => {
         ],
       },
     })
-    expect(client.requests[2]).toEqual({
+    expect(client.requests[1]).toEqual({
       method: 'turn/start',
       params: expect.objectContaining({
         input: [{ type: 'text', text: 'Continue now', text_elements: [] }],
@@ -4153,7 +4126,7 @@ describe('codexProvider app-server integration', () => {
     await drainStream(stream)
   })
 
-  it('injects previous Codex native history before starting a fresh replacement thread', async () => {
+  it('does not carry native rollout history into a fresh replacement thread', async () => {
     const client = new FakeCodexAppServerClient({})
     const provider = createProvider(client)
     const previousProviderStateSnapshot = JSON.stringify({
@@ -4223,101 +4196,9 @@ describe('codexProvider app-server integration', () => {
       previousProviderStateSnapshot,
     })
 
-    expect(JSON.parse(runtimeSession.providerStateSnapshot ?? '{}')).toMatchObject({
-      codex: {
-        previousNativeHistory: {
-          threadId: 'previous-thread',
-          itemsView: 'full',
-          turnCount: 1,
-          itemCount: 4,
-        },
-      },
-    })
-
-    const stream = provider.streamTurn({
-      runId: 'run-codex-native-history-reconstruction',
-      runtimeSession,
-      profile: createProfile(),
-      message: createUserMessage('Continue from native history'),
-      workspaceId: 'workspace-1',
-    })
-    const firstChunkPromise = stream.next()
-
-    await vi.waitFor(() => {
-      expect(client.requests.map(request => request.method).slice(0, 3)).toEqual(['thread/start', 'thread/inject_items', 'turn/start'])
-    })
-
-    expect(client.requests[1]).toEqual({
-      method: 'thread/inject_items',
-      params: {
-        threadId: 'codex-thread-1',
-        items: [
-          {
-            type: 'message',
-            role: 'user',
-            content: [{ type: 'input_text', text: 'Earlier Codex request' }],
-            metadata: { turn_id: 'previous-turn-1' },
-          },
-          {
-            type: 'reasoning',
-            summary: [{ type: 'summary_text', text: 'I checked the prior native history.' }],
-            content: [{ type: 'reasoning_text', text: 'The important fact is already known.' }],
-            encrypted_content: null,
-            metadata: { turn_id: 'previous-turn-1' },
-          },
-          {
-            type: 'message',
-            role: 'assistant',
-            content: [{ type: 'output_text', text: 'Earlier Codex answer' }],
-            metadata: { turn_id: 'previous-turn-1' },
-          },
-          {
-            type: 'function_call',
-            name: 'github/search',
-            arguments: JSON.stringify({ query: 'cradle' }),
-            call_id: 'previous-mcp-item',
-            metadata: { turn_id: 'previous-turn-1' },
-          },
-          {
-            type: 'function_call_output',
-            call_id: 'previous-mcp-item',
-            output: JSON.stringify({
-              server: 'github',
-              tool: 'search',
-              status: 'completed',
-              pluginId: null,
-              durationMs: 12,
-              durationSeconds: 0.012,
-              error: null,
-              result: { content: [], structuredContent: { total: 1 }, _meta: null },
-              content: [],
-              structuredContent: { total: 1 },
-              _meta: null,
-            }),
-            metadata: { turn_id: 'previous-turn-1' },
-          },
-        ],
-      },
-    })
-
-    client.pushNotification({
-      method: 'item/agentMessage/delta',
-      params: {
-        threadId: 'codex-thread-1',
-        turnId: 'codex-turn-1',
-        itemId: 'assistant-message-1',
-        delta: 'Recovered native history',
-      },
-    })
-    await firstChunkPromise
-    client.pushNotification({
-      method: 'turn/completed',
-      params: {
-        threadId: 'codex-thread-1',
-        turn: { id: 'codex-turn-1', status: 'completed' },
-      },
-    })
-    await drainStream(stream)
+    expect(JSON.parse(runtimeSession.providerStateSnapshot ?? '{}')).not.toHaveProperty('codex.nativeHistory')
+    expect(JSON.parse(runtimeSession.providerStateSnapshot ?? '{}')).not.toHaveProperty('codex.previousNativeHistory')
+    expect(client.requests).toEqual([])
   })
 
   it('passes external OpenAI-compatible targets as explicit Codex model providers', async () => {
@@ -6044,44 +5925,12 @@ describe('codexProvider app-server integration', () => {
       }))
     })
     await vi.waitFor(() => {
-      expect(client.requests.map(request => request.method).slice(0, 3)).toEqual([
+      expect(client.requests.map(request => request.method).slice(0, 2)).toEqual([
         'thread/resume',
-        'thread/turns/list',
         'turn/start',
       ])
     })
-    expect(client.requests[1]).toEqual({
-      method: 'thread/turns/list',
-      params: {
-        threadId: 'existing-thread',
-        cursor: null,
-        limit: 100,
-        sortDirection: 'asc',
-        itemsView: 'full',
-      },
-    })
-    expect(JSON.parse(runtimeSession.providerStateSnapshot ?? '{}')).toMatchObject({
-      codex: {
-        nativeHistory: {
-          threadId: 'existing-thread',
-          itemsView: 'full',
-          complete: true,
-          turnCount: 1,
-          itemCount: 3,
-          turns: [
-            {
-              id: 'history-turn-1',
-              itemsView: 'full',
-              items: [
-                { type: 'userMessage', id: 'history-user-item' },
-                { type: 'agentMessage', id: 'history-agent-item', text: 'Earlier Codex answer' },
-                { type: 'mcpToolCall', id: 'history-mcp-item', server: 'github', tool: 'search' },
-              ],
-            },
-          ],
-        },
-      },
-    })
+    expect(client.requests.some(request => request.method === 'thread/turns/list')).toBe(false)
     client.pushNotification({
       method: 'item/agentMessage/delta',
       params: { threadId: 'existing-thread', turnId: 'codex-turn-1', itemId: 'assistant-message-1', delta: 'Continued' },
@@ -6096,40 +5945,7 @@ describe('codexProvider app-server integration', () => {
       // Drain stream.
     }
 
-    expect(client.requests.map(request => request.method).slice(0, 3)).toEqual([
-      'thread/resume',
-      'thread/turns/list',
-      'turn/start',
-    ])
-
-    client.requests.length = 0
-    const resumedStream = provider.streamTurn({
-      runId: 'run-codex-test-resumed',
-      runtimeSession,
-      profile: createProfile(),
-      message: createUserMessage('Continue again'),
-      workspaceId: 'workspace-1',
-    })
-    const resumedFirstChunk = resumedStream.next()
-
-    await vi.waitFor(() => {
-      expect(client.requests.map(request => request.method)).toEqual(['turn/start'])
-    })
-    client.pushNotification({
-      method: 'item/agentMessage/delta',
-      params: { threadId: 'existing-thread', turnId: 'codex-turn-1', itemId: 'assistant-message-2', delta: 'Continued again' },
-    })
-    await resumedFirstChunk
-    client.pushNotification({
-      method: 'turn/completed',
-      params: { threadId: 'existing-thread', turn: { id: 'codex-turn-1', status: 'completed' } },
-    })
-    for await (const _chunk of resumedStream) {
-      // Drain stream.
-    }
-    expect(client.requests.map(request => request.method)).toContain('thread/turns/list')
-    expect(client.requests.findIndex(request => request.method === 'thread/turns/list'))
-      .toBeGreaterThan(client.requests.findIndex(request => request.method === 'turn/start'))
+    expect(client.requests.some(request => request.method === 'thread/turns/list')).toBe(false)
   })
 
   it('injects Work harness context once as a developer item', async () => {

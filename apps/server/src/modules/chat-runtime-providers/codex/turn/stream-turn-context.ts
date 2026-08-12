@@ -59,7 +59,6 @@ export interface CodexStreamTurnContext {
   codexConfig: NonNullable<ThreadForkParams['config']>
   codexEnv: Record<string, string>
   serverRequestHandler: NonNullable<CodexAppServerClientOptions['serverRequestHandler']>
-  shouldInjectReconstructedHistory: boolean
   isFreshProviderThread: boolean
   isLiveSideFork: boolean
 }
@@ -152,7 +151,6 @@ export function resolveCodexStreamTurnContext(
     codexConfig,
     codexEnv,
     serverRequestHandler: deps.createServerRequestHandler(auth),
-    shouldInjectReconstructedHistory: !input.runtimeSession.providerSessionId,
     isFreshProviderThread: !input.runtimeSession.providerSessionId,
     isLiveSideFork: isLiveCodexSideFork(input.runtimeSession),
   }
