@@ -3,12 +3,13 @@ import { describe, expect, it } from 'vitest'
 
 import { loadServerAuthConfig } from '../config/server-config'
 import { createAuthPlugin, verifyRequestToken, verifyWebSocketRequestToken } from './auth'
-import { issueWebSocketTicket, resetWebSocketTicketsForTests } from './websocket-ticket'
+import { issueSingleUseTicket, resetSingleUseTicketsForTests } from './single-use-ticket'
 
 function createTestApp(config: { authRequired: boolean, authToken: string | null }) {
   return new Elysia()
     .use(createAuthPlugin(config))
     .get('/health', () => 'OK')
+    .get('/api/plugins/-/deps/react.mjs', () => 'export {}')
     .get('/protected', () => ({ ok: true }))
 }
 
@@ -86,6 +87,15 @@ describe('hTTP auth plugin', () => {
     expect(docsResponse.status).not.toBe(401)
   })
 
+  it('allows stable shared plugin dependency modules without credentials', async () => {
+    const app = createTestApp({ authRequired: true, authToken: 'secret-token' })
+
+    const response = await app.handle(new Request('http://localhost/api/plugins/-/deps/react.mjs'))
+
+    expect(response.status).toBe(200)
+    await expect(response.text()).resolves.toBe('export {}')
+  })
+
   it('accepts the WebSocket-adjacent token header', () => {
     const headers = new Headers({ 'x-cradle-token': 'secret-token' })
 
@@ -95,23 +105,37 @@ describe('hTTP auth plugin', () => {
   })
 
   it('accepts a single-use audience-bound ticket for browser WebSocket clients', () => {
-    resetWebSocketTicketsForTests()
-    const { ticket } = issueWebSocketTicket('/sync')
+    resetSingleUseTicketsForTests()
+    const { ticket } = issueSingleUseTicket('/sync')
     const request = new Request(`http://localhost/sync?ticket=${ticket}`)
 
     expect(verifyWebSocketRequestToken(request, {
       config: { authRequired: true, authToken: 'secret-token' },
       audience: '/sync',
     })).toBe(true)
-    expect(verifyWebSocketRequestToken(request, {
+    expect(verifyWebSocketRequestToken(new Request(request.url), {
       config: { authRequired: true, authToken: 'secret-token' },
       audience: '/sync',
     })).toBe(false)
   })
 
+  it('keeps ticket consumption idempotent within one WebSocket upgrade request', () => {
+    resetSingleUseTicketsForTests()
+    const { ticket } = issueSingleUseTicket('/sync')
+    const request = new Request(`http://localhost/sync?ticket=${ticket}`)
+    const options = {
+      config: { authRequired: true, authToken: 'secret-token' },
+      audience: '/sync',
+    }
+
+    expect(verifyWebSocketRequestToken(request, options)).toBe(true)
+    expect(verifyWebSocketRequestToken(request, options)).toBe(true)
+    expect(verifyWebSocketRequestToken(new Request(request.url), options)).toBe(false)
+  })
+
   it('lets the global auth hook pre-validate, but not consume, WebSocket tickets', async () => {
-    resetWebSocketTicketsForTests()
-    const { ticket } = issueWebSocketTicket('/protected')
+    resetSingleUseTicketsForTests()
+    const { ticket } = issueSingleUseTicket('/protected')
     const app = createTestApp({ authRequired: true, authToken: 'secret-token' })
 
     const response = await app.handle(new Request(`http://localhost/protected?ticket=${ticket}`, {
@@ -125,8 +149,8 @@ describe('hTTP auth plugin', () => {
   })
 
   it('does not bypass HTTP auth for a ticket without a WebSocket upgrade', async () => {
-    resetWebSocketTicketsForTests()
-    const { ticket } = issueWebSocketTicket('/protected')
+    resetSingleUseTicketsForTests()
+    const { ticket } = issueSingleUseTicket('/protected')
     const app = createTestApp({ authRequired: true, authToken: 'secret-token' })
 
     const response = await app.handle(new Request(`http://localhost/protected?ticket=${ticket}`))
@@ -134,9 +158,27 @@ describe('hTTP auth plugin', () => {
     expect(response.status).toBe(401)
   })
 
+  it('allows one audience-bound GET with a browser resource ticket', async () => {
+    resetSingleUseTicketsForTests()
+    const app = createTestApp({ authRequired: true, authToken: 'secret-token' })
+    const issued = await app.handle(new Request('http://localhost/auth/resource-ticket', {
+      method: 'POST',
+      headers: {
+        'authorization': 'Bearer secret-token',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ path: '/protected' }),
+    }))
+    const { ticket } = await issued.json() as { ticket: string }
+    const resourceUrl = `http://localhost/protected?resourceTicket=${ticket}`
+
+    expect((await app.handle(new Request(resourceUrl))).status).toBe(200)
+    expect((await app.handle(new Request(resourceUrl))).status).toBe(401)
+  })
+
   it('rejects a WebSocket ticket issued for a different audience', () => {
-    resetWebSocketTicketsForTests()
-    const { ticket } = issueWebSocketTicket('/sync')
+    resetSingleUseTicketsForTests()
+    const { ticket } = issueSingleUseTicket('/sync')
     const request = new Request(`http://localhost/terminal-sessions/one/socket?ticket=${ticket}`)
 
     expect(verifyWebSocketRequestToken(request, {

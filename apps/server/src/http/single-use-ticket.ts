@@ -29,7 +29,7 @@ function pruneTickets(now: number): void {
   }
 }
 
-export function issueWebSocketTicket(audience: string, now = Date.now()): {
+export function issueSingleUseTicket(audience: string, now = Date.now()): {
   ticket: string
   expiresAt: number
 } {
@@ -40,18 +40,18 @@ export function issueWebSocketTicket(audience: string, now = Date.now()): {
   return { ticket, expiresAt }
 }
 
-export function consumeWebSocketTicket(ticket: string, audience: string, now = Date.now()): boolean {
+export function consumeSingleUseTicket(ticket: string, audience: string, now = Date.now()): boolean {
   const digest = digestTicket(ticket)
-  const valid = hasWebSocketTicket(ticket, audience, now)
+  const valid = hasSingleUseTicket(ticket, audience, now)
   tickets.delete(digest)
   return valid
 }
 
-export function hasWebSocketTicket(ticket: string, audience: string, now = Date.now()): boolean {
+export function hasSingleUseTicket(ticket: string, audience: string, now = Date.now()): boolean {
   const record = tickets.get(digestTicket(ticket))
   return Boolean(record && record.expiresAt > now && record.audience === audience)
 }
 
-export function resetWebSocketTicketsForTests(): void {
+export function resetSingleUseTicketsForTests(): void {
   tickets.clear()
 }

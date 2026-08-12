@@ -1,4 +1,4 @@
-import type { Disposable, PluginDescriptor } from '@cradle/plugin-sdk'
+import type { Disposable } from '@cradle/plugin-sdk'
 import { derivePluginRouteSegment } from '@cradle/plugin-sdk'
 import { evaluatePluginRuntimeCapabilityPolicy } from '@cradle/plugin-sdk/permissions'
 import type {
@@ -10,17 +10,30 @@ import type {
 } from '@cradle/plugin-sdk/web'
 import { z } from 'zod'
 
+import { getPlugins } from '~/api-gen/sdk.gen'
+import type { GetPluginsResponse } from '~/api-gen/types.gen'
 import { toastManager } from '~/components/ui/toast'
 import { readPluginDevSessions } from '~/features/plugins/api/plugin-dev'
 
+import { getAuthenticatedServerResourceUrl } from './authenticated-server-url'
 import { getServerUrl } from './electron'
 import { usePluginStore } from './plugin-store'
+import { cradleFetch } from './server-credential'
 import type { ServerEventSource } from './server-transport'
 import { openServerEventSource } from './server-transport'
 import { registerWebCodeActivitySubscription } from './web-code-activity-registry'
 
-type WebPluginDescriptor = Pick<PluginDescriptor, 'name' | 'version' | 'displayName' | 'hasWeb'>
-  & Partial<Pick<PluginDescriptor, 'identity' | 'routeSegment' | 'layers'>>
+type PluginDescriptor = GetPluginsResponse[number]
+
+interface WebPluginDescriptor {
+  name: string
+  version: string
+  displayName: string
+  hasWeb: boolean
+  identity?: string
+  routeSegment?: string
+  layers?: { web: { status: PluginDescriptor['layers']['web']['status'] } }
+}
 
 const WebPluginActivateSchema = z.function()
   .transform(fn => fn as NonNullable<WebPlugin['activate']>)
@@ -133,7 +146,7 @@ function createWebPluginRouteClient(pluginName: string, descriptor?: PluginDescr
       return routeUrl(path)
     },
     fetch(path, init) {
-      return fetch(routeUrl(path), init)
+      return cradleFetch(routeUrl(path), init)
     },
   }
 }
@@ -306,7 +319,9 @@ export async function loadWebPlugins(): Promise<void> {
   await Promise.all(
     webPlugins.map(async (plugin) => {
       const owner = plugin.identity ?? plugin.name
-      const moduleUrl = `${baseUrl}/api/plugins/${getWebBundleRouteSegment(plugin)}/web.mjs`
+      const moduleUrl = await getAuthenticatedServerResourceUrl(
+        `${baseUrl}/api/plugins/${getWebBundleRouteSegment(plugin)}/web.mjs`,
+      )
       try {
         setWebLayerState(owner, 'activating')
         const mod = await import(/* @vite-ignore */ moduleUrl)
@@ -323,11 +338,8 @@ export async function loadWebPlugins(): Promise<void> {
 }
 
 async function readPluginDescriptors(): Promise<PluginDescriptor[]> {
-  const response = await fetch(`${getServerUrl()}/api/plugins`)
-  if (!response.ok) {
-    throw new Error(`Failed to read plugin descriptors: HTTP ${response.status}`)
-  }
-  return z.array(z.custom<PluginDescriptor>()).parse(await response.json())
+  const { data } = await getPlugins({ throwOnError: true })
+  return data
 }
 
 async function reloadDevelopmentWebPlugin(session: PluginDevSession): Promise<void> {
@@ -342,7 +354,8 @@ async function reloadDevelopmentWebPlugin(session: PluginDevSession): Promise<vo
   )
   moduleUrl.searchParams.set('cradleDevRevision', String(session.revisions.web))
   setWebLayerState(session.pluginName, 'activating')
-  const mod = await import(/* @vite-ignore */ moduleUrl.toString())
+  const authenticatedModuleUrl = await getAuthenticatedServerResourceUrl(moduleUrl.toString())
+  const mod = await import(/* @vite-ignore */ authenticatedModuleUrl)
   await activateWebPluginModule(session.pluginName, mod, descriptor)
   console.log(`[plugin-host] development web reloaded: ${session.pluginName}@${session.revisions.web}`)
 }

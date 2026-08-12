@@ -6,6 +6,10 @@ export const zPostAuthWebsocketTicketBody = z.object({
     audience: z.string().min(1).max(256)
 });
 
+export const zPostAuthResourceTicketBody = z.object({
+    path: z.string().min(1).max(512).regex(/^\/[^?#]*$/)
+});
+
 export const zPutPreferencesAppBody = z.object({
     featureFlags: z.object({
         multiWorkspacePoc: z.boolean().default(false),

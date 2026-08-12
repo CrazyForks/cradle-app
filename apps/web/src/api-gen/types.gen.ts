@@ -25,6 +25,27 @@ export type PostAuthWebsocketTicketResponses = {
 
 export type PostAuthWebsocketTicketResponse = PostAuthWebsocketTicketResponses[keyof PostAuthWebsocketTicketResponses];
 
+export type PostAuthResourceTicketData = {
+    body: {
+        path: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/auth/resource-ticket';
+};
+
+export type PostAuthResourceTicketResponses = {
+    /**
+     * Response for status 200
+     */
+    200: {
+        ticket: string;
+        expiresAt: number;
+    };
+};
+
+export type PostAuthResourceTicketResponse = PostAuthResourceTicketResponses[keyof PostAuthResourceTicketResponses];
+
 export type PostAuthBrowserSessionData = {
     body?: never;
     path?: never;
@@ -12398,6 +12419,7 @@ export type GetPluginsResponses = {
             trusted: boolean;
             reason: string | null;
             checksum: string | null;
+            grantedPermissions: Array<string>;
         };
         activation: {
             enabled: boolean;
@@ -12540,6 +12562,7 @@ export type GetPluginsSourcesResponses = {
                 trusted: boolean;
                 reason: string | null;
                 checksum: string | null;
+                grantedPermissions: Array<string>;
             };
             activation: {
                 enabled: boolean;
@@ -12661,6 +12684,7 @@ export type PostPluginsSourcesResponses = {
                     trusted: boolean;
                     reason: string | null;
                     checksum: string | null;
+                    grantedPermissions: Array<string>;
                 };
                 activation: {
                     enabled: boolean;
@@ -12747,6 +12771,7 @@ export type PostPluginsSourcesResponses = {
                 trusted: boolean;
                 reason: string | null;
                 checksum: string | null;
+                grantedPermissions: Array<string>;
             };
             activation: {
                 enabled: boolean;
@@ -13110,6 +13135,7 @@ export type GetPluginsSourcesByIdResponses = {
                 trusted: boolean;
                 reason: string | null;
                 checksum: string | null;
+                grantedPermissions: Array<string>;
             };
             activation: {
                 enabled: boolean;
@@ -13226,6 +13252,7 @@ export type PostPluginsSourcesByIdRefreshResponses = {
                     trusted: boolean;
                     reason: string | null;
                     checksum: string | null;
+                    grantedPermissions: Array<string>;
                 };
                 activation: {
                     enabled: boolean;
@@ -13312,6 +13339,7 @@ export type PostPluginsSourcesByIdRefreshResponses = {
                 trusted: boolean;
                 reason: string | null;
                 checksum: string | null;
+                grantedPermissions: Array<string>;
             };
             activation: {
                 enabled: boolean;
@@ -13500,6 +13528,7 @@ export type GetPluginsByRouteSegmentResponses = {
             trusted: boolean;
             reason: string | null;
             checksum: string | null;
+            grantedPermissions: Array<string>;
         };
         activation: {
             enabled: boolean;
@@ -13605,6 +13634,7 @@ export type PatchPluginsByRouteSegmentEnabledResponses = {
             trusted: boolean;
             reason: string | null;
             checksum: string | null;
+            grantedPermissions: Array<string>;
         };
         activation: {
             enabled: boolean;

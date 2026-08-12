@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createPtyChannel } from './pty-channel'
 import type { PtyErrorEvent, PtySnapshotEvent } from './pty-protocol'
 
-vi.mock('~/lib/electron', () => ({
+vi.mock('~/lib/authenticated-server-url', () => ({
   getAuthenticatedServerWebSocketUrl: async (_socketPath: string, query?: { fromSeq?: number }) => {
     const url = new URL('ws://127.0.0.1/pty')
     if (typeof query?.fromSeq === 'number') {

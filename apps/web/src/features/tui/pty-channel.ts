@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import { getI18n } from '~/i18n/instance'
-import { getAuthenticatedServerWebSocketUrl } from '~/lib/electron'
+import { getAuthenticatedServerWebSocketUrl } from '~/lib/authenticated-server-url'
 
 import type { PtyClientEvent, PtyErrorEvent, PtyExitEvent, PtyOutputEvent, PtySnapshotEvent, PtyStatusEvent } from './pty-protocol'
 import { PtyServerEventJsonSchema } from './pty-protocol'

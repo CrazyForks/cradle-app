@@ -6,7 +6,7 @@ import { loadServerAuthConfig } from '../config/server-config'
 import { AppError } from '../errors/app-error'
 import { issueBrowserAuthSession, verifyBrowserAuthSession } from './browser-auth-session'
 import { OPENAPI_DOCS_PATH, OPENAPI_JSON_ALIAS_PATH, OPENAPI_JSON_PATH } from './openapi'
-import { consumeWebSocketTicket, hasWebSocketTicket, issueWebSocketTicket } from './websocket-ticket'
+import { consumeSingleUseTicket, hasSingleUseTicket, issueSingleUseTicket } from './single-use-ticket'
 
 export const CRADLE_TOKEN_HEADER = 'x-cradle-token'
 export const CRADLE_RELAY_TOKEN_HEADER = 'x-cradle-relay-token'
@@ -27,6 +27,8 @@ interface VerifyWebSocketRequestTokenOptions {
   audience?: string
   consume?: boolean
 }
+
+const consumedWebSocketTicketRequests = new WeakMap<Request, string>()
 
 function readAuthConfig(): AuthConfig {
   const { authRequired, authToken } = loadServerAuthConfig()
@@ -63,11 +65,13 @@ function readPresentedToken(headers: Headers, options: VerifyRequestTokenOptions
 }
 
 function isPublicAuthPath(method: string, pathname: string): boolean {
-  if ((method === 'GET' || method === 'HEAD') && pathname === '/health') {
-    return true
+  if (method !== 'GET' && method !== 'HEAD') {
+    return false
   }
 
-  return pathname === OPENAPI_JSON_PATH
+  return pathname === '/health'
+    || pathname.startsWith('/api/plugins/-/deps/')
+    || pathname === OPENAPI_JSON_PATH
     || pathname === OPENAPI_JSON_ALIAS_PATH
     || pathname === OPENAPI_DOCS_PATH
     || pathname.startsWith(`${OPENAPI_DOCS_PATH}/`)
@@ -117,9 +121,23 @@ export function verifyWebSocketRequestToken(
     return false
   }
   const audience = options.audience ?? url.pathname
-  return options.consume === false
-    ? hasWebSocketTicket(ticket, audience)
-    : consumeWebSocketTicket(ticket, audience)
+  if (options.consume === false) {
+    return hasSingleUseTicket(ticket, audience)
+  }
+
+  if (consumedWebSocketTicketRequests.get(request) === audience) {
+    return true
+  }
+
+  if (!consumeSingleUseTicket(ticket, audience)) {
+    return false
+  }
+
+  // @elysiajs/node 1.4 invokes a WebSocket route's beforeHandle twice for the
+  // same upgrade Request. Keep consumption idempotent within that request while
+  // preserving single use across separate upgrade requests.
+  consumedWebSocketTicketRequests.set(request, audience)
+  return true
 }
 
 export function createAuthPlugin(config: AuthConfig = readAuthConfig()) {
@@ -135,7 +153,16 @@ export function createAuthPlugin(config: AuthConfig = readAuthConfig()) {
       if (
         request.method === 'GET'
         && eventTicket
-        && consumeWebSocketTicket(eventTicket, `sse:${pathname}`)
+        && consumeSingleUseTicket(eventTicket, `sse:${pathname}`)
+      ) {
+        return undefined
+      }
+
+      const resourceTicket = url.searchParams.get('resourceTicket')
+      if (
+        request.method === 'GET'
+        && resourceTicket
+        && consumeSingleUseTicket(resourceTicket, `resource:${pathname}`)
       ) {
         return undefined
       }
@@ -157,9 +184,24 @@ export function createAuthPlugin(config: AuthConfig = readAuthConfig()) {
 
       return undefined
     })
-    .post('/auth/websocket-ticket', ({ body }) => issueWebSocketTicket(body.audience), {
+    .post('/auth/websocket-ticket', ({ body }) => issueSingleUseTicket(body.audience), {
       detail: { summary: 'Issue a single-use WebSocket authentication ticket', tags: ['auth'] },
       body: t.Object({ audience: t.String({ minLength: 1, maxLength: 256 }) }),
+      response: {
+        200: t.Object({
+          ticket: t.String(),
+          expiresAt: t.Number(),
+        }),
+      },
+    })
+    .post('/auth/resource-ticket', ({ body }) => issueSingleUseTicket(`resource:${body.path}`), {
+      detail: {
+        summary: 'Issue a single-use browser resource authentication ticket',
+        tags: ['auth'],
+      },
+      body: t.Object({
+        path: t.String({ minLength: 1, maxLength: 512, pattern: '^/[^?#]*$' }),
+      }),
       response: {
         200: t.Object({
           ticket: t.String(),
